@@ -1,0 +1,2561 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>반가워요 — Compagnon de coréen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Fusionné ici pour prévisualisation directe — en déploiement réel, ces valeurs
+  // peuvent aussi vivre dans un config.js séparé (voir le zip complet du projet).
+  window.SUPABASE_CONFIG = {
+    url: "https://vcnkcmgvswdmbwkjfsyg.supabase.co",
+    anonKey: "sb_publishable_oNSTKKW1_Q3vapZo43t35A_KCtoMLWl"
+  };
+</script>
+<style>
+  :root{
+    --paper:#F3EDE1; --paper-dim:#EAE1CF; --card:#FBF8F2; --ink:#211D1A; --ink-soft:#5B554C;
+    --celadon:#6E8F78; --celadon-dark:#4A6455; --seal:#B8433A; --seal-dark:#8F2F28;
+    --gold:#C08A2E; --line:#DCD3BE; --danger:#A6402F; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .kr{font-family:'Noto Sans KR',sans-serif;} .mono{font-family:'IBM Plex Mono',monospace;}
+  h1,h2,h3,.display{font-family:'Fraunces',serif;}
+  button{font-family:inherit;cursor:pointer;}
+  .app{max-width:1180px;margin:0 auto;padding:20px 20px 60px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:2px solid var(--ink);margin-bottom:22px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:baseline;gap:10px;}
+  .brand .kr{font-size:26px;font-weight:700;} .brand .sub{font-size:13px;color:var(--ink-soft);}
+  .top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  select,input[type=text],input[type=email],input[type=password]{font-family:'Inter',sans-serif;font-size:14px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;background:var(--card);color:var(--ink);}
+  .stat-pill{display:flex;align-items:center;gap:6px;background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;}
+  .btn{border:1.5px solid var(--ink);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;}
+  .btn.ghost{background:transparent;color:var(--ink);} .btn.celadon{background:var(--celadon);border-color:var(--celadon-dark);color:#fff;}
+  .btn.seal{background:var(--seal);border-color:var(--seal-dark);color:#fff;} .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.small{padding:6px 10px;font-size:12px;}
+  .layout{display:grid;grid-template-columns:250px 1fr;gap:24px;align-items:start;}
+  @media(max-width:840px){.layout{grid-template-columns:1fr;}}
+  .sidebar{position:sticky;top:20px;}
+  .level-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .level-tab{flex:1;text-align:center;padding:8px 6px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);font-size:12px;font-weight:600;color:var(--ink-soft);}
+  .level-tab.active{border-color:var(--ink);color:var(--ink);background:var(--paper-dim);}
+  .lesson-path{border-left:2px solid var(--line);padding-left:14px;display:flex;flex-direction:column;gap:4px;}
+  .lesson-node{position:relative;padding:10px 12px;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13.5px;justify-content:space-between;}
+  .lesson-node:hover{background:var(--paper-dim);}
+  .lesson-node.active{background:var(--card);border:1.5px solid var(--ink);}
+  .lesson-node.locked{opacity:.5;}
+  .lesson-node::before{content:'';position:absolute;left:-19px;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:50%;background:var(--line);border:2px solid var(--paper);}
+  .lesson-node.done::before{background:var(--celadon);} .lesson-node.active::before{background:var(--seal);}
+  .seal-badge{width:22px;height:22px;border-radius:50%;border:2px solid var(--seal);color:var(--seal);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;font-family:'Fraunces',serif;transform:rotate(-8deg);}
+  .lesson-node.done .seal-badge{background:var(--seal);color:#fff;}
+  .empty-level{font-size:13px;color:var(--ink-soft);padding:10px 4px;line-height:1.5;}
+  .main-card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:26px 28px;min-height:400px;}
+  .lesson-title h2{margin:0 0 14px;font-size:24px;} .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--celadon-dark);font-weight:700;}
+  .tabs{display:flex;gap:4px;margin:18px 0 22px;border-bottom:1.5px solid var(--line);flex-wrap:wrap;}
+  .tab-btn{padding:9px 16px;border:none;background:none;font-size:14px;font-weight:600;color:var(--ink-soft);border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
+  .tab-btn.active{color:var(--ink);border-bottom-color:var(--seal);}
+  .section-block{margin-bottom:26px;} .section-block h3{font-size:17px;margin:0 0 10px;}
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .item-card{background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:14px 12px;text-align:center;}
+  .item-card .kr{font-size:26px;font-weight:700;display:block;margin-bottom:4px;}
+  .item-card .rom{font-size:12px;color:var(--celadon-dark);font-weight:600;} .item-card .fr{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .vocab-row{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:12px 6px;border-bottom:1px solid var(--line);}
+  .vocab-row:last-child{border-bottom:none;} .vocab-row .kr{font-size:20px;font-weight:700;}
+  .vocab-row .rom{font-size:12px;color:var(--celadon-dark);font-weight:600;} .vocab-row .fr{font-size:14px;color:var(--ink-soft);text-align:right;}
+  .note{background:var(--paper-dim);border-left:3px solid var(--gold);padding:12px 14px;border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.6;}
+  .q-block{margin-bottom:22px;padding-bottom:20px;border-bottom:1px solid var(--line);} .q-block:last-child{border:none;}
+  .q-text{font-size:15px;font-weight:600;margin-bottom:10px;display:flex;gap:8px;align-items:baseline;} .q-text .kr{font-size:19px;}
+  .opt-list{display:flex;flex-direction:column;gap:8px;}
+  .opt{text-align:left;padding:10px 14px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);font-size:14px;}
+  .opt.correct{border-color:var(--celadon-dark);background:#E4EEE7;} .opt.wrong{border-color:var(--danger);background:#F3E1DD;}
+  .feedback{font-size:13px;margin-top:8px;padding:8px 10px;border-radius:6px;} .feedback.ok{background:#E4EEE7;color:var(--celadon-dark);} .feedback.ko{background:#F3E1DD;color:var(--danger);}
+  .result-box{text-align:center;padding:30px 20px;border-radius:12px;border:2px solid var(--ink);background:var(--paper-dim);}
+  .result-box .score{font-family:'Fraunces',serif;font-size:44px;font-weight:700;}
+  .stamp{width:78px;height:78px;margin:0 auto 14px;border:3px solid var(--seal);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--seal);transform:rotate(-10deg);font-family:'Fraunces',serif;font-weight:700;font-size:13px;}
+  .flip-card{background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:16px 12px;text-align:center;cursor:pointer;min-height:78px;display:flex;align-items:center;justify-content:center;}
+  .flip-card.revealed{background:var(--paper-dim);} .flip-card .meaning{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .modal-bg{position:fixed;inset:0;background:rgba(33,29,26,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .modal{background:var(--card);border-radius:var(--radius);padding:26px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;border:1.5px solid var(--line);}
+  .field{margin-bottom:14px;} .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .field input,.field textarea,.field select{width:100%;font-family:inherit;}
+  .field textarea{padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;min-height:60px;}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+  .empty-state{text-align:center;padding:50px 20px;color:var(--ink-soft);} .empty-state .kr{font-size:28px;display:block;margin-bottom:10px;}
+  .login-wrap{max-width:380px;margin:80px auto;text-align:center;}
+  .login-wrap .kr{font-size:36px;font-weight:700;display:block;margin-bottom:6px;}
+  .error-text{color:var(--danger);font-size:13px;margin:8px 0;}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+const CONFIG_OK = !!(window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.anonKey
+  && !window.SUPABASE_CONFIG.url.includes('TON-PROJET') && !window.SUPABASE_CONFIG.anonKey.includes('TA-CLE-ANON'));
+
+if(!CONFIG_OK){
+  document.getElementById('app').innerHTML = `
+    <div class="login-wrap">
+      <span class="kr">반가워요</span>
+      <div class="display" style="font-size:15px;color:var(--ink-soft);margin-bottom:24px;">Compagnon de coréen</div>
+      <div class="note" style="text-align:left;">
+        Configuration Supabase manquante ou incomplète.<br><br>
+        Ce fichier <code>index.html</code> a besoin d'un fichier <code>config.js</code> juste à côté de lui,
+        avec ton URL et ta clé Supabase (voir le README). Sans ça, l'application ne peut pas se connecter
+        à une base de données et reste à cet écran.
+      </div>
+    </div>`;
+} else {
+  const { createClient } = supabase;
+  const sb = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+  runApp(sb);
+}
+
+function runApp(sb){
+
+const LEVEL_LABELS = {debutant:'Débutant', intermediaire:'Intermédiaire', avance:'Avancé', groupe:'Cours en groupe'};
+const PERSO_LEVELS = ['debutant','intermediaire','avance'];
+
+let SESSION = null;
+let PROFILE = null;
+let ALL_PROFILES = [];
+let LESSONS_CACHE = {};
+let PROGRESS = {};       // lesson_id -> row
+let ALL_PROGRESS = [];   // teacher dashboard
+let ASSIGNMENT = null;
+let CHAT = [];
+let CHAT_SUB = null;
+let DM = [];
+let DM_SUB = null;
+let ACTIVE_DM_STUDENT_ID = null;
+let INBOX = {};            // prof : id élève -> dernier message de sa conversation
+let STUDENT_LAST_DM = null; // élève : dernier message de son fil
+const DM_DRAFTS = {};      // brouillons par conversation (survivent aux rafraîchissements)
+let VOICE_BUSY = false;    // un enregistrement vocal est en cours : ne pas reconstruire la page
+let GROUPS = [];
+let WEAK_WORDS = [];
+let ACTIVE_GROUP_ID = null; // for teacher: which group's chat she's currently viewing
+
+let state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
+  controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
+  exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
+  reviewMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+  globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
+  reviewSelected:{},
+  translationDraft:'', translationValidated:false };
+
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+
+/* ---------------- DATA LAYER (Supabase) ---------------- */
+async function sbLessons(space){
+  const {data,error} = await sb.from('lessons').select('*').eq('space',space).order('position');
+  if(error){ console.error(error); return []; }
+  return data||[];
+}
+async function sbAddLesson(row){ return await sb.from('lessons').insert(row); }
+async function sbAllProgressForSelf(){
+  const {data} = await sb.from('progress').select('*').eq('student_id', SESSION.user.id);
+  const map = {}; (data||[]).forEach(r=>map[r.lesson_id]=r); return map;
+}
+async function sbUpsertProgress(lessonId, patch){
+  const existing = PROGRESS[lessonId] || {};
+  const merged = Object.assign({student_id:SESSION.user.id, lesson_id:lessonId}, existing, patch);
+  delete merged.updated_at;
+  await sb.from('progress').upsert(merged, {onConflict:'student_id,lesson_id'});
+  PROGRESS[lessonId] = merged;
+}
+async function sbMyAssignment(){
+  const {data} = await sb.from('assignments').select('*').eq('student_id', SESSION.user.id).maybeSingle();
+  return data;
+}
+async function sbSetAssignment(studentId, lessonId){
+  await sb.from('assignments').upsert({student_id:studentId, lesson_id:lessonId, assigned_at:new Date().toISOString()});
+}
+async function sbClearAssignment(studentId){ await sb.from('assignments').delete().eq('student_id', studentId); }
+async function sbAllProfiles(){ const {data} = await sb.from('profiles').select('*').order('name'); return data||[]; }
+async function sbAllProgress(){ const {data} = await sb.from('progress').select('*'); return data||[]; }
+async function sbAllGroups(){ const {data} = await sb.from('groups').select('*').order('name'); return data||[]; }
+async function sbCreateGroup(name){ const {data} = await sb.from('groups').insert({name}).select().maybeSingle(); return data; }
+async function sbDeleteGroup(groupId){ return await sb.from('groups').delete().eq('id', groupId); }
+async function sbDeleteLesson(lessonId){ return await sb.from('lessons').delete().eq('id', lessonId); }
+async function sbDeleteStudent(studentId){
+  return await sb.functions.invoke('delete-student', { body:{ studentId } });
+}
+async function sbSetGroupTopic(groupId, topic){ await sb.from('groups').update({current_topic:topic}).eq('id', groupId); }
+async function sbWeakWords(){ const {data} = await sb.from('weak_words').select('*').order('created_at',{ascending:false}); return data||[]; }
+async function sbAddWeakWord(word, meaning){
+  if(!SESSION || PROFILE.role!=='student') return;
+  const existing = WEAK_WORDS.find(w=>w.word===word);
+  if(existing) return; // déjà suivi
+  await sb.from('weak_words').upsert({student_id:SESSION.user.id, word, meaning, hit_count:1}, {onConflict:'student_id,word'});
+  WEAK_WORDS.push({word, meaning});
+}
+async function sbAddWeakWordsBulk(items){
+  if(!SESSION || PROFILE.role!=='student' || items.length===0) return 0;
+  const fresh = items.filter(it=>!WEAK_WORDS.find(w=>w.word===it.kr));
+  if(fresh.length===0) return 0;
+  const rows = fresh.map(it=>({student_id:SESSION.user.id, word:it.kr, meaning:it.fr, hit_count:1}));
+  await sb.from('weak_words').upsert(rows, {onConflict:'student_id,word'});
+  fresh.forEach(it=> WEAK_WORDS.push({word:it.kr, meaning:it.fr}));
+  return fresh.length;
+}
+async function sbRemoveWeakWord(word){
+  await sb.from('weak_words').delete().eq('student_id', SESSION.user.id).eq('word', word);
+  WEAK_WORDS = WEAK_WORDS.filter(w=>w.word!==word);
+}
+async function sbRemoveWeakWordsBulk(words){
+  if(words.length===0) return;
+  await sb.from('weak_words').delete().eq('student_id', SESSION.user.id).in('word', words);
+  WEAK_WORDS = WEAK_WORDS.filter(w=>!words.includes(w.word));
+}
+// Traduction automatique coréen -> français via MyMemory : API publique, gratuite,
+// sans clé ni compte requis. Elle traduit chaque mot isolément (sans regarder
+// la phrase autour), donc elle se trompe régulièrement sur des mots courts ou
+// ambigus — à prendre comme un indice de départ, jamais comme une certitude.
+const KO_PARTICLES = ['에서','으로','에게','한테','까지','부터','이라','라서','이고','에','는','은','이','가','을','를','로','와','과','도','만','의','께'];
+function stripKoParticle(word){
+  for(const p of KO_PARTICLES){
+    if(word.length>p.length && word.endsWith(p)) return word.slice(0, -p.length);
+  }
+  return word;
+}
+let KRDICT_UNAVAILABLE = false; // évite de retenter à chaque mot si non configuré
+
+async function translateWordKoFr(word){
+  const stem = stripKoParticle(word);
+
+  // 1) Dictionnaire coréen officiel (KRDict) si configuré — bien plus fiable
+  // que MyMemory pour distinguer les vrais sens différents d'un mot (ex.
+  // 새 = "nouveau" et "oiseau" sont deux mots distincts dans un vrai
+  // dictionnaire, alors que MyMemory les mélange).
+  if(!KRDICT_UNAVAILABLE){
+    try{
+      const { data, error } = await sb.functions.invoke('krdict-lookup', { body:{ word: stem } });
+      if(!error && data){
+        if(data.configured === false){ KRDICT_UNAVAILABLE = true; }
+        else if(data.senses && data.senses.length){
+          const seenDict = new Set();
+          const dictVariants = [];
+          data.senses.forEach(s=>{
+            const t = (s.translation||'').trim();
+            const key = t.toLowerCase();
+            if(t && !seenDict.has(key)){ seenDict.add(key); dictVariants.push(t); }
+          });
+          if(dictVariants.length) return dictVariants.slice(0,4);
+        }
+      }
+    }catch(e){ /* on retombe sur MyMemory en cas de souci */ }
+  }
+
+  // 2) Repli : MyMemory (base de traductions existantes, moins fiable sur les
+  // mots courts/ambigus mais fonctionne sans configuration).
+  const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(stem)}&langpair=ko|fr`);
+  const data = await res.json();
+
+  // MyMemory renvoie plusieurs correspondances existantes (data.matches),
+  // pas qu'une seule "meilleure" réponse — utile pour repérer un mot ambigu
+  // comme 새 (nouveau / oiseau) au lieu de se fier aveuglément à un seul choix.
+  const seen = new Set();
+  const variants = [];
+  (data.matches || [])
+    .slice()
+    .sort((a,b)=> (parseFloat(b.match)||0) - (parseFloat(a.match)||0))
+    .forEach(m=>{
+      const t = (m.translation||'').trim();
+      const key = t.toLowerCase();
+      if(t && !seen.has(key)){ seen.add(key); variants.push(t); }
+    });
+
+  const best = data && data.responseData && data.responseData.translatedText;
+  if(best && !seen.has(best.trim().toLowerCase())){ variants.unshift(best.trim()); }
+
+  if(variants.length===0) throw new Error('no translation');
+  return variants.slice(0,4); // jusqu'à 4 propositions
+}
+async function sbSetStudentGroup(studentId, groupId){ await sb.from('profiles').update({group_id:groupId}).eq('id', studentId); }
+async function sbChat(groupId){
+  if(!groupId) return [];
+  const {data} = await sb.from('chat_messages').select('*').eq('group_id', groupId).order('created_at',{ascending:true}).limit(300);
+  return data||[];
+}
+async function sbSendChat(groupId, text, audioUrl){
+  return await sb.from('chat_messages').insert({author_id:SESSION.user.id, author_name:PROFILE.name, body:text||'', audio_url:audioUrl||null, group_id:groupId}).select().maybeSingle();
+}
+async function sbDMMessages(studentId){
+  if(!studentId) return [];
+  const {data} = await sb.from('direct_messages').select('*').eq('student_id', studentId).order('created_at',{ascending:true}).limit(300);
+  return data||[];
+}
+async function sbSendDM(studentId, text, audioUrl){
+  return await sb.from('direct_messages').insert({student_id:studentId, author_id:SESSION.user.id, author_name:PROFILE.name, body:text||'', audio_url:audioUrl||null}).select().maybeSingle();
+}
+function notifyDiscordIfStudent(preview){
+  if(PROFILE.role!=='student') return; // seuls les messages élève -> prof notifient
+  sb.functions.invoke('notify-discord', { body:{ studentName: PROFILE.name, preview: (preview||'').slice(0,200) } }).catch(()=>{});
+}
+async function sbUploadVoiceNote(blob){
+  const path = `${SESSION.user.id}/${Date.now()}.webm`;
+  const { error } = await sb.storage.from('voice-notes').upload(path, blob, { contentType: 'audio/webm' });
+  if(error) throw error;
+  const { data } = sb.storage.from('voice-notes').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// Bouton d'enregistrement réutilisable : câble un bouton + une zone de statut,
+// enregistre au clic, envoie au stockage, et appelle onUploaded(url) une fois fait.
+function wireVoiceRecorder(recBtn, statusEl, onUploaded){
+  let mr = null;
+  recBtn.onclick = async ()=>{
+    if(mr){ mr.stop(); return; }
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      mr = new MediaRecorder(stream);
+      mr.ondataavailable = (e)=> chunks.push(e.data);
+      mr.onstop = async ()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        mr = null; VOICE_BUSY = false; recBtn.textContent = '🎙️';
+        statusEl.textContent = 'Envoi…';
+        try{
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const url = await sbUploadVoiceNote(blob);
+          statusEl.textContent = 'Envoyé ✓';
+          onUploaded(url);
+        }catch(err){ statusEl.textContent = "Erreur d'envoi."; }
+      };
+      mr.start(); VOICE_BUSY = true;
+      recBtn.textContent = '⏹️';
+      statusEl.textContent = 'Enregistrement…';
+    }catch(err){
+      statusEl.textContent = 'Micro indisponible ou refusé.';
+    }
+  };
+}
+
+/* ---------------- AUTH ---------------- */
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  SESSION = session;
+  if(SESSION){ await loadOwnProfile(); }
+  render();
+}
+async function loadOwnProfile(){
+  const { data } = await sb.from('profiles').select('*').eq('id', SESSION.user.id).maybeSingle();
+  PROFILE = data;
+  if(!PROFILE){
+    // Session valide mais plus aucun profil derrière (compte supprimé,
+    // ou trigger pas encore passé) — on ne reste jamais bloqué dessus.
+    await sb.auth.signOut();
+    SESSION = null;
+    state.loginError = "Ce compte n'existe plus ou la session a expiré — reconnecte-toi.";
+    return;
+  }
+  {
+    state.level = PROFILE.level || 'debutant';
+    state.lastPersoLevel = state.level;
+    PROGRESS = await sbAllProgressForSelf();
+    ASSIGNMENT = await sbMyAssignment();
+    GROUPS = await sbAllGroups();
+    if(PROFILE.role==='student'){
+      ACTIVE_GROUP_ID = PROFILE.group_id || null;
+      WEAK_WORDS = await sbWeakWords();
+      sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
+    }
+    else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); }
+    await loadDMState();
+    subscribeDM();
+    updateTitleBadge();
+  }
+}
+async function doLogin(email, pass){
+  state.loginError = null;
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error){ state.loginError = error.message + ' (code: ' + (error.status||'?') + ')'; render(); return; }
+  const { data:{ session } } = await sb.auth.getSession();
+  SESSION = session;
+  await loadOwnProfile();
+  render();
+}
+async function doLogout(){
+  await sb.auth.signOut();
+  unsubscribeChat(); unsubscribeDM();
+  SESSION = null; PROFILE = null; PROGRESS = {}; ASSIGNMENT = null;
+  DM = []; ACTIVE_DM_STUDENT_ID = null; ACTIVE_GROUP_ID = null;
+  INBOX = {}; STUDENT_LAST_DM = null; VOICE_BUSY = false; document.title = BASE_TITLE;
+  state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
+    controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
+    exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
+    reviewMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+    globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
+    reviewSelected:{}, translationDraft:'', translationValidated:false };
+  render();
+}
+
+/* ---------------- LESSON HELPERS ---------------- */
+async function lessonsForLevel(level){
+  if(!LESSONS_CACHE[level]) LESSONS_CACHE[level] = await sbLessons(level);
+  return LESSONS_CACHE[level];
+}
+function isUnlockedSync(list, idx){
+  if(idx===0) return true;
+  const l = list[idx];
+  if(ASSIGNMENT && l && ASSIGNMENT.lesson_id===l.id) return true;
+  const prev = list[idx-1];
+  const pr = PROGRESS[prev.id];
+  return !!(pr && pr.control && pr.control.passed);
+}
+
+/* ---------------- RENDER ---------------- */
+async function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  if(!SESSION){ app.appendChild(renderLogin()); return; }
+  if(!PROFILE){ app.appendChild(el('<div class="empty-state">Chargement du profil…</div>')); return; }
+  if(PROFILE.role==='student' && state.space==='groupe' && !PROFILE.group_id){ state.space='perso'; }
+
+  app.appendChild(renderHeader());
+  app.appendChild(await renderAssignmentBanner());
+
+  app.appendChild(renderSpaceTabs());
+
+  if(state.space==='dashboard' && PROFILE.role==='teacher'){
+    app.appendChild(await renderDashboard());
+  } else if(state.space==='inbox' && PROFILE.role==='teacher'){
+    app.appendChild(await renderInbox());
+  } else if(state.space==='dm'){
+    app.appendChild(await renderDMPanel());
+  } else {
+    const grid = el('<div class="layout"></div>');
+    grid.appendChild(await renderSidebar());
+    grid.appendChild(await renderMain());
+    app.appendChild(grid);
+    if(state.space==='groupe'){ app.appendChild(await renderChatPanel()); }
+  }
+}
+
+function renderLogin(){
+  const box = el(`<div class="login-wrap">
+    <span class="kr">반가워요</span>
+    <div class="display" style="font-size:15px;color:var(--ink-soft);margin-bottom:24px;">Compagnon de coréen</div>
+    <div class="field" style="text-align:left;"><label>Email</label><input type="email" id="lg-email"></div>
+    <div class="field" style="text-align:left;"><label>Mot de passe</label><input type="password" id="lg-pass"></div>
+    ${state.loginError? `<div class="error-text">${state.loginError}</div>` : ''}
+    <button class="btn seal" style="width:100%;margin-top:6px;">Se connecter</button>
+  </div>`);
+  const btn = box.querySelector('button');
+  const doIt = ()=> doLogin(box.querySelector('#lg-email').value.trim(), box.querySelector('#lg-pass').value);
+  btn.onclick = doIt;
+  box.querySelector('#lg-pass').onkeydown = (e)=>{ if(e.key==='Enter') doIt(); };
+  return box;
+}
+
+function renderHeader(){
+  const h = el(`<header class="top">
+    <div class="brand"><span class="kr">반가워요</span><span class="sub display">Compagnon de coréen</span></div>
+    <div class="top-right"></div>
+  </header>`);
+  const right = h.querySelector('.top-right');
+  right.appendChild(el(`<div class="stat-pill">👤 <b>${escapeHtml(PROFILE.name)}</b>${PROFILE.role==='teacher'?' · professeur':''}</div>`));
+  if(PROFILE.role==='student'){
+    right.appendChild(el(`<div class="stat-pill">🔥 <span class="mono">${PROFILE.streak||0}</span></div>`));
+    right.appendChild(el(`<div class="stat-pill">✦ XP <span class="mono">${PROFILE.xp||0}</span></div>`));
+  }
+  const optionsWrap = el('<div style="position:relative;"></div>');
+  const optionsBtn = el('<button class="btn ghost small">⚙️ Options ▾</button>');
+  optionsBtn.onclick = (e)=>{ e.stopPropagation(); state.headerMenuOpen = !state.headerMenuOpen; render(); };
+  optionsWrap.appendChild(optionsBtn);
+  if(state.headerMenuOpen){
+    const menu = el(`<div style="position:absolute;top:calc(100% + 6px);right:0;background:var(--card);border:1.5px solid var(--line);border-radius:10px;box-shadow:0 6px 18px rgba(33,29,26,.12);min-width:190px;z-index:40;overflow:hidden;"></div>`);
+    const itemStyle = 'display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;font-size:13px;color:var(--ink);';
+    const changePass = el(`<button style="${itemStyle}">🔑 Changer le mot de passe</button>`);
+    changePass.onclick = ()=>{ state.headerMenuOpen=false; openChangePasswordModal(); render(); };
+    menu.appendChild(changePass);
+    // le réglage n'est proposé que si la migration des rappels est en place (colonne présente)
+    if(PROFILE.role==='student' && 'reminder_opt_in' in PROFILE){
+      const reminderBtn = el(`<button style="${itemStyle}border-top:1px solid var(--line);">🔔 Rappels par email</button>`);
+      reminderBtn.onclick = ()=>{ state.headerMenuOpen=false; openReminderModal(); render(); };
+      menu.appendChild(reminderBtn);
+    }
+    const logout = el(`<button style="${itemStyle}border-top:1px solid var(--line);color:var(--seal-dark);">Se déconnecter</button>`);
+    logout.onclick = doLogout;
+    menu.appendChild(logout);
+    optionsWrap.appendChild(menu);
+    setTimeout(()=>{
+      document.addEventListener('click', function closeMenu(){
+        state.headerMenuOpen = false; render();
+        document.removeEventListener('click', closeMenu);
+      }, { once:true });
+    }, 0);
+  }
+  right.appendChild(optionsWrap);
+  return h;
+}
+
+function openReminderModal(){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>Rappels par email</h3>
+    <div class="note" style="margin-bottom:14px;">Si tu n'as rien fait sur l'appli depuis un moment, on peut t'envoyer un petit email pour te le rappeler — utile avant le prochain cours.</div>
+    <div class="field"><label><input type="checkbox" id="rm-optin" ${PROFILE.reminder_opt_in!==false?'checked':''}> Recevoir des rappels par email</label></div>
+    <div class="field"><label>Me rappeler après combien de jours sans rien faire</label><input type="text" id="rm-days" value="${PROFILE.reminder_days||3}"></div>
+    <div id="rm-status" style="font-size:12px;margin-bottom:8px;"></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  const actions = modal.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Fermer</button>');
+  cancel.onclick = ()=> bg.remove();
+  const save = el('<button class="btn celadon">Enregistrer</button>');
+  save.onclick = async ()=>{
+    const status = modal.querySelector('#rm-status');
+    const optIn = modal.querySelector('#rm-optin').checked;
+    const days = Math.max(1, parseInt(modal.querySelector('#rm-days').value)||3);
+    save.disabled = true;
+    const { error } = await sb.from('profiles').update({reminder_opt_in:optIn, reminder_days:days}).eq('id', SESSION.user.id);
+    save.disabled = false;
+    if(error){ status.style.color='var(--danger)'; status.textContent='Erreur : '+error.message; return; }
+    PROFILE.reminder_opt_in = optIn; PROFILE.reminder_days = days;
+    status.style.color='var(--celadon-dark)'; status.textContent='Enregistré ✓';
+    setTimeout(()=> bg.remove(), 900);
+  };
+  actions.appendChild(cancel); actions.appendChild(save);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+function openChangePasswordModal(){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>Changer mon mot de passe</h3>
+    <div class="field"><label>Nouveau mot de passe</label><input type="password" id="pw-new"></div>
+    <div class="field"><label>Confirmer le nouveau mot de passe</label><input type="password" id="pw-confirm"></div>
+    <div id="pw-status" style="font-size:12px;margin-bottom:8px;"></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  const actions = modal.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Annuler</button>');
+  cancel.onclick = ()=> bg.remove();
+  const save = el('<button class="btn seal">Enregistrer</button>');
+  save.onclick = async ()=>{
+    const status = modal.querySelector('#pw-status');
+    const p1 = modal.querySelector('#pw-new').value;
+    const p2 = modal.querySelector('#pw-confirm').value;
+    if(p1.length < 6){ status.style.color='var(--danger)'; status.textContent='6 caractères minimum.'; return; }
+    if(p1 !== p2){ status.style.color='var(--danger)'; status.textContent='Les deux mots de passe ne correspondent pas.'; return; }
+    save.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    save.disabled = false;
+    if(error){ status.style.color='var(--danger)'; status.textContent = 'Erreur : ' + error.message; return; }
+    status.style.color='var(--celadon-dark)'; status.textContent = 'Mot de passe mis à jour ✓';
+    setTimeout(()=> bg.remove(), 1200);
+  };
+  actions.appendChild(cancel); actions.appendChild(save);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+async function renderAssignmentBanner(){
+  if(!ASSIGNMENT || PROFILE.role!=='student') return el('<div></div>');
+  // find which space this lesson belongs to
+  for(const lvl of Object.keys(LEVEL_LABELS)){
+    const list = await lessonsForLevel(lvl);
+    const lesson = list.find(l=>l.id===ASSIGNMENT.lesson_id);
+    if(lesson){
+      if(state.level===lvl && state.lessonId===lesson.id) return el('<div></div>');
+      const box = el(`<div class="note" style="border-color:var(--seal);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+        <span>🎯 Ta professeur t'a assigné : <b>${escapeHtml(lesson.title)}</b> <span style="color:var(--ink-soft);">(${LEVEL_LABELS[lvl]})</span></span>
+      </div>`);
+      const btn = el('<button class="btn seal small">Y aller</button>');
+      btn.onclick = ()=>{
+        state.space = PERSO_LEVELS.includes(lvl) ? 'perso' : lvl;
+        state.level = lvl; if(state.space==='perso') state.lastPersoLevel = lvl;
+        state.lessonId = lesson.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false;
+        render();
+      };
+      box.appendChild(btn);
+      return box;
+    }
+  }
+  return el('<div></div>');
+}
+
+function renderSpaceTabs(){
+  const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
+  const spaces = PROFILE.role==='teacher'
+    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves']]
+    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')]]);
+  spaces.forEach(([key,label])=>{
+    const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
+    b.onclick = async ()=>{
+      if(state.space===key) return;
+      if(key==='inbox'){ await enterInbox(); return; }
+      state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
+      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.globalQuizMode=false;
+      if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); GROUPS = await sbAllGroups(); }
+      else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
+      else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
+      if(key==='groupe'){
+        if(PROFILE.role==='teacher'){ GROUPS = await sbAllGroups(); if(!ACTIVE_GROUP_ID && GROUPS[0]) ACTIVE_GROUP_ID = GROUPS[0].id; }
+        CHAT = await sbChat(ACTIVE_GROUP_ID); subscribeChat();
+      } else { unsubscribeChat(); }
+      if(key==='dm'){
+        ACTIVE_DM_STUDENT_ID = SESSION.user.id;
+        DM = await sbDMMessages(ACTIVE_DM_STUDENT_ID);
+        markThreadSeen(ACTIVE_DM_STUDENT_ID);
+      }
+      render();
+    };
+    row.appendChild(b);
+  });
+  return row;
+}
+
+async function renderSidebar(){
+  const box = el('<div class="sidebar"></div>');
+  if(state.space==='manage'){
+    box.appendChild(el('<h3 style="margin:0 0 14px;font-size:15px;">Choisis un espace à gérer</h3>'));
+    Object.keys(LEVEL_LABELS).forEach(lvl=>{
+      const b = el(`<button class="level-tab" style="margin-bottom:6px;display:block;width:100%;">${LEVEL_LABELS[lvl]}</button>`);
+      b.onclick = ()=>{ state.level = lvl; render(); };
+      box.appendChild(b);
+    });
+    return box;
+  }
+  if(state.space==='perso'){
+    const tabs = el('<div class="level-tabs"></div>');
+    PERSO_LEVELS.forEach(lv=>{
+      const b = el(`<button class="level-tab ${state.level===lv?'active':''}">${LEVEL_LABELS[lv]}</button>`);
+      b.onclick = async ()=>{
+        state.reviewMode = false; state.globalQuizMode = false;
+        state.level = lv; state.lastPersoLevel = lv; state.lessonId=null; state.controlResult=null; state.quizResult=null;
+        if(PROFILE.role==='student' && PROFILE.level!==lv){ PROFILE.level=lv; await sb.from('profiles').update({level:lv}).eq('id',SESSION.user.id); }
+        render();
+      };
+      tabs.appendChild(b);
+    });
+    box.appendChild(tabs);
+    if(PROFILE.role==='student'){
+      const reviewBtn = el(`<div class="lesson-node ${state.reviewMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);">
+        <span>🔁 Mots à revoir (${WEAK_WORDS.length})</span>
+      </div>`);
+      reviewBtn.style.cursor='pointer';
+      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.globalQuizMode=false; state.lessonId=null; render(); };
+      box.appendChild(reviewBtn);
+      const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
+        <span>🌐 Quiz global</span>
+      </div>`);
+      globalQuizBtn.style.cursor='pointer';
+      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
+      box.appendChild(globalQuizBtn);
+    }
+  } else {
+    box.appendChild(el(`<h3 style="margin:0 0 14px;font-size:15px;">${LEVEL_LABELS[state.level]}</h3>`));
+  }
+
+  const list = await lessonsForLevel(state.level);
+  if(list.length===0){
+    box.appendChild(el(`<div class="empty-level">Aucune leçon dans cet espace pour l'instant.</div>`));
+    return box;
+  }
+  const path = el('<div class="lesson-path"></div>');
+  list.forEach((l,idx)=>{
+    const unlocked = isUnlockedSync(list, idx);
+    const pr = PROGRESS[l.id];
+    const done = pr && pr.control && pr.control.passed;
+    const active = !state.reviewMode && !state.globalQuizMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
+    const node = el(`<div class="lesson-node ${active?'active':''} ${unlocked?'':'locked'} ${done?'done':''}">
+      <span style="display:flex;align-items:center;gap:10px;">
+      ${done?'<span class="seal-badge">印</span>':unlocked?'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">'+(idx+1)+'</span>':'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">🔒</span>'}
+      <span>${escapeHtml(l.title)}</span></span>
+    </div>`);
+    if(unlocked){
+      node.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
+      node.style.cursor='pointer';
+    }
+    path.appendChild(node);
+  });
+  box.appendChild(path);
+  return box;
+}
+
+async function renderMain(){
+  const card = el('<div class="main-card"></div>');
+  if(state.space==='manage'){
+    card.appendChild(await renderManage());
+    return card;
+  }
+  if(state.reviewMode){
+    card.appendChild(renderWeakWordsPractice());
+    return card;
+  }
+  if(state.globalQuizMode){
+    card.appendChild(await renderGlobalQuiz());
+    return card;
+  }
+  const list = await lessonsForLevel(state.level);
+  const lesson = list.find(l=>l.id===state.lessonId) || list[0] || null;
+  if(!lesson){
+    card.appendChild(el(`<div class="empty-state"><span class="kr">시작해요</span><div>Choisis une leçon dans la colonne de gauche.</div></div>`));
+    return card;
+  }
+  const idx = list.findIndex(l=>l.id===lesson.id);
+  if(!isUnlockedSync(list, idx)){
+    card.appendChild(el(`<div class="empty-state"><span class="kr">잠겨 있어요</span><div>Cette leçon est verrouillée — réussis le contrôle précédent pour la débloquer.</div></div>`));
+    return card;
+  }
+  card.appendChild(el(`<div class="lesson-title"><span class="eyebrow">${LEVEL_LABELS[state.level]} · Leçon ${idx+1}</span></div><h2 style="margin:0 0 14px;">${escapeHtml(lesson.title)}</h2>`));
+
+  const tabs = el('<div class="tabs"></div>');
+  [['cours','Cours'],['memoriser','À mémoriser'],['exercices','Exercices'],['traduction','Traduction'],['quiz','Quiz'],['controle','Contrôle'],['revision','Révision']].forEach(([key,label])=>{
+    const b = el(`<button class="tab-btn ${state.tab===key?'active':''}">${label}</button>`);
+    b.onclick = ()=>{ state.tab=key; if(key!=='controle') state.controlResult=null; if(key!=='quiz') state.quizResult=null; if(key!=='exercices'){ state.exerciseIndex=0; state.exerciseCorrectCount=0; } render(); };
+    tabs.appendChild(b);
+  });
+  card.appendChild(tabs);
+
+  const body = el('<div></div>');
+  if(state.tab==='cours') body.appendChild(renderCours(lesson));
+  if(state.tab==='memoriser') body.appendChild(renderMemorize(lesson));
+  if(state.tab==='exercices') body.appendChild(renderExercices(lesson));
+  if(state.tab==='traduction') body.appendChild(renderTraduction(lesson));
+  if(state.tab==='quiz') body.appendChild(renderQuiz(lesson));
+  if(state.tab==='controle') body.appendChild(renderControle(lesson, list, idx));
+  if(state.tab==='revision') body.appendChild(await renderRevision());
+  card.appendChild(body);
+  return card;
+}
+
+function renderCours(lesson){
+  const wrap = el('<div></div>');
+  if(lesson.audio_url){
+    wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:20px;">
+      <b>🔊 Prononciation de la professeur</b>
+      <audio controls src="${escapeHtml(lesson.audio_url)}" style="width:100%;margin-top:8px;"></audio>
+    </div>`));
+  }
+  if(lesson.dialogue && lesson.dialogue.length){
+    const block = el('<div class="section-block"><h3>Le cours</h3></div>');
+    let lastSpeaker = null;
+    lesson.dialogue.forEach(ex=>{
+      if(ex.speaker && ex.speaker !== lastSpeaker){
+        block.appendChild(el(`<div style="font-size:11px;font-weight:700;color:var(--celadon-dark);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 4px;">${escapeHtml(ex.speaker)}${ex.role?' · '+escapeHtml(ex.role):''}</div>`));
+      }
+      if(ex.speaker) lastSpeaker = ex.speaker;
+      ex.segments.forEach(seg=>{
+        const indent = ex.reply ? 'margin-left:18px;border-left:3px solid var(--celadon);padding-left:10px;' : '';
+        const krText = (ex.equiv ? '= ' : '') + seg.kr;
+        const short = seg.fr && seg.kr.length <= 14;   // mot/glose courte : mise en page sur une ligne
+        const krStyle = `font-size:${seg.gloss ? 14 : 16}px;${seg.gloss ? 'color:var(--celadon-dark);' : ''}`;
+        block.appendChild(el(short
+          ? `<div class="vocab-row" style="grid-template-columns:minmax(110px,auto) 1fr;gap:14px;padding:7px 6px;${indent}">
+               <span class="kr" style="${krStyle}">${escapeHtml(krText)}</span>
+               <span class="fr" style="text-align:left;color:var(--ink-soft);">${escapeHtml(seg.fr)}</span>
+             </div>`
+          : `<div class="vocab-row" style="grid-template-columns:1fr;gap:4px;padding:8px 6px;${indent}">
+               <span class="kr" style="${krStyle}">${escapeHtml(krText)}</span>
+               ${seg.fr ? `<span class="fr" style="text-align:left;color:var(--ink-soft);">${escapeHtml(seg.fr)}</span>` : ''}
+             </div>`));
+      });
+    });
+    wrap.appendChild(block);
+  }
+  if(lesson.vowels && lesson.vowels.length){
+    const block = el('<div class="section-block"><h3>Lettres à retenir</h3></div>');
+    const grid = el('<div class="card-grid"></div>');
+    lesson.vowels.forEach(v=>grid.appendChild(el(`<div class="item-card"><span class="kr">${v.kr}</span><div class="rom mono">${v.rom}</div><div class="fr">${v.fr}</div></div>`)));
+    block.appendChild(grid); wrap.appendChild(block);
+  }
+  if(lesson.vocab && lesson.vocab.length){
+    const block = el('<div class="section-block"><h3>Vocabulaire</h3></div>');
+    const rows = el('<div></div>');
+    lesson.vocab.forEach(v=>rows.appendChild(el(`<div class="vocab-row"><span class="kr">${v.kr}</span><span class="rom mono">${v.rom||''}</span><span class="fr">${v.fr}</span></div>`)));
+    block.appendChild(rows); wrap.appendChild(block);
+  }
+  if(lesson.grammar && lesson.grammar.length){
+    const block = el('<div class="section-block"><h3>À comprendre</h3></div>');
+    lesson.grammar.forEach(g=>block.appendChild(el(`<div class="note" style="margin-bottom:10px;">${g}</div>`)));
+    wrap.appendChild(block);
+  }
+  wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);">Une fois à l'aise, passe à Exercices puis Quiz, et enfin au Contrôle — il faut au moins ${Math.round((lesson.pass_score||0.8)*100)}% pour débloquer la suite.</div>`));
+  return wrap;
+}
+
+function renderMemorize(lesson){
+  const wrap = el('<div></div>');
+  const pool = (lesson.vowels||[]).concat(lesson.vocab||[]);
+  if(pool.length===0){ wrap.appendChild(el(`<div class="empty-state">Rien à mémoriser ici.</div>`)); return wrap; }
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Clique sur une carte pour révéler le sens.</div>'));
+  const grid = el('<div class="card-grid"></div>');
+  pool.forEach(v=>{
+    const c = el(`<div class="flip-card"><div><span class="kr">${v.kr}</span></div></div>`);
+    let revealed=false;
+    c.onclick = ()=>{
+      revealed = !revealed; c.classList.toggle('revealed', revealed);
+      c.querySelector('div').innerHTML = revealed ? `<span class="kr">${v.kr}</span>${v.rom?`<div class="meaning mono">${v.rom}</div>`:''}<div class="meaning">${v.fr}</div>` : `<span class="kr">${v.kr}</span>`;
+    };
+    grid.appendChild(c);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function buildMCQ(lesson, count){
+  const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr})));
+  const shuffled = [...items].sort(()=>Math.random()-0.5).slice(0,count||items.length);
+  return shuffled.map((it,i)=>{
+    const correct = it.fr || it.rom;
+    const distractors = items.filter(x=>x!==it).sort(()=>Math.random()-0.5).slice(0,3).map(x=>x.fr||x.rom);
+    return {id:'q'+lesson.id+'_'+i, kr:it.kr, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
+  });
+}
+
+function normFr(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[’‘`]/g,"'").replace(/[^a-z0-9' ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+// Réponse acceptée si elle correspond à la traduction entière OU à l'une de ses
+// variantes ("être changé / être modifié" -> l'une ou l'autre), sans tenir
+// compte des accents, majuscules ni de la ponctuation.
+function frAnswerOk(input, expected){
+  const exp = (expected||'').trim();
+  if(/^[\d\s.,']+$/.test(exp)){            // réponse numérique : seuls les chiffres comptent
+    const digits = x=>(x||'').replace(/\D/g,'');
+    return digits(input)!=='' && digits(input)===digits(exp);
+  }
+  const given = normFr(input);
+  if(!given) return false;
+  const alts = [expected].concat((expected||'').split(/[,;\/]/)).map(normFr).filter(Boolean);
+  const noParen = normFr((expected||'').replace(/\([^)]*\)/g,''));
+  if(noParen) alts.push(noParen);
+  return alts.includes(given);
+}
+function renderExercices(lesson){
+  const wrap = el('<div></div>');
+  const allItems = (lesson.vowels||[]).concat(lesson.vocab||[]);
+  // la saisie exacte n'a de sens que pour des mots/expressions courts : les
+  // phrases entières se travaillent dans le Quiz et le Contrôle
+  const items = allItems.filter(it=> it.rom || (it.fr||'').split(/\s+/).filter(Boolean).length <= 6);
+  if(items.length===0){
+    wrap.appendChild(el(allItems.length
+      ? '<div class="empty-state">Cette leçon ne contient que des phrases longues — travaille-les dans le <b>Quiz</b> et le <b>Contrôle</b>.</div>'
+      : '<div class="empty-state">Rien à travailler ici.</div>'));
+    return wrap;
+  }
+  if(!lesson._exOrder || lesson._exOrder.length!==items.length) lesson._exOrder = items.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  const total = items.length;
+  if(state.exerciseIndex >= total){
+    const done = el(`<div class="result-box"><div class="score mono">${state.exerciseCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Entraînement terminé — refais un tour, ou passe au Quiz.</div></div>`);
+    const restart = el('<button class="btn celadon">Recommencer</button>');
+    restart.onclick = ()=>{ state.exerciseIndex=0; state.exerciseCorrectCount=0; lesson._exOrder = items.map((_,i)=>i).sort(()=>Math.random()-0.5); render(); };
+    done.appendChild(restart); wrap.appendChild(done); return wrap;
+  }
+  const item = items[lesson._exOrder[state.exerciseIndex]];
+  const askRom = !!item.rom;
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">' + (askRom ? 'Tape la romanisation de mémoire, sans pression.' : 'Tape la traduction française de mémoire, sans pression.') + '</div>'));
+  wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${state.exerciseIndex+1} / ${total}</div>`));
+  wrap.appendChild(el(`<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${item.kr}</span></div>`));
+  const row = el('<div style="display:flex;gap:8px;max-width:340px;"></div>');
+  const input = el(`<input type="text" placeholder="${askRom ? 'romanisation...' : 'traduction en français...'}">`); input.style.flex='1';
+  const checkBtn = el('<button class="btn celadon">Vérifier</button>');
+  row.appendChild(input); row.appendChild(checkBtn); wrap.appendChild(row);
+  const fb = el('<div style="margin-top:10px;"></div>'); wrap.appendChild(fb);
+  const nextBtn = el('<button class="btn ghost" style="margin-top:12px;display:none;">Suivant →</button>'); wrap.appendChild(nextBtn);
+  const doCheck = ()=>{
+    if(input.disabled) return;
+    const expected = askRom ? item.rom : item.fr;
+    const ok = askRom ? (input.value.trim().toLowerCase() === (expected||'').toLowerCase()) : frAnswerOk(input.value, expected);
+    if(ok){ state.exerciseCorrectCount=(state.exerciseCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍${(!askRom||!item.fr)?'':(' — '+item.fr)}</div>`; }
+    else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${expected}"${(askRom&&item.fr)?(' ('+item.fr+')'):''}.</div>`; }
+    checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
+  };
+  checkBtn.onclick = doCheck;
+  input.onkeydown = (e)=>{ if(e.key==='Enter') doCheck(); };
+  nextBtn.onclick = async ()=>{
+    state.exerciseIndex++;
+    if(state.exerciseIndex>=total){ await sbUpsertProgress(lesson.id, {exercises:{correct:state.exerciseCorrectCount||0, total, date:new Date().toISOString().slice(0,10)}}); }
+    render();
+  };
+  return wrap;
+}
+
+async function renderGlobalQuiz(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el(`<h2 style="margin:0 0 4px;">🌐 Quiz global</h2>`));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Mélange le vocabulaire de toutes les leçons que tu as déjà validées (contrôle réussi), tous niveaux confondus — pour réviser large avant un vrai contrôle avec ta professeur.</div>'));
+
+  const pool = [];
+  for(const lvl of Object.keys(LEVEL_LABELS)){
+    const list = await lessonsForLevel(lvl);
+    list.forEach(l=>{
+      const pr = PROGRESS[l.id];
+      if(pr && pr.control && pr.control.passed){
+        (l.vowels||[]).forEach(v=>pool.push(v));
+        (l.vocab||[]).forEach(v=>pool.push(v));
+      }
+    });
+  }
+
+  if(pool.length===0){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">아직이에요</span><div>Rien à mélanger pour l'instant — valide au moins une leçon (contrôle réussi) pour débloquer ce quiz.</div></div>`));
+    return wrap;
+  }
+
+  if(state.globalQuizResult){
+    const r = state.globalQuizResult;
+    const box = el(`<div class="result-box"><div class="score mono">${r.correct}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé, ou refais-en un autre.'}</div></div>`);
+    const retry = el('<button class="btn celadon">Nouveau quiz global</button>');
+    retry.onclick = ()=>{ state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
+    box.appendChild(retry); wrap.appendChild(box);
+    if(r.wrong.length){
+      const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
+      r.wrong.forEach(w=>rev.appendChild(el(`<div class="vocab-row"><span class="kr">${w.kr}</span><span class="rom mono">donné : ${w.given||'—'}</span><span class="fr">correct : ${w.answer}</span></div>`)));
+      wrap.appendChild(rev);
+    }
+    return wrap;
+  }
+
+  const shuffled = [...pool].sort(()=>Math.random()-0.5).slice(0, Math.min(15, pool.length));
+  const qs = shuffled.map((it,i)=>{
+    const correct = it.fr || it.rom;
+    const distractors = pool.filter(x=>x!==it).sort(()=>Math.random()-0.5).slice(0,3).map(x=>x.fr||x.rom);
+    return {id:'gq'+i, kr:it.kr, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
+  });
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">${qs.length} question(s) piochées dans ${pool.length} mot(s) au total.</div>`));
+  qs.forEach(q=>{
+    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
+    const opts = el('<div class="opt-list"></div>');
+    q.options.forEach(opt=>{
+      const b = el(`<button class="opt">${opt}</button>`);
+      b.onclick = ()=>{ state.globalQuizAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
+      opts.appendChild(b);
+    });
+    qb.appendChild(opts); wrap.appendChild(qb);
+  });
+  const submit = el('<button class="btn celadon">Valider le quiz global</button>');
+  submit.onclick = ()=>{
+    let correct=0; const wrong=[];
+    qs.forEach(q=>{ const g=state.globalQuizAnswers[q.id]; if(g===q.answer) correct++; else wrong.push({kr:q.kr, given:g, answer:q.answer}); });
+    state.globalQuizResult = {correct, total:qs.length, wrong};
+    render();
+  };
+  wrap.appendChild(submit);
+  return wrap;
+}
+
+function renderWeakWordsPractice(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el(`<h2 style="margin:0 0 4px;">🔁 Mots à revoir</h2>`));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Chaque mot que tu débloques en Traduction atterrit ici automatiquement — indépendamment de la leçon d\'origine.</div>'));
+
+  const addBox = el(`<div class="section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+    <h3 style="margin-top:0;font-size:15px;">+ Ajouter tes propres mots</h3>
+    <div class="note" style="margin-bottom:10px;font-size:12px;">Colle même un morceau brut de tes notes de cours — l'outil repère tout seul les lignes où il y a du coréen suivi d'une traduction en français (ex. "바람이 불다 il y a du vent"), même sans séparateur. Les lignes sans traduction sont simplement ignorées.</div>
+    <textarea id="ww-paste" style="width:100%;min-height:80px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;" placeholder="예쁘다 → joli, mignon"></textarea>
+    <button class="btn celadon small" id="ww-paste-btn" style="margin-top:8px;">Ajouter à mes révisions</button>
+    <span id="ww-paste-status" style="margin-left:8px;font-size:12px;color:var(--ink-soft);"></span>
+  </div>`);
+  addBox.querySelector('#ww-paste-btn').onclick = async ()=>{
+    const raw = addBox.querySelector('#ww-paste').value;
+    const status = addBox.querySelector('#ww-paste-status');
+    const parsed = parseVocabText(raw).filter(v=>v.fr);
+    if(parsed.length===0){ status.textContent = 'Rien de reconnu — vérifie le format.'; return; }
+    status.textContent = 'Ajout en cours…';
+    const added = await sbAddWeakWordsBulk(parsed);
+    status.textContent = added>0 ? `${added} mot(s) ajouté(s) ✓` : 'Déjà tous présents.';
+    addBox.querySelector('#ww-paste').value = '';
+    render();
+  };
+  wrap.appendChild(addBox);
+
+  const tabs = el('<div class="tabs"></div>');
+  [['memoriser','À mémoriser'],['exercices','Exercices']].forEach(([key,label])=>{
+    const b = el(`<button class="tab-btn ${state.reviewTab===key?'active':''}">${label}</button>`);
+    b.onclick = ()=>{ state.reviewTab=key; state.reviewExerciseIndex=0; state.reviewCorrectCount=0; render(); };
+    tabs.appendChild(b);
+  });
+  wrap.appendChild(tabs);
+
+  if(WEAK_WORDS.length===0){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien à revoir pour l'instant — ajoute des mots ci-dessus, ou utilise l'aide en Traduction.</div></div>`));
+    return wrap;
+  }
+
+  if(state.reviewTab==='memoriser'){
+    wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Une fois qu\'un mot est acquis, clique sur "Je le connais" pour l\'enlever de la liste — sinon elle ne fait que grossir. Tu peux aussi en cocher plusieurs et les retirer d\'un coup.</div>'));
+
+    if(WEAK_WORDS.length > 4){
+      const toolbar = el('<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;"></div>');
+      const selectedCount = Object.values(state.reviewSelected).filter(Boolean).length;
+      const allSelected = selectedCount>0 && selectedCount===WEAK_WORDS.length;
+      const selectAllBtn = el(`<button class="btn ghost small">${allSelected?'Tout désélectionner':'Tout sélectionner'}</button>`);
+      selectAllBtn.onclick = ()=>{
+        if(allSelected){ state.reviewSelected = {}; }
+        else{ WEAK_WORDS.forEach(w=>{ state.reviewSelected[w.word] = true; }); }
+        render();
+      };
+      const bulkDeleteBtn = el(`<button class="btn seal small" ${selectedCount===0?'disabled':''}>🗑️ Retirer la sélection (${selectedCount})</button>`);
+      bulkDeleteBtn.onclick = async ()=>{
+        const words = Object.keys(state.reviewSelected).filter(w=>state.reviewSelected[w]);
+        bulkDeleteBtn.disabled = true;
+        await sbRemoveWeakWordsBulk(words);
+        state.reviewSelected = {};
+        render();
+      };
+      toolbar.appendChild(selectAllBtn);
+      toolbar.appendChild(bulkDeleteBtn);
+      wrap.appendChild(toolbar);
+    }
+
+    const grid = el('<div class="card-grid"></div>');
+    WEAK_WORDS.forEach(w=>{
+      const cell = el('<div></div>');
+      const checkRow = el(`<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-soft);margin-bottom:4px;"><input type="checkbox" ${state.reviewSelected[w.word]?'checked':''}> sélectionner</label>`);
+      checkRow.querySelector('input').onchange = (e)=>{ state.reviewSelected[w.word] = e.target.checked; render(); };
+      cell.appendChild(checkRow);
+      const c = el(`<div class="flip-card"><div><span class="kr">${escapeHtml(w.word)}</span></div></div>`);
+      let revealed = false;
+      c.onclick = ()=>{
+        revealed = !revealed; c.classList.toggle('revealed', revealed);
+        c.querySelector('div').innerHTML = revealed
+          ? `<span class="kr">${escapeHtml(w.word)}</span><div class="meaning">${escapeHtml(w.meaning||'')}</div>`
+          : `<span class="kr">${escapeHtml(w.word)}</span>`;
+      };
+      cell.appendChild(c);
+      const knowBtn = el('<button class="btn ghost small" style="width:100%;margin-top:4px;font-size:11px;">✓ Je le connais</button>');
+      knowBtn.onclick = async ()=>{
+        knowBtn.disabled = true;
+        await sbRemoveWeakWord(w.word);
+        delete state.reviewSelected[w.word];
+        render();
+      };
+      cell.appendChild(knowBtn);
+      grid.appendChild(cell);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  // Exercices : drill de saisie, sans sauvegarde (pratique libre, pas liée à une leçon)
+  const total = WEAK_WORDS.length;
+  if(state.reviewExerciseIndex >= total){
+    const done = el(`<div class="result-box"><div class="score mono">${state.reviewCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Tour terminé — refais-en un autre pour renforcer la mémoire.</div></div>`);
+    const restart = el('<button class="btn celadon">Recommencer</button>');
+    restart.onclick = ()=>{ state.reviewExerciseIndex=0; state.reviewCorrectCount=0; render(); };
+    done.appendChild(restart); wrap.appendChild(done); return wrap;
+  }
+  const item = WEAK_WORDS[state.reviewExerciseIndex];
+  wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${state.reviewExerciseIndex+1} / ${total}</div>`));
+  wrap.appendChild(el(`<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${escapeHtml(item.word)}</span></div>`));
+  const row = el('<div style="display:flex;gap:8px;max-width:340px;"></div>');
+  const input = el('<input type="text" placeholder="traduction en français...">'); input.style.flex='1';
+  const checkBtn = el('<button class="btn celadon">Vérifier</button>');
+  row.appendChild(input); row.appendChild(checkBtn); wrap.appendChild(row);
+  const fb = el('<div style="margin-top:10px;"></div>'); wrap.appendChild(fb);
+  const nextBtn = el('<button class="btn ghost" style="margin-top:12px;display:none;">Suivant →</button>'); wrap.appendChild(nextBtn);
+  const doCheck = ()=>{
+    if(input.disabled) return;
+    const ok = input.value.trim().toLowerCase() === (item.meaning||'').trim().toLowerCase();
+    if(ok){ state.reviewCorrectCount=(state.reviewCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍</div>`; }
+    else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${escapeHtml(item.meaning||'')}".</div>`; }
+    checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
+  };
+  checkBtn.onclick = doCheck;
+  input.onkeydown = (e)=>{ if(e.key==='Enter') doCheck(); };
+  nextBtn.onclick = ()=>{ state.reviewExerciseIndex++; render(); };
+  return wrap;
+}
+
+function renderTraduction(lesson){
+  const wrap = el('<div></div>');
+  const items = lesson.translations || [];
+  if(items.length===0){
+    wrap.appendChild(el('<div class="empty-state">Pas de texte à traduire pour cette leçon pour l\'instant.</div>'));
+    return wrap;
+  }
+  const item = items[0];
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Traduis ce texte en français. Bloqué sur un mot ? Clique dessus directement dans le texte pour voir une proposition de traduction.</div>'));
+  wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ Ces traductions sont automatiques. Quand un mot a plusieurs sens possibles, tu verras plusieurs propositions séparées par "/" — à toi de choisir celle qui colle au contexte, ou de rester prudent si aucune ne te semble sûre. En cas de doute, fie-toi plutôt à la liste préparée par ta professeur ci-dessous, ou demande-lui directement dans le chat.</div>`));
+
+  const textCard = el('<div class="item-card kr" style="text-align:left;font-size:19px;line-height:2.2;padding:20px;margin-bottom:16px;white-space:pre-wrap;"></div>');
+  const tokens = (item.text||'').split(/(\s+)/);
+  tokens.forEach(tok=>{
+    if(tok==='' ){ return; }
+    if(/^\s+$/.test(tok)){ textCard.appendChild(document.createTextNode(tok)); return; }
+    const clean = tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if(!clean){ textCard.appendChild(document.createTextNode(tok)); return; }
+    const span = el(`<span style="cursor:pointer;border-bottom:1.5px dashed var(--celadon-dark);">${escapeHtml(tok)}</span>`);
+    const variantsWrap = el('<span></span>');
+    let revealed = false;
+    span.onclick = async ()=>{
+      if(span.dataset.busy==='1') return;
+      if(revealed){ revealed=false; variantsWrap.innerHTML=''; return; }
+      span.dataset.busy='1';
+      variantsWrap.innerHTML = ' <span class="mono" style="font-size:11px;color:var(--ink-soft);">…</span>';
+      try{
+        const variants = await translateWordKoFr(clean);
+        variantsWrap.innerHTML = '';
+        variantsWrap.appendChild(document.createTextNode(' '));
+        variants.forEach(v=>{
+          const chip = el(`<button type="button" class="mono" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(v)}</button>`);
+          chip.onclick = async (e)=>{
+            e.stopPropagation();
+            [...variantsWrap.querySelectorAll('button')].forEach(b=>{ b.style.borderColor='var(--line)'; b.style.background='var(--paper)'; b.style.color='var(--ink)'; });
+            chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
+            await sbAddWeakWord(clean, v);
+          };
+          variantsWrap.appendChild(chip);
+        });
+        revealed = true;
+      }catch(e){
+        variantsWrap.innerHTML = ' <span style="font-size:11px;color:var(--danger);">(indisponible)</span>';
+      }
+      span.dataset.busy='0';
+    };
+    textCard.appendChild(span);
+    textCard.appendChild(variantsWrap);
+  });
+  wrap.appendChild(textCard);
+  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).</div>'));
+
+  const textarea = el('<textarea style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:14px;" placeholder="Ta traduction en français..."></textarea>');
+  textarea.value = state.translationDraft || '';
+  textarea.disabled = state.translationValidated;
+  textarea.oninput = (e)=>{ state.translationDraft = e.target.value; };
+  wrap.appendChild(textarea);
+
+  if(!state.translationValidated){
+    const validateBtn = el('<button class="btn celadon" style="margin-top:10px;">✓ Valider ma traduction</button>');
+    validateBtn.onclick = ()=>{
+      if(!textarea.value.trim()){ alert('Écris ta traduction avant de valider.'); return; }
+      state.translationValidated = true;
+      render();
+    };
+    wrap.appendChild(validateBtn);
+  } else {
+    const editAgainBtn = el('<button class="btn ghost small" style="margin-top:10px;">✏️ Modifier ma traduction</button>');
+    editAgainBtn.onclick = ()=>{ state.translationValidated = false; render(); };
+    wrap.appendChild(el('<div class="note" style="margin-top:10px;border-color:var(--celadon-dark);font-size:12.5px;">Traduction validée ✓ — la référence de la professeur est débloquée plus bas.</div>'));
+    wrap.appendChild(editAgainBtn);
+  }
+
+  if(item.help && item.help.length){
+    const helpBlock = el('<div class="section-block" style="margin-top:20px;"><h3>Aide donnée par la professeur sur certains mots</h3></div>');
+    const grid = el('<div class="card-grid"></div>');
+    item.help.forEach(h=>{
+      const c = el(`<div class="flip-card"><div><span class="kr">${escapeHtml(h.word)}</span></div></div>`);
+      let revealed = false;
+      c.onclick = ()=>{
+        revealed = !revealed; c.classList.toggle('revealed', revealed);
+        c.querySelector('div').innerHTML = revealed
+          ? `<span class="kr">${escapeHtml(h.word)}</span><div class="meaning">${escapeHtml(h.meaning)}</div>`
+          : `<span class="kr">${escapeHtml(h.word)}</span>`;
+        if(revealed){ sbAddWeakWord(h.word, h.meaning); }
+      };
+      grid.appendChild(c);
+    });
+    helpBlock.appendChild(grid);
+    wrap.appendChild(helpBlock);
+  }
+
+  if(item.ref || item.refAudio){
+    const revealWrap = el('<div class="section-block" style="margin-top:24px;border-top:1.5px solid var(--line);padding-top:20px;"></div>');
+    revealWrap.appendChild(el('<h3>Traduction de référence</h3>'));
+    if(!state.translationValidated){
+      revealWrap.appendChild(el('<div class="note" style="font-size:12.5px;">🔒 Valide d\'abord ta propre traduction ci-dessus pour débloquer celle de ta professeur.</div>'));
+      wrap.appendChild(revealWrap);
+      return wrap;
+    }
+    revealWrap.appendChild(el('<div class="note" style="margin-bottom:10px;font-size:12.5px;">De ta professeur — fiable, contrairement à l\'aide automatique ci-dessus.</div>'));
+    const revealBtn = el('<button class="btn ghost">Révéler la traduction de la professeur</button>');
+    const refBox = el('<div class="item-card" style="text-align:left;margin-top:12px;padding:16px 18px;display:none;white-space:pre-wrap;"></div>');
+    revealBtn.onclick = ()=>{
+      let html = '';
+      if(item.ref) html += escapeHtml(item.ref);
+      if(item.refAudio) html += `${item.ref?'<br><br>':''}<audio controls src="${escapeHtml(item.refAudio)}" style="width:100%;"></audio>`;
+      refBox.innerHTML = html;
+      refBox.style.display = 'block';
+      revealBtn.style.display = 'none';
+    };
+    revealWrap.appendChild(revealBtn);
+    revealWrap.appendChild(refBox);
+    wrap.appendChild(revealWrap);
+  }
+
+  return wrap;
+}
+
+function renderQuiz(lesson){
+  const wrap = el('<div></div>');
+  if(state.quizResult){
+    const r = state.quizResult;
+    const box = el(`<div class="result-box"><div class="score mono">${r.correct}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé.'}</div></div>`);
+    const retry = el('<button class="btn celadon">Refaire le quiz</button>');
+    retry.onclick = ()=>{ state.quizResult=null; delete lesson._quiz; render(); };
+    box.appendChild(retry); wrap.appendChild(box);
+    if(r.wrong.length){
+      const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
+      r.wrong.forEach(w=>rev.appendChild(el(`<div class="vocab-row"><span class="kr">${w.kr}</span><span class="rom mono">donné : ${w.given||'—'}</span><span class="fr">correct : ${w.answer}</span></div>`)));
+      wrap.appendChild(rev);
+    }
+    return wrap;
+  }
+  const qs = lesson._quiz || (lesson._quiz = buildMCQ(lesson, 10));
+  if(qs.length===0){ wrap.appendChild(el('<div class="empty-state">Pas de contenu pour un quiz ici.</div>')); return wrap; }
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Petit contrôle rapide, sans enjeu.</div>'));
+  qs.forEach(q=>{
+    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
+    const opts = el('<div class="opt-list"></div>');
+    q.options.forEach(opt=>{
+      const b = el(`<button class="opt">${opt}</button>`);
+      b.onclick = ()=>{ state.quizAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
+      opts.appendChild(b);
+    });
+    qb.appendChild(opts); wrap.appendChild(qb);
+  });
+  const submit = el('<button class="btn celadon">Valider le quiz</button>');
+  submit.onclick = async ()=>{
+    let correct=0; const wrong=[];
+    qs.forEach(q=>{ const g=state.quizAnswers[q.id]; if(g===q.answer) correct++; else wrong.push({kr:q.kr, given:g, answer:q.answer}); });
+    state.quizResult = {correct, total:qs.length, wrong};
+    await sbUpsertProgress(lesson.id, {quiz:{correct, total:qs.length, date:new Date().toISOString().slice(0,10)}});
+    render();
+  };
+  wrap.appendChild(submit);
+  return wrap;
+}
+
+function renderControle(lesson, list, idx){
+  const wrap = el('<div></div>');
+  if(state.controlResult){
+    const r = state.controlResult;
+    const box = el('<div class="result-box"></div>');
+    if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
+    box.appendChild(el(`<div class="score mono">${r.correct}/${r.total}</div>`));
+    box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi — la leçon suivante est débloquée.":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
+    const retry = el('<button class="btn celadon">Retenter le contrôle</button>');
+    retry.onclick = ()=>{ state.controlResult=null; delete lesson._control; render(); };
+    box.appendChild(retry); wrap.appendChild(box);
+    if(r.wrong.length){
+      const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
+      r.wrong.forEach(w=>rev.appendChild(el(`<div class="vocab-row"><span class="kr">${w.kr}</span><span class="rom mono">donné : ${w.given||'—'}</span><span class="fr">correct : ${w.answer}</span></div>`)));
+      wrap.appendChild(rev);
+    }
+    return wrap;
+  }
+  const qs = lesson._control || (lesson._control = buildMCQ(lesson, 10));
+  qs.forEach(q=>{
+    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
+    const opts = el('<div class="opt-list"></div>');
+    q.options.forEach(opt=>{
+      const b = el(`<button class="opt">${opt}</button>`);
+      b.onclick = ()=>{ state.controlAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
+      opts.appendChild(b);
+    });
+    qb.appendChild(opts); wrap.appendChild(qb);
+  });
+  const submit = el('<button class="btn seal">Valider le contrôle</button>');
+  submit.onclick = async ()=>{
+    let correct=0; const wrong=[];
+    qs.forEach(q=>{ const g=state.controlAnswers[q.id]; if(g===q.answer) correct++; else wrong.push({kr:q.kr, given:g, answer:q.answer}); });
+    const total=qs.length, ratio=correct/total, passed = ratio >= (lesson.pass_score||0.8);
+    state.controlResult = {correct, total, passed, wrong};
+    const prevAttempts = (PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.attempts) || 0;
+    await sbUpsertProgress(lesson.id, {control:{passed, score:ratio, date:new Date().toISOString().slice(0,10), attempts:prevAttempts+1}});
+    if(passed && PROFILE.role==='student'){
+      PROFILE.xp = (PROFILE.xp||0)+20; PROFILE.streak=(PROFILE.streak||0)+1;
+      await sb.from('profiles').update({xp:PROFILE.xp, streak:PROFILE.streak}).eq('id', SESSION.user.id);
+    }
+    render();
+  };
+  wrap.appendChild(submit);
+  return wrap;
+}
+
+async function renderRevision(){
+  const wrap = el('<div></div>');
+  const list = await lessonsForLevel(state.level);
+  const pool = [];
+  list.forEach(l=>{
+    const pr = PROGRESS[l.id];
+    if(pr && pr.control && pr.control.passed){ (l.vowels||[]).forEach(v=>pool.push(v)); (l.vocab||[]).forEach(v=>pool.push(v)); }
+  });
+  if(pool.length===0){ wrap.appendChild(el('<div class="empty-state">Rien à réviser pour l\'instant.</div>')); return wrap; }
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Clique pour révéler le sens.</div>'));
+  const grid = el('<div class="card-grid"></div>');
+  pool.forEach(v=>{
+    const c = el(`<div class="flip-card"><div><span class="kr">${v.kr}</span></div></div>`);
+    c.onclick = ()=>{ if(c.classList.contains('revealed')) return; c.classList.add('revealed'); c.querySelector('div').innerHTML = `<span class="kr">${v.kr}</span>${v.rom?`<div class="meaning mono">${v.rom}</div>`:''}<div class="meaning">${v.fr}</div>`; };
+    grid.appendChild(c);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* ---------------- TEACHER: manage lessons ---------------- */
+function isHangul(s){ return /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(s||''); }
+function hasLatinLetters(s){ return /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(s||''); }
+
+// Tente d'extraire une paire coréen/français d'un fragment de texte qui n'a
+// AUCUN séparateur explicite (ex. "바람이 불다 il y a du vent" collé tel quel
+// dans des notes de cours). On repère juste où s'arrête le hangeul et où
+// commence le texte en alphabet latin — pas besoin de comprendre le sens.
+function splitEmbeddedKoFr(segment){
+  let lastHangulIdx = -1;
+  for(let i=0;i<segment.length;i++){ if(isHangul(segment[i])) lastHangulIdx = i; }
+  if(lastHangulIdx===-1) return null; // pas de coréen du tout sur ce fragment
+  // la ponctuation collée au dernier mot coréen (. ? ! …) reste avec le coréen
+  const tail = segment.slice(lastHangulIdx+1);
+  const punct = (tail.match(/^[.?!…。？！~]+/) || [''])[0];
+  const kr = (segment.slice(0, lastHangulIdx+1) + punct).trim();
+  let fr = tail.slice(punct.length).trim().replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ0-9(]+/, '').trim();
+  if(!kr || !(hasLatinLetters(fr) || /\d/.test(fr))) return null; // pas de traduction accolée -> on ignore la ligne
+  return {kr, rom:'', fr};
+}
+
+function parseVocabText(raw){
+  const results = [];
+  const seen = new Set();
+  raw.split('\n').forEach(rawLine=>{
+    let line = rawLine.trim();
+    if(!line) return;
+    // Retire les puces de correction ("* ..."), les reformulations ("= ...")
+    // et les indicatifs de dialogue courts ("A :", "B:", "엄마 :"...)
+    line = line.replace(/^[*=]\s*/, '').replace(/^[A-Za-z가-힣]{1,3}\s*[:：]\s*/, '').trim();
+    if(!line) return;
+
+    const arrowParts = line.split('→').map(s=>s.trim()).filter(Boolean);
+    const segments = arrowParts.length>1 ? arrowParts : [line];
+
+    segments.forEach(seg=>{
+      let parts;
+      if(seg.includes('\t')) parts = seg.split('\t');
+      else if(seg.includes('->')) parts = seg.split('->');
+      else if(seg.includes('|')) parts = seg.split('|');
+      else if(seg.includes(';')) parts = seg.split(';');
+      else if((seg.match(/,/g)||[]).length>=2) parts = seg.split(',');
+      else parts = null;
+
+      let entry = null;
+      if(parts && parts.length>=2){
+        parts = parts.map(s=>s&&s.trim());
+        if(parts.length>=3){
+          const [kr,rom,fr] = parts;
+          if(kr) entry = {kr, rom:rom||'', fr:fr||''};
+        } else {
+          const [a,b] = parts;
+          if(isHangul(a)) entry = {kr:a, rom:'', fr:b||''};
+          else if(isHangul(b)) entry = {kr:b, rom:'', fr:a||''};
+          else if(a) entry = {kr:a, rom:'', fr:b||''};
+        }
+      } else {
+        entry = splitEmbeddedKoFr(seg);
+      }
+      if(entry && entry.kr && !seen.has(entry.kr)){
+        seen.add(entry.kr);
+        results.push(entry);
+      }
+    });
+  });
+  return results;
+}
+
+// ---------------------------------------------------------------
+// Analyseur de cours — lit les notes de la prof telles qu'elle les écrit,
+// en acceptant ses DEUX habitudes de notation (souvent mélangées) :
+//
+//  A) Cours de groupe, avec locuteurs :
+//       locuteur (rôle) : segment1 | segment2 = traduction1 | traduction2
+//  B) Cours individuel, traduction collée juste après le coréen :
+//       역사 histoire
+//       이름 모르겠어요. Je ne connais pas le nom.
+//
+// Règles :
+//  - ":" (ou "：") sépare un locuteur court du contenu. Sans ":", pas de locuteur.
+//  - "(rôle)" après le nom du locuteur = étiquette affichée, jamais traduite ;
+//    s'il manque, on réutilise le dernier rôle vu pour ce même locuteur.
+//  - "*" en début de ligne = réponse de l'élève ; "=" en début de ligne =
+//    reformulation de la phrase précédente.
+//  - "|" sépare plusieurs segments coréens sur une même ligne.
+//  - "=" ou "→" suivi de français = traduction MANUELLE du coréen qui précède
+//    (fiable : jamais besoin de l'API pour ce bout-là).
+//  - Sans séparateur, si du français suit directement le coréen, c'est lu
+//    comme une traduction (on repère juste où le hangeul s'arrête).
+//  - Une glose entre parenthèses en fin de ligne "(연말 fin d'année)" devient
+//    une entrée de vocabulaire à part.
+//  - Virgules, points, "!", "?" ne coupent JAMAIS un segment.
+//  - Un segment coréen sans traduction reste vide : à compléter à la main ou
+//    par suggestion automatique, toujours relue avant de valider.
+// ---------------------------------------------------------------
+function isFrenchish(s){ return !!s && !isHangul(s) && hasLatinLetters(s); }
+
+function parseContentSegments(content){
+  const out = [];
+  let gloss = null;
+
+  // glose entre parenthèses en fin de ligne : "phrase (연말 fin d'année)"
+  const pm = content.match(/\s*\(([^()]*)\)\s*$/);
+  if(pm && isHangul(pm[1])){
+    const g = splitEmbeddedKoFr(pm[1]);
+    if(g){ gloss = { kr:g.kr, fr:g.fr, manual:true, gloss:true }; content = content.slice(0, pm.index).trim(); }
+  }
+
+  if(content){
+    const eqIdx = content.indexOf('=');
+    if(eqIdx !== -1){
+      // "ko1 | ko2 = fr1 | fr2" : les segments des deux côtés se correspondent un par un
+      const koSegs = content.slice(0, eqIdx).split('|').map(s=>s.trim()).filter(Boolean);
+      const frSegs = content.slice(eqIdx+1).split('|').map(s=>s.trim());
+      koSegs.forEach((kr,i)=> out.push({ kr, fr: frSegs[i]||'', manual: !!frSegs[i] }));
+    } else if(content.includes('→')){
+      const parts = content.split('→').map(s=>s.trim()).filter(Boolean);
+      if(parts.length===2 && isFrenchish(parts[1])){
+        out.push({ kr: parts[0], fr: parts[1], manual: true });
+      } else {
+        parts.forEach(p=>{
+          const e = splitEmbeddedKoFr(p);
+          out.push(e ? { kr:e.kr, fr:e.fr, manual:true } : { kr:p, fr:'', manual:false });
+        });
+      }
+    } else if(content.includes('|')){
+      content.split('|').map(s=>s.trim()).filter(Boolean).forEach(kr=> out.push({ kr, fr:'', manual:false }));
+    } else {
+      const e = splitEmbeddedKoFr(content);
+      out.push(e ? { kr:e.kr, fr:e.fr, manual:true } : { kr:content, fr:'', manual:false });
+    }
+  }
+  if(gloss) out.push(gloss);
+  return out;
+}
+
+function parseDialogueText(raw){
+  const exchanges = [];
+  const lastRoleBySpeaker = {};
+  raw.split('\n').forEach(rawLine=>{
+    let line = rawLine.trim();
+    if(!line) return;
+
+    let reply = false, equiv = false;
+    if(/^\*/.test(line)){ reply = true; line = line.replace(/^\*+\s*/, ''); }
+    if(/^=/.test(line)){ equiv = true; line = line.replace(/^=+\s*/, ''); }
+    if(!line) return;
+
+    let speaker = null, role = null, content = line;
+    const i1 = line.indexOf(':'), i2 = line.indexOf('：');
+    const colonIdx = (i1===-1) ? i2 : (i2===-1 ? i1 : Math.min(i1,i2));
+    if(colonIdx !== -1){
+      const before = line.slice(0, colonIdx).trim();
+      // un vrai nom de locuteur est court, contient des lettres, et ne ressemble pas à une phrase
+      if(before && before.length<=30 && !/[.?!]/.test(before) && /[A-Za-zÀ-ÖØ-öø-ÿ\uAC00-\uD7A3]/.test(before)){
+        content = line.slice(colonIdx+1).trim();
+        const m = before.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+        if(m){ speaker = m[1].trim(); role = m[2].trim(); if(speaker) lastRoleBySpeaker[speaker] = role; }
+        else { speaker = before; role = lastRoleBySpeaker[speaker] || null; }
+      }
+    }
+    if(!content) return;
+
+    const segments = parseContentSegments(content);
+    if(segments.length===0) return;
+    exchanges.push({ speaker, role, reply, equiv, segments });
+  });
+  return exchanges;
+}
+
+// Nombres coréens : se CALCULENT (aucune API, aucun quota, aucune ambiguïté
+// de traduction). Deux systèmes : sino-coréen (일 이 삼 … 십 백 천 만 억 조)
+// et purement coréen (하나 둘 … 열 스물 서른 …).
+const KO_SINO_DIGITS = {영:0,공:0,일:1,이:2,삼:3,사:4,오:5,육:6,칠:7,팔:8,구:9};
+const KO_SINO_SMALL  = {십:10,백:100,천:1000};
+const KO_SINO_BIG    = {만:1e4,억:1e8,조:1e12};
+const KO_NATIVE_ONES = {하나:1,둘:2,셋:3,넷:4,다섯:5,여섯:6,일곱:7,여덟:8,아홉:9};
+const KO_NATIVE_TENS = {열:10,스물:20,서른:30,마흔:40,쉰:50,예순:60,일흔:70,여든:80,아흔:90};
+function koNumeralToNumber(raw){
+  const s = (raw||'').replace(/\s+/g,'').replace(/[.,!?…~]+$/,'');
+  if(!s) return null;
+  if(/^[영공일이삼사오육칠팔구십백천만억조]+$/.test(s)){
+    let total=0, section=0, num=0;
+    for(const ch of s){
+      if(ch in KO_SINO_DIGITS){ num = KO_SINO_DIGITS[ch]; }
+      else if(ch in KO_SINO_SMALL){ section += (num||1)*KO_SINO_SMALL[ch]; num = 0; }
+      else { section += num; total += (section||1)*KO_SINO_BIG[ch]; section = 0; num = 0; }
+    }
+    return total + section + num;
+  }
+  if(s in KO_NATIVE_ONES) return KO_NATIVE_ONES[s];
+  for(const t of Object.keys(KO_NATIVE_TENS)){
+    if(s===t) return KO_NATIVE_TENS[t];
+    if(s.startsWith(t) && (s.slice(t.length) in KO_NATIVE_ONES)) return KO_NATIVE_TENS[t] + KO_NATIVE_ONES[s.slice(t.length)];
+  }
+  return null;
+}
+
+// Traduction d'une phrase entière via MyMemory — simple suggestion de départ
+// pour les segments sans traduction ; la prof relit et corrige avant de valider.
+// Le service gratuit a un quota quotidien : on le détecte pour ne jamais
+// écrire son message d'avertissement à la place d'une traduction.
+async function translateSentenceKoFr(text){
+  try{
+    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ko|fr`);
+    const data = await res.json();
+    const t = (data && data.responseData && data.responseData.translatedText) || '';
+    const status = parseInt(data && data.responseStatus, 10);
+    if(/MYMEMORY WARNING/i.test(t) || status===429) return { text:'', quota:true };
+    if(status && status!==200) return { text:'', quota:false };
+    return { text:t, quota:false };
+  }catch(e){ return { text:'', quota:false }; }
+}
+
+// Widget réutilisable : zone de collage + analyse + tableau de relecture
+// éditable, utilisé à la fois pour créer et pour modifier une leçon.
+function buildDialogueEditor(initialExchanges){
+  let exchanges = (initialExchanges||[]).map(ex=>({ ...ex, segments:(ex.segments||[]).map(s=>({...s})) }));
+  const wrap = el('<div></div>');
+
+  const toRaw = (list)=> list.map(ex=>{
+    const prefix = (ex.reply?'* ':'') + (ex.equiv?'= ':'') + (ex.speaker ? `${ex.speaker}${ex.role?` (${ex.role})`:''} : ` : '');
+    const hasFr = ex.segments.some(s=>s.fr);
+    return prefix + ex.segments.map(s=>s.kr).join(' | ') + (hasFr ? ' = ' + ex.segments.map(s=>s.fr||'').join(' | ') : '');
+  }).join('\n');
+  const rawText = toRaw(exchanges);
+
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:10px;font-size:12px;line-height:1.55;">
+    Colle ton cours <b>tel quel</b>. Sont reconnus :<br>
+    • coréen suivi de sa traduction sur la même ligne : <code>역사 histoire</code><br>
+    • <code>coréen → français</code> ou <code>coréen = français</code><br>
+    • dialogues : <code>locuteur (rôle) : coréen | coréen = français | français</code><br>
+    • <code>*</code> en début de ligne = réponse de l'élève<br>
+    Les phrases sans traduction restent vides : tu les complètes à la main ou avec la suggestion automatique, et tu relis avant d'enregistrer.</div>`));
+  const textarea = el(`<textarea style="width:100%;min-height:180px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;">${escapeHtml(rawText)}</textarea>`);
+  wrap.appendChild(textarea);
+  const btnRow = el('<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;"></div>');
+  const analyzeBtn = el('<button type="button" class="btn ghost small">Analyser le texte</button>');
+  const apiBtn = el('<button type="button" class="btn ghost small" style="display:none;">🌐 Suggérer les traductions manquantes</button>');
+  const status = el('<span style="font-size:12px;color:var(--ink-soft);align-self:center;"></span>');
+  btnRow.appendChild(analyzeBtn); btnRow.appendChild(apiBtn); btnRow.appendChild(status);
+  wrap.appendChild(btnRow);
+  const reviewBox = el('<div style="max-height:460px;overflow-y:auto;"></div>');
+  wrap.appendChild(reviewBox);
+
+  let lastAnalyzed = textarea.value;
+  // Ré-analyse le texte SANS perdre le travail de relecture déjà fait : les
+  // traductions corrigées à la main (et les suggestions déjà reçues) sont
+  // reportées sur les segments dont le coréen n'a pas changé.
+  const syncFromText = ()=>{
+    const known = new Map();
+    exchanges.forEach(ex=>ex.segments.forEach(s=>{ if(s.fr) known.set(s.kr, { fr:s.fr, manual:s.manual, edited:s.edited }); }));
+    exchanges = parseDialogueText(textarea.value);
+    exchanges.forEach(ex=>ex.segments.forEach(s=>{
+      const k = known.get(s.kr);
+      if(k && (!s.fr || k.edited)){ s.fr = k.fr; s.manual = k.manual; if(k.edited) s.edited = true; }
+    }));
+    lastAnalyzed = textarea.value;
+  };
+  const countSummary = ()=>{
+    const segs = exchanges.reduce((n,ex)=>n+ex.segments.length, 0);
+    const withFr = exchanges.reduce((n,ex)=>n+ex.segments.filter(s=>s.fr).length, 0);
+    return `${segs} segment(s) : ${withFr} avec traduction, ${segs-withFr} sans.`;
+  };
+
+  function renderReview(){
+    reviewBox.innerHTML = '';
+    if(exchanges.length===0) return;
+    apiBtn.style.display = exchanges.some(ex=>ex.segments.some(s=>!s.fr)) ? 'inline-block' : 'none';
+    exchanges.forEach(ex=>{
+      const card = el('<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;"></div>');
+      const tags = [];
+      if(ex.speaker) tags.push(escapeHtml(ex.speaker) + (ex.role?' · '+escapeHtml(ex.role):''));
+      if(ex.reply) tags.push('↳ réponse de l\'élève');
+      if(ex.equiv) tags.push('= reformulation');
+      if(tags.length){
+        card.appendChild(el(`<div style="font-size:11px;font-weight:700;color:var(--celadon-dark);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;">${tags.join(' — ')}</div>`));
+      }
+      ex.segments.forEach(seg=>{
+        const row = el('<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"></div>');
+        row.appendChild(el(`<div class="kr" style="flex:1;font-size:14px;">${escapeHtml(seg.kr)}${seg.gloss?' <span class="mono" style="font-size:10px;color:var(--ink-soft);">glose</span>':''}</div>`));
+        const input = el(`<input type="text" value="${escapeHtml(seg.fr)}" placeholder="traduction..." style="flex:1;font-size:13px;">`);
+        input.oninput = (e)=>{ seg.fr = e.target.value; seg.manual = true; seg.edited = true; };
+        row.appendChild(input);
+        if(!seg.manual && seg.fr){ row.appendChild(el('<span class="mono" style="font-size:10px;color:var(--gold);white-space:nowrap;">suggestion</span>')); }
+        card.appendChild(row);
+      });
+      reviewBox.appendChild(card);
+    });
+  }
+
+  analyzeBtn.onclick = ()=>{
+    syncFromText();
+    status.textContent = countSummary();
+    renderReview();
+  };
+
+  apiBtn.onclick = async ()=>{
+    apiBtn.disabled = true;
+    const todo = []; let skippedWords = 0, numerals = 0;
+    exchanges.forEach(ex=>ex.segments.forEach(seg=>{
+      if(seg.fr) return;
+      const k = seg.kr.trim();
+      const n = koNumeralToNumber(k);
+      if(n !== null){ seg.fr = n.toLocaleString('en-US'); seg.manual = false; numerals++; return; }
+      // un mot isolé est trop ambigu sans contexte : on ne propose rien
+      if(!/\s/.test(k) && k.length<=6){ skippedWords++; return; }
+      if(k.length>160){ return; } // limite de longueur du service gratuit
+      todo.push(seg);
+    }));
+    let done = 0, quota = false;
+    for(const seg of todo){
+      status.textContent = `Suggestion ${done+1}/${todo.length}…`;
+      const r = await translateSentenceKoFr(seg.kr);
+      if(r.quota){ quota = true; break; }
+      if(r.text){ seg.fr = r.text; seg.manual = false; }
+      done++;
+    }
+    apiBtn.disabled = false;
+    status.textContent = quota
+      ? `${numerals?numerals+' nombre(s) converti(s). ':''}Quota gratuit du service atteint pour aujourd\'hui — complète les phrases à la main ou réessaie demain.`
+      : `Terminé${numerals?` — ${numerals} nombre(s) converti(s)`:''}${skippedWords?` — ${skippedWords} mot(s) isolé(s) laissé(s) vide(s), trop ambigus sans contexte`:''}. Relis et corrige avant d'enregistrer.`;
+    renderReview();
+  };
+
+  if(exchanges.length) renderReview();
+
+  return {
+    element: wrap,
+    // Si du texte a été collé/modifié sans cliquer sur "Analyser", on l'analyse
+    // ici plutôt que de l'ignorer en silence à l'enregistrement.
+    getExchanges: ()=>{ if(textarea.value !== lastAnalyzed){ syncFromText(); } return exchanges; },
+    setText: (t)=>{
+      const cur = textarea.value.trim();
+      textarea.value = cur ? cur + '\n' + t : t;
+      syncFromText();
+      status.textContent = countSummary();
+      renderReview();
+    }
+  };
+}
+
+function dialogueToVocab(exchanges){
+  const seen = new Set();
+  const vocab = [];
+  (exchanges||[]).forEach(ex=> ex.segments.forEach(s=>{
+    if(s.kr && s.fr && !seen.has(s.kr)){ seen.add(s.kr); vocab.push({kr:s.kr, rom:'', fr:s.fr}); }
+  }));
+  return vocab;
+}
+
+async function renderManage(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el(`<h2 style="margin:0 0 6px;">Gérer les leçons — ${LEVEL_LABELS[state.level]}</h2>`));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:20px;">Réservé au Mode Professeur. Une fois le vocabulaire entré, les fiches à mémoriser, les exercices, le quiz, le contrôle et les révisions sont générés automatiquement pour les élèves.</div>'));
+
+  const form = el(`<div>
+    <div class="field"><label>Titre de la leçon</label><input type="text" id="mg-title"></div>
+  </div>`);
+  wrap.appendChild(form);
+
+  const dialogueEditor = buildDialogueEditor([]);
+  const dialogueSection = el('<div class="section-block" style="border:1.5px dashed var(--gold);border-radius:10px;padding:16px 18px;margin-bottom:22px;"><h3 style="margin-top:0;">📖 Contenu du cours — colle tes notes telles quelles</h3></div>');
+  dialogueSection.appendChild(dialogueEditor.element);
+  wrap.appendChild(dialogueSection);
+
+  const form2 = el(`<div>
+    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne (optionnel, en plus du dialogue ci-dessus)</label><textarea id="mg-vocab" placeholder="salut → 안녕&#10;안녕 | annyeong | salut (romanisation facultative)" style="min-height:100px;"></textarea>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Colle un tableau Google Docs, ou écris "français → coréen" ou "coréen → français" — la romanisation est facultative, ajoute-la avec un | si tu veux ("coréen | romanisation | français").</div>
+      <div id="mg-vocab-preview" class="note" style="margin-top:8px;font-size:12px;">Aucun mot détecté pour l'instant.</div>
+    </div>
+    <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="mg-grammar"></textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Le cours lui-même (phrases, vocabulaire, dialogues) se colle dans « Contenu du cours » plus haut, sinon il n'alimente ni les exercices ni le quiz. <button type="button" class="btn ghost small" id="mg-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
+    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea id="mg-trans-text" placeholder="Colle ou écris le texte en coréen que l'élève devra traduire..." style="min-height:80px;"></textarea></div>
+    <div class="field"><label>Ta traduction de référence (optionnel — fiable, révélée à la demande de l'élève, séparément du texte)</label>
+      <textarea id="mg-trans-ref" placeholder="Tu peux l'écrire ici, ou juste l'enregistrer à voix haute ci-dessous — les deux sont possibles."></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+        <button type="button" class="btn ghost small" id="mg-ref-rec-btn">🎙️ Enregistrer plutôt à l'oral</button>
+        <span id="mg-ref-rec-status" style="font-size:12px;color:var(--ink-soft);"></span>
+      </div>
+    </div>
+    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea id="mg-trans-help" placeholder="복잡하다 | être compliqué, embrouillé"></textarea></div>
+    <div class="field"><label>Score requis pour débloquer la suite (%)</label><input type="text" id="mg-pass" value="80"></div>
+    <div class="field">
+      <label>Prononciation par la professeur (optionnel)</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button type="button" class="btn ghost small" id="mg-rec-btn">🎙️</button>
+        <span id="mg-rec-status" style="font-size:12px;color:var(--ink-soft);">Enregistre-toi en train de dire les nouveaux mots avec la bonne intonation — l'élève pourra la réécouter à volonté.</span>
+      </div>
+    </div>
+  </div>`);
+  wrap.appendChild(form2);
+
+  form2.querySelector('#mg-grammar-move').onclick = ()=>{
+    const g = form2.querySelector('#mg-grammar');
+    if(!g.value.trim()) return;
+    dialogueEditor.setText(g.value); g.value = '';
+  };
+
+  let pendingAudioUrl = null;
+  wireVoiceRecorder(form2.querySelector('#mg-rec-btn'), form2.querySelector('#mg-rec-status'), (url)=>{ pendingAudioUrl = url; });
+
+  let pendingRefAudioUrl = null;
+  wireVoiceRecorder(form2.querySelector('#mg-ref-rec-btn'), form2.querySelector('#mg-ref-rec-status'), (url)=>{ pendingRefAudioUrl = url; });
+
+  const vocabArea = form2.querySelector('#mg-vocab');
+  const preview = form2.querySelector('#mg-vocab-preview');
+  const refreshPreview = ()=>{
+    const parsed = parseVocabText(vocabArea.value);
+    if(parsed.length===0){ preview.textContent = 'Aucun mot détecté pour l\'instant.'; return; }
+    const sample = parsed.slice(0,3).map(v=>v.rom ? `${v.kr} → ${v.rom} (${v.fr||'?'})` : `${v.kr} → ${v.fr||'?'}`).join(' · ');
+    preview.textContent = `${parsed.length} mot(s) détecté(s) : ${sample}${parsed.length>3?' …':''}`;
+  };
+  vocabArea.oninput = refreshPreview;
+
+  const addBtn = el('<button class="btn celadon">Ajouter la leçon</button>');
+  const addStatus = el('<span style="margin-left:10px;font-size:12px;"></span>');
+  const afterCreate = el('<div></div>');
+  addBtn.onclick = async ()=>{
+    const title = form.querySelector('#mg-title').value.trim();
+    if(!title){ addStatus.style.color='var(--danger)'; addStatus.textContent='Le titre est obligatoire.'; return; }
+    addBtn.disabled = true; addStatus.style.color='var(--ink-soft)'; addStatus.textContent = 'Ajout en cours…';
+    const dialogue = dialogueEditor.getExchanges();
+    const manualVocab = parseVocabText(vocabArea.value);
+    const dialogueVocab = dialogueToVocab(dialogue);
+    const seenKr = new Set();
+    const vocab = [...dialogueVocab, ...manualVocab].filter(v=>{
+      if(seenKr.has(v.kr)) return false;
+      seenKr.add(v.kr); return true;
+    });
+    const grammar = form2.querySelector('#mg-grammar').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const passScore = (parseFloat(form2.querySelector('#mg-pass').value)||80)/100;
+    const transText = form2.querySelector('#mg-trans-text').value.trim();
+    const transRef = form2.querySelector('#mg-trans-ref').value.trim();
+    const transHelp = form2.querySelector('#mg-trans-help').value.split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{
+      const [word,meaning] = line.split('|').map(s=>s&&s.trim());
+      return {word:word||'', meaning:meaning||''};
+    }).filter(h=>h.word);
+    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
+    const list = await lessonsForLevel(state.level);
+    const id = state.level[0] + (list.length+1) + '-' + Date.now().toString(36);
+    const { error } = await sbAddLesson({id, space:state.level, position:list.length+1, title, vowels:[], vocab, dialogue, grammar, pass_score:passScore, translations, audio_url:pendingAudioUrl});
+    addBtn.disabled = false;
+    if(error){
+      addStatus.style.color='var(--danger)';
+      addStatus.textContent = 'Erreur : ' + error.message + ' — as-tu bien lancé toutes les migrations SQL (voir README) ?';
+      return;
+    }
+    addStatus.style.color='var(--celadon-dark)'; addStatus.textContent = 'Leçon ajoutée ✓';
+    delete LESSONS_CACHE[state.level];
+    renderAssignAfterCreate(afterCreate, state.level, id, title);
+  };
+  wrap.appendChild(addBtn);
+  wrap.appendChild(addStatus);
+  wrap.appendChild(afterCreate);
+
+  const list = await lessonsForLevel(state.level);
+  const existing = el('<div class="section-block" style="margin-top:30px;"><h3>Leçons existantes</h3></div>');
+  if(list.length===0){ existing.appendChild(el('<div class="empty-level">Aucune pour l\'instant.</div>')); }
+  list.forEach(l=>{
+    const row = el(`<div class="vocab-row" style="align-items:center;"><span>${escapeHtml(l.title)}${l.audio_url?' 🔊':''}</span><span></span><span></span></div>`);
+    const editBtn = el('<button class="btn ghost small">✏️ Modifier</button>');
+    editBtn.onclick = ()=> openEditLessonModal(l);
+    const assignBtn = el('<button class="btn ghost small" style="margin-left:6px;">🎯 Assigner</button>');
+    assignBtn.onclick = ()=> openAssignLessonToStudentsModal(state.level, l.id, l.title);
+    const audioBtn = el(`<button class="btn ghost small" style="margin-left:6px;">🎙️ ${l.audio_url?'Remplacer':'Ajouter'} audio</button>`);
+    audioBtn.onclick = ()=> openLessonAudioModal(l);
+    const printBtn = el('<button class="btn ghost small" style="margin-left:6px;">🖨️ Imprimer</button>');
+    printBtn.onclick = ()=> openPrintableLesson(l);
+    const deleteBtn = el('<button class="btn ghost small" style="margin-left:6px;color:var(--danger);">🗑️ Supprimer</button>');
+    deleteBtn.onclick = async ()=>{
+      if(!confirm(`Supprimer définitivement la leçon "${l.title}" ? Toute la progression et les assignations liées seront aussi supprimées.`)) return;
+      await sbDeleteLesson(l.id);
+      delete LESSONS_CACHE[state.level];
+      render();
+    };
+    row.lastElementChild.appendChild(editBtn);
+    row.lastElementChild.appendChild(assignBtn);
+    row.lastElementChild.appendChild(audioBtn);
+    row.lastElementChild.appendChild(printBtn);
+    row.lastElementChild.appendChild(deleteBtn);
+    existing.appendChild(row);
+  });
+  wrap.appendChild(existing);
+  return wrap;
+}
+
+function serializeVocab(vocab){
+  return (vocab||[]).map(v => v.rom ? `${v.kr} | ${v.rom} | ${v.fr}` : `${v.kr} → ${v.fr}`).join('\n');
+}
+
+function openPrintableLesson(lesson){
+  const vocabRows = (lesson.vocab||[]).map(v=>`<tr><td style="font-size:18px;">${escapeHtml(v.kr)}</td><td>${escapeHtml(v.rom||'')}</td><td>${escapeHtml(v.fr||'')}</td></tr>`).join('');
+  const grammarItems = (lesson.grammar||[]).map(g=>`<li>${escapeHtml(g)}</li>`).join('');
+  const t = (lesson.translations && lesson.translations[0]) || {};
+  const transSection = t.text ? `
+    <h2>Texte à traduire</h2>
+    <p style="white-space:pre-wrap;font-size:16px;">${escapeHtml(t.text)}</p>
+    ${t.ref ? `<h2>Traduction de référence</h2><p style="white-space:pre-wrap;">${escapeHtml(t.ref)}</p>` : ''}
+  ` : '';
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${escapeHtml(lesson.title)}</title>
+  <style>
+    body{font-family:'Malgun Gothic','Noto Sans KR','Apple SD Gothic Neo',sans-serif;padding:40px;color:#211D1A;max-width:800px;margin:0 auto;}
+    h1{font-size:24px;border-bottom:2px solid #211D1A;padding-bottom:10px;}
+    h2{font-size:16px;margin-top:28px;margin-bottom:8px;}
+    table{width:100%;border-collapse:collapse;margin-top:6px;}
+    td{border-bottom:1px solid #ddd;padding:8px 10px;font-size:14px;vertical-align:top;}
+    ul{padding-left:20px;} li{margin-bottom:8px;font-size:14px;line-height:1.5;}
+    @media print{ body{padding:15px;} }
+  </style></head><body>
+  <h1>${escapeHtml(lesson.title)}</h1>
+  <h2>Vocabulaire</h2>
+  <table>${vocabRows || '<tr><td>Aucun</td></tr>'}</table>
+  ${grammarItems ? `<h2>Grammaire</h2><ul>${grammarItems}</ul>` : ''}
+  ${transSection}
+  </body></html>`;
+  const win = window.open('', '_blank');
+  if(!win){ alert('Le navigateur a bloqué la fenêtre d\'impression — autorise les pop-ups pour ce site.'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>{ win.print(); }, 300);
+}
+
+function openEditLessonModal(lesson){
+  const bg = el('<div class="modal-bg"></div>');
+  const t = (lesson.translations && lesson.translations[0]) || {};
+  const modal = el(`<div class="modal">
+    <h3>Modifier "${escapeHtml(lesson.title)}"</h3>
+    <div class="field"><label>Titre de la leçon</label><input type="text" id="em-title" value="${escapeHtml(lesson.title)}"></div>
+  </div>`);
+
+  const dialogueEditor = buildDialogueEditor(lesson.dialogue || []);
+  const dialogueSection = el('<div class="section-block" style="border:1.5px dashed var(--gold);border-radius:10px;padding:16px 18px;margin-bottom:22px;"><h3 style="margin-top:0;">📖 Contenu du cours — colle tes notes telles quelles</h3></div>');
+  dialogueSection.appendChild(dialogueEditor.element);
+  modal.appendChild(dialogueSection);
+
+  const form2 = el(`<div>
+    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne</label><textarea id="em-vocab" style="min-height:100px;">${escapeHtml(serializeVocab(lesson.vocab))}</textarea>
+      <div id="em-vocab-preview" class="note" style="margin-top:8px;font-size:12px;"></div>
+    </div>
+    <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="em-grammar">${escapeHtml((lesson.grammar||[]).join('\n'))}</textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Si tout ton cours se trouve ici, déplace-le vers « Contenu du cours » pour qu'il alimente les exercices et le quiz. <button type="button" class="btn ghost small" id="em-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
+    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
+    <div class="field"><label>Ta traduction de référence (optionnel)</label>
+      <textarea id="em-trans-ref">${escapeHtml(t.ref||'')}</textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+        <button type="button" class="btn ghost small" id="em-ref-rec-btn">🎙️ ${t.refAudio?'Remplacer':'Enregistrer'} à l'oral</button>
+        <span id="em-ref-rec-status" style="font-size:12px;color:var(--ink-soft);"></span>
+      </div>
+      ${t.refAudio?`<audio controls src="${escapeHtml(t.refAudio)}" style="width:100%;margin-top:8px;"></audio>`:''}
+    </div>
+    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea id="em-trans-help">${escapeHtml((t.help||[]).map(h=>`${h.word} | ${h.meaning}`).join('\n'))}</textarea></div>
+    <div class="field"><label>Score requis pour débloquer la suite (%)</label><input type="text" id="em-pass" value="${Math.round((lesson.pass_score||0.8)*100)}"></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  modal.appendChild(form2);
+  form2.querySelector('#em-grammar-move').onclick = ()=>{
+    const g = form2.querySelector('#em-grammar');
+    if(!g.value.trim()) return;
+    dialogueEditor.setText(g.value); g.value = '';
+  };
+
+  const vocabArea = form2.querySelector('#em-vocab');
+  const preview = form2.querySelector('#em-vocab-preview');
+  const refreshPreview = ()=>{
+    const parsed = parseVocabText(vocabArea.value);
+    if(parsed.length===0){ preview.textContent = 'Aucun mot détecté pour l\'instant.'; return; }
+    const sample = parsed.slice(0,3).map(v=>v.rom ? `${v.kr} → ${v.rom} (${v.fr||'?'})` : `${v.kr} → ${v.fr||'?'}`).join(' · ');
+    preview.textContent = `${parsed.length} mot(s) détecté(s) : ${sample}${parsed.length>3?' …':''}`;
+  };
+  vocabArea.oninput = refreshPreview;
+  refreshPreview();
+
+  let pendingRefAudioUrl = t.refAudio || null;
+  wireVoiceRecorder(form2.querySelector('#em-ref-rec-btn'), form2.querySelector('#em-ref-rec-status'), (url)=>{ pendingRefAudioUrl = url; });
+
+  const actions = form2.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Annuler</button>');
+  cancel.onclick = ()=> bg.remove();
+  const status = el('<span style="font-size:12px;margin-right:auto;"></span>');
+  const save = el('<button class="btn celadon">Enregistrer les modifications</button>');
+  save.onclick = async ()=>{
+    const title = modal.querySelector('#em-title').value.trim();
+    if(!title) return;
+    const dialogue = dialogueEditor.getExchanges();
+    const manualVocab = parseVocabText(vocabArea.value);
+    const dialogueVocab = dialogueToVocab(dialogue);
+    const seenKr = new Set();
+    const vocab = [...dialogueVocab, ...manualVocab].filter(v=>{
+      if(seenKr.has(v.kr)) return false;
+      seenKr.add(v.kr); return true;
+    });
+    const grammar = form2.querySelector('#em-grammar').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const passScore = (parseFloat(form2.querySelector('#em-pass').value)||80)/100;
+    const transText = form2.querySelector('#em-trans-text').value.trim();
+    const transRef = form2.querySelector('#em-trans-ref').value.trim();
+    const transHelp = form2.querySelector('#em-trans-help').value.split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{
+      const [word,meaning] = line.split('|').map(s=>s&&s.trim());
+      return {word:word||'', meaning:meaning||''};
+    }).filter(h=>h.word);
+    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
+    save.disabled = true; status.style.color='var(--ink-soft)'; status.textContent = 'Enregistrement…';
+    const { error } = await sb.from('lessons').update({title, vocab, dialogue, grammar, pass_score:passScore, translations}).eq('id', lesson.id);
+    save.disabled = false;
+    if(error){ status.style.color='var(--danger)'; status.textContent = 'Erreur : ' + error.message; return; }
+    delete LESSONS_CACHE[lesson.space];
+    bg.remove();
+    render();
+  };
+  actions.appendChild(status); actions.appendChild(cancel); actions.appendChild(save);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+function openLessonAudioModal(lesson){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>Prononciation — ${escapeHtml(lesson.title)}</h3>
+    <div class="note" style="margin-bottom:14px;">Enregistre-toi en train de dire les mots de cette leçon avec la bonne intonation.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <button class="btn ghost small" id="la-rec-btn">🎙️</button>
+      <span id="la-rec-status" style="font-size:12px;color:var(--ink-soft);"></span>
+    </div>
+    ${lesson.audio_url ? `<audio controls src="${escapeHtml(lesson.audio_url)}" style="width:100%;margin-bottom:14px;"></audio>` : ''}
+    <div class="modal-actions"></div>
+  </div>`);
+  const close = el('<button class="btn ghost">Fermer</button>');
+  close.onclick = ()=> bg.remove();
+  modal.querySelector('.modal-actions').appendChild(close);
+  wireVoiceRecorder(modal.querySelector('#la-rec-btn'), modal.querySelector('#la-rec-status'), async (url)=>{
+    await sb.from('lessons').update({audio_url:url}).eq('id', lesson.id);
+    delete LESSONS_CACHE[lesson.space];
+    bg.remove();
+    render();
+  });
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+function openAssignLessonToStudentsModal(level, lessonId, title){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal"><h3>Assigner "${escapeHtml(title)}"</h3></div>`);
+  const inner = el('<div></div>');
+  modal.appendChild(inner);
+  const cancel = el('<button class="btn ghost" style="margin-top:14px;">Fermer</button>');
+  cancel.onclick = ()=> bg.remove();
+  renderAssignAfterCreate(inner, level, lessonId, title);
+  modal.appendChild(cancel);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+function renderAssignAfterCreate(container, level, lessonId, title){
+  container.innerHTML = '';
+  const students = ALL_PROFILES.filter(p=>p.role==='student');
+  const box = el(`<div class="note" style="border-color:var(--celadon-dark);margin-top:14px;">
+    <b>${escapeHtml(title)}</b> a été ajoutée. L'assigner tout de suite à :
+  </div>`);
+  container.appendChild(box);
+  if(students.length===0){
+    box.appendChild(el('<div style="margin-top:8px;font-size:12px;">Aucun élève créé pour l\'instant — la leçon reste visible pour tous ceux qui accèdent à cet espace.</div>'));
+    return;
+  }
+  const list = el('<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;"></div>');
+  const checks = [];
+  students.forEach(p=>{
+    const row = el(`<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox"> ${escapeHtml(p.name)}</label>`);
+    const cb = row.querySelector('input');
+    checks.push([cb, p.id]);
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+  const btn = el('<button class="btn celadon small" style="margin-top:10px;">Assigner aux élèves cochés</button>');
+  btn.onclick = async ()=>{
+    const selected = checks.filter(([cb])=>cb.checked).map(([,id])=>id);
+    if(selected.length===0) return;
+    btn.disabled = true;
+    await Promise.all(selected.map(id=>sbSetAssignment(id, lessonId)));
+    btn.disabled = false;
+    btn.textContent = 'Assigné ✓';
+  };
+  box.appendChild(btn);
+}
+
+/* ---------------- TEACHER: dashboard ---------------- */
+async function renderDashboard(){
+  const box = el('<div class="main-card"></div>');
+  box.appendChild(el('<h2 style="margin:0 0 6px;">Suivi des élèves</h2>'));
+  box.appendChild(el('<div class="note" style="margin-bottom:20px;">Résultats d\'exercices, de quiz et de contrôle, leçon par leçon.</div>'));
+
+  /* --- Créer un compte élève --- */
+  const defaultAppUrl = window.location.href.split('?')[0];
+  const createBox = el(`<div class="section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:26px;">
+    <h3 style="margin-top:0;">+ Créer un compte élève</h3>
+    <div class="field"><label>Prénom</label><input type="text" id="cs-name"></div>
+    <div class="field"><label>Email</label><input type="email" id="cs-email" placeholder="ex : marjan@coreen.local"></div>
+    <div class="field"><label>Mot de passe</label><input type="text" id="cs-pass" placeholder="6 caractères minimum"></div>
+    <div class="field"><label>Lien de l'outil (envoyé dans l'email de bienvenue)</label><input type="text" id="cs-appurl" value="${escapeHtml(defaultAppUrl)}"></div>
+    <div class="field"><label><input type="checkbox" id="cs-sendmail" checked> Envoyer un email de bienvenue avec ses identifiants</label></div>
+    <button class="btn celadon" id="cs-create-btn">Créer le compte</button>
+    <span id="cs-status" style="margin-left:10px;font-size:12px;color:var(--ink-soft);"></span>
+  </div>`);
+  box.appendChild(createBox);
+  createBox.querySelector('#cs-create-btn').onclick = async ()=>{
+    const name = createBox.querySelector('#cs-name').value.trim();
+    const email = createBox.querySelector('#cs-email').value.trim();
+    const password = createBox.querySelector('#cs-pass').value;
+    const appUrl = createBox.querySelector('#cs-appurl').value.trim();
+    const sendWelcomeEmail = createBox.querySelector('#cs-sendmail').checked;
+    const status = createBox.querySelector('#cs-status');
+    if(!name || !email || password.length<6){ status.textContent = 'Nom, email et mot de passe (6 car. min.) requis.'; return; }
+    status.textContent = 'Création en cours…';
+    createBox.querySelector('#cs-create-btn').disabled = true;
+    try{
+      const { data, error } = await sb.functions.invoke('create-student', { body:{ name, email, password, appUrl, sendWelcomeEmail } });
+      if(error || (data && data.error)){ status.textContent = 'Erreur : ' + (error?.message || data.error); return; }
+      status.textContent = data.emailSent ? `Compte de ${name} créé ✓ — email de bienvenue envoyé` : `Compte de ${name} créé ✓ (email non envoyé — communique les identifiants toi-même)`;
+      createBox.querySelector('#cs-name').value='';
+      createBox.querySelector('#cs-email').value='';
+      createBox.querySelector('#cs-pass').value='';
+      ALL_PROFILES = await sbAllProfiles();
+      ALL_PROGRESS = await sbAllProgress();
+      render();
+    }catch(e){
+      status.textContent = 'Erreur de connexion à la fonction.';
+    }finally{
+      createBox.querySelector('#cs-create-btn').disabled = false;
+    }
+  };
+
+  /* --- Groupes --- */
+  const groupBox = el(`<div class="section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:26px;">
+    <h3 style="margin-top:0;">Groupes</h3>
+    <div class="note" style="margin-bottom:12px;">Ex. "Dimanche midi" — un élève assigné à un groupe partage un chat (texte + notes vocales) avec les autres membres et toi.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="gr-name" placeholder="Nom du groupe" style="flex:1;min-width:160px;">
+      <button class="btn celadon small" id="gr-create-btn">Créer le groupe</button>
+    </div>
+    <div id="gr-list" style="margin-top:10px;"></div>
+  </div>`);
+  box.appendChild(groupBox);
+  const grListEl = groupBox.querySelector('#gr-list');
+  if(GROUPS.length===0){
+    grListEl.appendChild(el('<div style="font-size:13px;color:var(--ink-soft);">Aucun groupe créé pour l\'instant.</div>'));
+  } else {
+    GROUPS.forEach(g=>{
+      const row = el(`<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);"><span>${escapeHtml(g.name)}</span></div>`);
+      const delBtn = el('<button class="btn ghost small" style="color:var(--danger);">🗑️</button>');
+      delBtn.onclick = async ()=>{
+        if(!confirm(`Supprimer le groupe "${g.name}" ? Ses élèves n'auront simplement plus de groupe, l'historique du chat sera supprimé.`)) return;
+        await sbDeleteGroup(g.id);
+        GROUPS = await sbAllGroups();
+        ALL_PROFILES = await sbAllProfiles();
+        render();
+      };
+      row.appendChild(delBtn);
+      grListEl.appendChild(row);
+    });
+  }
+  groupBox.querySelector('#gr-create-btn').onclick = async ()=>{
+    const nameInput = groupBox.querySelector('#gr-name');
+    const name = nameInput.value.trim();
+    if(!name) return;
+    await sbCreateGroup(name);
+    GROUPS = await sbAllGroups();
+    render();
+  };
+
+  const students = ALL_PROFILES.filter(p=>p.role==='student');
+  if(students.length===0){ box.appendChild(el('<div class="empty-state">Aucun élève pour l\'instant — crée le premier compte ci-dessus.</div>')); return box; }
+
+  const allLessonsFlat = {};
+  for(const lvl of Object.keys(LEVEL_LABELS)){ (await lessonsForLevel(lvl)).forEach(l=>allLessonsFlat[l.id]={title:l.title, level:lvl}); }
+
+  students.forEach(p=>{
+    const rows = ALL_PROGRESS.filter(r=>r.student_id===p.id);
+    const expanded = !!state.dashboardExpanded[p.id];
+    const card = el(`<div class="item-card" style="text-align:left;margin-bottom:12px;padding:16px 18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div><b style="font-size:15px;">${escapeHtml(p.name)}</b> <span style="font-size:12px;color:var(--ink-soft);">— ${LEVEL_LABELS[p.level]||'niveau non défini'} · 🔥${p.streak||0} · ✦${p.xp||0} XP</span></div>
+        <span class="mono" style="font-size:12px;">${expanded?'▲':'▼'} ${rows.length} leçon(s)</span>
+      </div>
+    </div>`);
+    const header = card.firstElementChild;
+    header.onclick = ()=>{ state.dashboardExpanded[p.id] = !expanded; render(); };
+    const assignBtn = el('<button class="btn ghost small" style="margin-left:10px;">🎯 Assigner</button>');
+    assignBtn.onclick = (e)=>{ e.stopPropagation(); openAssignModal(p); };
+    header.appendChild(assignBtn);
+    const dmBtn = el(`<button class="btn ghost small" style="margin-left:6px;">💬 Message${isThreadUnread(p.id)?' <span style="color:var(--seal);">●</span>':''}</button>`);
+    dmBtn.onclick = (e)=>{ e.stopPropagation(); enterInbox(p.id); };
+    header.appendChild(dmBtn);
+    const deleteStudentBtn = el('<button class="btn ghost small" style="margin-left:6px;color:var(--danger);">🗑️ Supprimer</button>');
+    deleteStudentBtn.onclick = async (e)=>{
+      e.stopPropagation();
+      if(!confirm(`Supprimer définitivement le compte de ${p.name} ? Toute sa progression, ses résultats et son historique seront perdus. Cette action est irréversible.`)) return;
+      deleteStudentBtn.disabled = true; deleteStudentBtn.textContent = 'Suppression…';
+      const { data, error } = await sbDeleteStudent(p.id);
+      if(error || (data && data.error)){
+        alert('Erreur : ' + (error?.message || data.error));
+        deleteStudentBtn.disabled = false; deleteStudentBtn.textContent = '🗑️ Supprimer';
+        return;
+      }
+      ALL_PROFILES = await sbAllProfiles();
+      ALL_PROGRESS = await sbAllProgress();
+      render();
+    };
+    header.appendChild(deleteStudentBtn);
+
+    const groupRow = el('<div style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);"></div>');
+    groupRow.appendChild(el('<span>Groupe :</span>'));
+    const groupSel = el('<select style="font-size:12px;padding:4px 8px;"></select>');
+    groupSel.appendChild(el(`<option value="">— aucun —</option>`));
+    GROUPS.forEach(g=>{
+      const o = el(`<option value="${g.id}">${escapeHtml(g.name)}</option>`);
+      if(p.group_id===g.id) o.selected = true;
+      groupSel.appendChild(o);
+    });
+    groupSel.onclick = (e)=> e.stopPropagation();
+    groupSel.onchange = async (e)=>{ e.stopPropagation(); await sbSetStudentGroup(p.id, e.target.value || null); ALL_PROFILES = await sbAllProfiles(); render(); };
+    groupRow.appendChild(groupSel);
+    card.appendChild(groupRow);
+
+    if(expanded){
+      if(rows.length===0){ card.appendChild(el('<div class="empty-level">Rien fait pour l\'instant.</div>')); }
+      else{
+        const table = el('<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px;"></div>');
+        rows.forEach(r=>{
+          const meta = allLessonsFlat[r.lesson_id] || {title:r.lesson_id, level:''};
+          const ex = r.exercises ? `${r.exercises.correct}/${r.exercises.total}` : '—';
+          const qz = r.quiz ? `Quiz ${r.quiz.correct}/${r.quiz.total}` : '';
+          const ct = r.control ? `Contrôle ${Math.round(r.control.score*100)}% ${r.control.passed?'✅':'❌'} (${r.control.attempts} essai${r.control.attempts>1?'s':''})` : '';
+          table.appendChild(el(`<div class="vocab-row"><span>${escapeHtml(meta.title)} <span style="color:var(--ink-soft);font-size:11px;">(${LEVEL_LABELS[meta.level]||''})</span></span><span>${ex}</span><span>${[qz,ct].filter(Boolean).join(' · ')||'—'}</span></div>`));
+        });
+        card.appendChild(table);
+      }
+    }
+    box.appendChild(card);
+  });
+  return box;
+}
+
+function openAssignModal(profileRow){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>Assigner une leçon à ${escapeHtml(profileRow.name)}</h3>
+    <div class="field"><label>Espace</label>
+      <select id="am-level">${Object.keys(LEVEL_LABELS).map(k=>`<option value="${k}">${LEVEL_LABELS[k]}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Leçon</label><select id="am-lesson"><option>Chargement…</option></select></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  const lvlSel = modal.querySelector('#am-level');
+  const lessonSel = modal.querySelector('#am-lesson');
+  const refreshLessons = async ()=>{
+    const list = await lessonsForLevel(lvlSel.value);
+    lessonSel.innerHTML = list.map(l=>`<option value="${l.id}">${escapeHtml(l.title)}</option>`).join('') || '<option value="">Aucune leçon ici</option>';
+  };
+  lvlSel.onchange = refreshLessons; refreshLessons();
+  const actions = modal.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Fermer</button>');
+  cancel.onclick = ()=> bg.remove();
+  const clearBtn = el('<button class="btn ghost">Retirer l\'assignation</button>');
+  clearBtn.onclick = async ()=>{ await sbClearAssignment(profileRow.id); bg.remove(); render(); };
+  const assign = el('<button class="btn seal">Assigner</button>');
+  assign.onclick = async ()=>{
+    if(!lessonSel.value) return;
+    await sbSetAssignment(profileRow.id, lessonSel.value);
+    bg.remove(); render();
+  };
+  actions.appendChild(clearBtn); actions.appendChild(cancel); actions.appendChild(assign);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+/* ---------------- CHAT (live via Supabase Realtime) ---------------- */
+function playNotifSound(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine'; osc.frequency.value = 720;
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    osc.start(); osc.stop(ctx.currentTime + 0.3);
+    osc.onended = ()=> ctx.close();
+  }catch(e){ /* audio non disponible, on ignore silencieusement */ }
+}
+
+// Affiche tout de suite son propre message (sans attendre le temps réel) ;
+// l'éventuel écho du temps réel est ignoré grâce au contrôle par id.
+function echoChat(m){
+  if(!m || CHAT.some(x=>x.id===m.id)) return;
+  CHAT.push(m);
+  if(state.space==='groupe' && !VOICE_BUSY) render();
+}
+function subscribeChat(){
+  unsubscribeChat();
+  CHAT_SUB = sb.channel('chat_messages_changes_'+(ACTIVE_GROUP_ID||'none'))
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'chat_messages', filter: ACTIVE_GROUP_ID ? `group_id=eq.${ACTIVE_GROUP_ID}` : undefined}, payload=>{
+      if(CHAT.some(x=>x.id===payload.new.id)) return;      // déjà affiché (écho local)
+      CHAT.push(payload.new);
+      if(payload.new.author_id !== SESSION.user.id){ playNotifSound(); }
+      if(state.space==='groupe' && !VOICE_BUSY) render();
+    }).subscribe();
+}
+function unsubscribeChat(){ if(CHAT_SUB){ sb.removeChannel(CHAT_SUB); CHAT_SUB=null; } }
+
+let RECORDING = null; // MediaRecorder instance while recording
+
+async function renderChatPanel(){
+  const box = el('<div class="main-card" style="margin-top:20px;"></div>');
+  const header = el('<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;"></div>');
+  header.appendChild(el('<h3 style="margin:0;">💬 Chat du groupe</h3>'));
+
+  if(PROFILE.role==='teacher'){
+    const sel = el('<select></select>');
+    if(GROUPS.length===0){ sel.appendChild(el('<option value="">Aucun groupe créé</option>')); }
+    GROUPS.forEach(g=>{
+      const o = el(`<option value="${g.id}">${escapeHtml(g.name)}</option>`);
+      if(g.id===ACTIVE_GROUP_ID) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = async (e)=>{ ACTIVE_GROUP_ID = e.target.value || null; CHAT = await sbChat(ACTIVE_GROUP_ID); subscribeChat(); render(); };
+    header.appendChild(sel);
+  } else if(!ACTIVE_GROUP_ID){
+    header.appendChild(el('<span class="note" style="font-size:12px;">Ta professeur ne t\'a pas encore assigné de groupe.</span>'));
+  }
+  box.appendChild(header);
+
+  if(!ACTIVE_GROUP_ID){
+    box.appendChild(el('<div class="empty-level">Pas de groupe sélectionné — rien à afficher.</div>'));
+    return box;
+  }
+
+  const activeGroup = GROUPS.find(g=>g.id===ACTIVE_GROUP_ID);
+  const topicBox = el('<div class="note" style="border-color:var(--gold);margin-bottom:14px;"></div>');
+  if(PROFILE.role==='teacher'){
+    const label = el('<div style="font-weight:700;margin-bottom:6px;">📌 Sujet du jour</div>');
+    topicBox.appendChild(label);
+    const row = el('<div style="display:flex;gap:8px;"></div>');
+    const input = el(`<input type="text" value="${escapeHtml((activeGroup&&activeGroup.current_topic)||'')}" placeholder="ex : Parlez de votre week-end au passé">`);
+    input.style.flex='1';
+    const save = el('<button class="btn celadon small">Enregistrer</button>');
+    save.onclick = async ()=>{
+      await sbSetGroupTopic(ACTIVE_GROUP_ID, input.value.trim());
+      GROUPS = await sbAllGroups();
+      save.textContent = 'Enregistré ✓';
+      setTimeout(()=>{ save.textContent='Enregistrer'; }, 1200);
+    };
+    row.appendChild(input); row.appendChild(save);
+    topicBox.appendChild(row);
+  } else {
+    const topic = activeGroup && activeGroup.current_topic;
+    topicBox.innerHTML = topic
+      ? `<b>📌 Sujet du jour :</b> ${escapeHtml(topic)}`
+      : `<span style="color:var(--ink-soft);">Aucun sujet donné par ta professeur pour l'instant.</span>`;
+  }
+  box.appendChild(topicBox);
+
+  const list = el('<div style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>');
+  if(CHAT.length===0){ list.appendChild(el('<div class="empty-level">Aucun message pour l\'instant.</div>')); }
+  CHAT.forEach(m=>{
+    const time = new Date(m.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const bodyHtml = m.audio_url
+      ? `<audio controls src="${escapeHtml(m.audio_url)}" style="height:32px;margin-top:4px;"></audio>`
+      : `<div>${escapeHtml(m.body)}</div>`;
+    list.appendChild(el(`<div style="font-size:13px;line-height:1.4;"><b>${escapeHtml(m.author_name)}</b> <span class="mono" style="color:var(--ink-soft);font-size:11px;">${time}</span>${bodyHtml}</div>`));
+  });
+  box.appendChild(list);
+
+  const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
+  const input = el('<input type="text" placeholder="Écrire un message...">'); input.style.flex='1';
+  const send = el('<button class="btn celadon small">Envoyer</button>');
+  const doSend = async ()=>{
+    const t=input.value.trim(); if(!t) return;
+    const r = await sbSendChat(ACTIVE_GROUP_ID, t, null);
+    if(r.error){ recStatus.style.color='var(--danger)'; recStatus.textContent = 'Envoi impossible : ' + r.error.message; return; }
+    input.value=''; echoChat(r.data);
+  };
+  send.onclick = doSend; input.onkeydown=(e)=>{ if(e.key==='Enter') doSend(); };
+  const recBtn = el('<button class="btn ghost small" title="Note vocale">🎙️</button>');
+  const recStatus = el('<span style="font-size:11px;color:var(--ink-soft);"></span>');
+  recBtn.onclick = async ()=>{
+    if(RECORDING){
+      RECORDING.stop();
+      return;
+    }
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = (e)=> chunks.push(e.data);
+      mr.onstop = async ()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        RECORDING = null; VOICE_BUSY = false; recBtn.textContent = '🎙️'; recStatus.textContent = 'Envoi…';
+        try{
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const url = await sbUploadVoiceNote(blob);
+          const r = await sbSendChat(ACTIVE_GROUP_ID, '', url);
+          if(r.error){ recStatus.textContent = 'Envoi impossible : ' + r.error.message; return; }
+          echoChat(r.data);
+          recStatus.textContent = '';
+        }catch(err){ recStatus.textContent = 'Erreur d\'envoi.'; }
+      };
+      mr.start(); VOICE_BUSY = true;
+      RECORDING = mr;
+      recBtn.textContent = '⏹️';
+      recStatus.textContent = 'Enregistrement…';
+    }catch(err){
+      recStatus.textContent = 'Micro indisponible ou refusé.';
+    }
+  };
+  row.appendChild(input); row.appendChild(send); row.appendChild(recBtn); row.appendChild(recStatus);
+  box.appendChild(row);
+  return box;
+}
+
+/* ---------------- MESSAGERIE DIRECTE ÉLÈVE <-> PROF (indépendante des groupes) ---------------- */
+// Un seul abonnement temps réel par session (et non un par conversation) : la
+// prof reçoit les messages de TOUS les élèves, l'élève ceux de son propre fil.
+// Ainsi la pastille "non lu", le bip et le titre de l'onglet fonctionnent
+// depuis n'importe quelle page de l'outil.
+const BASE_TITLE = document.title;
+const DM_FIELDS = 'id,student_id,author_id,author_name,body,audio_url,created_at';
+
+async function loadDMState(){
+  INBOX = {}; STUDENT_LAST_DM = null;
+  try{
+    if(PROFILE.role==='teacher'){
+      const { data } = await sb.from('direct_messages').select(DM_FIELDS).order('created_at',{ascending:false}).limit(2000);
+      (data||[]).forEach(m=>{ if(!INBOX[m.student_id]) INBOX[m.student_id] = m; });
+    } else {
+      const { data } = await sb.from('direct_messages').select(DM_FIELDS).eq('student_id', SESSION.user.id).order('created_at',{ascending:false}).limit(1);
+      STUDENT_LAST_DM = (data && data[0]) || null;
+    }
+  }catch(e){ /* table absente : la messagerie reste simplement vide */ }
+}
+function lastDMOf(threadId){ return PROFILE.role==='teacher' ? INBOX[threadId] : STUDENT_LAST_DM; }
+function dmSeenAt(threadId){ const v = (PROFILE.dm_seen||{})[threadId]; return v ? new Date(v).getTime() : 0; }
+// "Non lu" = le dernier message de la conversation vient de l'autre personne
+// et date d'après la dernière fois que cette conversation a été ouverte.
+function isThreadUnread(threadId){
+  const last = lastDMOf(threadId);
+  if(!last || last.author_id === SESSION.user.id) return false;
+  return new Date(last.created_at).getTime() > dmSeenAt(threadId);
+}
+function unreadDMCount(){
+  if(!PROFILE || !SESSION) return 0;
+  if(PROFILE.role==='teacher') return Object.keys(INBOX).filter(isThreadUnread).length;
+  return isThreadUnread(SESSION.user.id) ? 1 : 0;
+}
+function updateTitleBadge(){
+  const n = unreadDMCount();
+  document.title = (n>0 ? `(${n}) ` : '') + BASE_TITLE;
+}
+function dmTabLabel(key){
+  const n = unreadDMCount();
+  if(key==='inbox') return '💬 Messages' + (n>0 ? ` <span style="background:var(--seal);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px;">${n}</span>` : '');
+  return '💬 Messagerie' + (n>0 ? ' <span style="color:var(--seal);">●</span>' : '');
+}
+// Met à jour les pastilles des onglets SUR PLACE, sans reconstruire la page :
+// un message qui arrive ne doit jamais effacer ce que la prof est en train de
+// saisir ailleurs (par exemple une leçon dans "Gérer les leçons").
+function refreshTabBadges(){
+  ['inbox','dm'].forEach(k=>{
+    const b = document.querySelector(`.level-tab[data-space="${k}"]`);
+    if(b) b.innerHTML = dmTabLabel(k);
+  });
+}
+function markThreadSeen(threadId){
+  const last = lastDMOf(threadId);
+  const ts = last ? last.created_at : new Date().toISOString();
+  PROFILE.dm_seen = Object.assign({}, PROFILE.dm_seen || {}, { [threadId]: ts });
+  // sans la migration, la colonne n'existe pas : l'erreur est ignorée (le "lu"
+  // n'est alors simplement pas retenu d'une session à l'autre)
+  sb.from('profiles').update({ dm_seen: PROFILE.dm_seen }).eq('id', SESSION.user.id).then(()=>{}, ()=>{});
+  updateTitleBadge();
+}
+function rememberLastDM(m){
+  if(PROFILE.role==='teacher'){
+    const cur = INBOX[m.student_id];
+    if(!cur || new Date(m.created_at) >= new Date(cur.created_at)) INBOX[m.student_id] = m;
+  } else if(m.student_id === SESSION.user.id){
+    if(!STUDENT_LAST_DM || new Date(m.created_at) >= new Date(STUDENT_LAST_DM.created_at)) STUDENT_LAST_DM = m;
+  }
+}
+function isDMThreadVisible(threadId){
+  if(PROFILE.role==='teacher') return state.space==='inbox' && ACTIVE_DM_STUDENT_ID===threadId;
+  return state.space==='dm' && threadId===SESSION.user.id;
+}
+// Point d'entrée UNIQUE pour tout message qui arrive dans une conversation :
+// écho immédiat de ses propres envois ET messages reçus en temps réel
+// (dédoublonnés par id, donc sans doublon si les deux arrivent).
+async function onIncomingDM(m){
+  if(!m) return;
+  const already = DM.some(x=>x.id===m.id);
+  rememberLastDM(m);
+  const mine = m.author_id === SESSION.user.id;
+  if(!mine && !already) playNotifSound();
+  if(isDMThreadVisible(m.student_id)){
+    if(!already) DM.push(m);
+    markThreadSeen(m.student_id);
+  }
+  updateTitleBadge();
+  const onMessagesPage = PROFILE.role==='teacher' ? state.space==='inbox' : state.space==='dm';
+  if(!onMessagesPage){ refreshTabBadges(); return; }
+  if(VOICE_BUSY) return;                       // ne pas casser un enregistrement vocal en cours
+  const typing = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.dmInput==='1';
+  await render();
+  if(typing){
+    const i = document.querySelector('input[data-dm-input="1"]');
+    if(i){ i.focus(); const L = i.value.length; try{ i.setSelectionRange(L,L); }catch(e){} }
+  }
+}
+
+function subscribeDM(){
+  unsubscribeDM();
+  if(!SESSION || !PROFILE) return;
+  const cfg = { event:'INSERT', schema:'public', table:'direct_messages' };
+  if(PROFILE.role!=='teacher') cfg.filter = `student_id=eq.${SESSION.user.id}`;
+  DM_SUB = sb.channel('dm_global_'+SESSION.user.id)
+    .on('postgres_changes', cfg, payload=> onIncomingDM(payload.new))
+    .subscribe();
+}
+function unsubscribeDM(){ if(DM_SUB){ sb.removeChannel(DM_SUB); DM_SUB=null; } }
+
+function shortTime(iso){
+  const d = new Date(iso), now = new Date();
+  return d.toDateString()===now.toDateString()
+    ? d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+    : d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+}
+
+function renderDMMessages(container){
+  container.innerHTML = '';
+  const threadId = ACTIVE_DM_STUDENT_ID;
+  const list = el('<div style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>');
+  if(DM.length===0){ list.appendChild(el('<div class="empty-level">Aucun message pour l\'instant.</div>')); }
+  DM.forEach(m=>{
+    const time = new Date(m.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const bodyHtml = m.audio_url
+      ? `<audio controls src="${escapeHtml(m.audio_url)}" style="height:32px;margin-top:4px;"></audio>`
+      : `<div>${escapeHtml(m.body)}</div>`;
+    list.appendChild(el(`<div style="font-size:13px;line-height:1.4;"><b>${escapeHtml(m.author_name)}</b> <span class="mono" style="color:var(--ink-soft);font-size:11px;">${time}</span>${bodyHtml}</div>`));
+  });
+  container.appendChild(list);
+  requestAnimationFrame(()=>{ list.scrollTop = list.scrollHeight; });   // toujours sur le dernier message
+
+  const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
+  const input = el('<input type="text" placeholder="Écrire un message..." data-dm-input="1">'); input.style.flex='1';
+  input.value = DM_DRAFTS[threadId] || '';                                // le brouillon survit aux rafraîchissements
+  input.oninput = (e)=>{ DM_DRAFTS[threadId] = e.target.value; };
+  const send = el('<button class="btn celadon small">Envoyer</button>');
+  const recBtn = el('<button class="btn ghost small" title="Note vocale">🎙️</button>');
+  const recStatus = el('<span style="font-size:11px;color:var(--ink-soft);"></span>');
+  const deliver = async (text, audioUrl, discordPreview)=>{
+    const { data, error } = await sbSendDM(threadId, text, audioUrl);
+    if(error){ recStatus.style.color='var(--danger)'; recStatus.textContent = 'Envoi impossible : ' + error.message; return false; }
+    if(data){ onIncomingDM(data); }                                       // écho local, sans attendre le temps réel
+    else { DM = await sbDMMessages(threadId); render(); }
+    notifyDiscordIfStudent(discordPreview);
+    return true;
+  };
+  const doSend = async ()=>{
+    const t = input.value.trim(); if(!t) return;
+    send.disabled = true; recStatus.textContent = '';
+    const ok = await deliver(t, null, t);
+    send.disabled = false;
+    if(ok){ DM_DRAFTS[threadId] = ''; input.value = ''; }
+  };
+  send.onclick = doSend; input.onkeydown=(e)=>{ if(e.key==='Enter') doSend(); };
+  wireVoiceRecorder(recBtn, recStatus, async (url)=>{ await deliver('', url, '🎙️ Note vocale'); });
+  row.appendChild(input); row.appendChild(send); row.appendChild(recBtn); row.appendChild(recStatus);
+  container.appendChild(row);
+}
+
+async function renderDMPanel(){
+  const box = el('<div class="main-card"></div>');
+  box.appendChild(el('<h2 style="margin:0 0 4px;">💬 Messagerie</h2>'));
+  box.appendChild(el('<div class="note" style="margin-bottom:16px;">Échange privé avec le professeur : seuls toi et lui pouvez le lire. Il est indépendant des groupes.</div>'));
+  const container = el('<div></div>');
+  box.appendChild(container);
+  renderDMMessages(container);
+  return box;
+}
+
+/* ---- Boîte de réception de la prof : une conversation par élève ---- */
+async function enterInbox(preferredStudentId){
+  state.space = 'inbox'; state.lessonId = null; state.reviewMode = false; state.globalQuizMode = false;
+  unsubscribeChat();
+  ALL_PROFILES = await sbAllProfiles();
+  await loadDMState();
+  const students = ALL_PROFILES.filter(p=>p.role==='student');
+  const has = id => !!id && students.some(s=>s.id===id);
+  let id = has(preferredStudentId) ? preferredStudentId : (has(ACTIVE_DM_STUDENT_ID) ? ACTIVE_DM_STUDENT_ID : null);
+  if(!id){
+    const lastTs = s => INBOX[s.id] ? new Date(INBOX[s.id].created_at).getTime() : 0;
+    const unread = students.find(s=>isThreadUnread(s.id));
+    const recent = students.slice().sort((a,b)=> lastTs(b)-lastTs(a))[0];
+    id = (unread || recent || {}).id || null;
+  }
+  ACTIVE_DM_STUDENT_ID = id;
+  DM = id ? await sbDMMessages(id) : [];
+  if(id) markThreadSeen(id);
+  render();
+}
+async function openInboxThread(studentId){
+  ACTIVE_DM_STUDENT_ID = studentId;
+  DM = await sbDMMessages(studentId);
+  markThreadSeen(studentId);
+  render();
+}
+async function renderInbox(){
+  const students = ALL_PROFILES.filter(p=>p.role==='student');
+  const layout = el('<div class="layout"></div>');
+
+  const side = el('<div class="sidebar"></div>');
+  side.appendChild(el('<h3 style="margin:0 0 12px;font-size:15px;">Conversations</h3>'));
+  if(students.length===0){ side.appendChild(el('<div class="empty-level">Aucun élève pour l\'instant.</div>')); }
+  const lastTs = s => INBOX[s.id] ? new Date(INBOX[s.id].created_at).getTime() : 0;
+  students.slice().sort((a,b)=> (lastTs(b)-lastTs(a)) || a.name.localeCompare(b.name)).forEach(st=>{
+    const last = INBOX[st.id];
+    const unread = isThreadUnread(st.id);
+    const preview = !last ? 'Aucun message' : ((last.author_id===SESSION.user.id ? 'Toi : ' : '') + (last.audio_url ? '🎙️ Note vocale' : last.body));
+    const active = st.id===ACTIVE_DM_STUDENT_ID;
+    const item = el(`<div data-thread="${st.id}" style="border:1.5px solid ${active?'var(--ink)':'var(--line)'};background:${active?'var(--paper-dim)':'transparent'};border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+        <span style="${unread?'font-weight:700;':''}">${escapeHtml(st.name)}${unread?' <span style="color:var(--seal);">●</span>':''}</span>
+        <span class="mono" style="font-size:10px;color:var(--ink-soft);white-space:nowrap;">${last?shortTime(last.created_at):''}</span>
+      </div>
+      <div style="font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;color:${unread?'var(--ink)':'var(--ink-soft)'};">${escapeHtml(preview)}</div>
+    </div>`);
+    item.onclick = ()=> openInboxThread(st.id);
+    side.appendChild(item);
+  });
+
+  const main = el('<div class="main-card"></div>');
+  const active = students.find(s=>s.id===ACTIVE_DM_STUDENT_ID);
+  if(!active){
+    main.appendChild(el('<div class="empty-state">Choisis un élève dans la liste pour voir ou écrire un message.</div>'));
+  } else {
+    main.appendChild(el(`<h2 style="margin:0 0 4px;">💬 ${escapeHtml(active.name)}</h2>`));
+    main.appendChild(el('<div class="note" style="margin-bottom:16px;">Fil privé avec cet élève — personne d\'autre n\'y a accès.</div>'));
+    const container = el('<div></div>');
+    main.appendChild(container);
+    renderDMMessages(container);
+  }
+  layout.appendChild(side); layout.appendChild(main);
+  return layout;
+}
+
+/* ---------------- INIT ---------------- */
+sb.auth.onAuthStateChange((event, session)=>{ /* handled manually via doLogin/doLogout to keep control flow simple */ });
+boot();
+
+} // end runApp
+</script>
+</body>
+</html>
