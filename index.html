@@ -225,6 +225,100 @@ function stripKoParticle(word){
 }
 let KRDICT_UNAVAILABLE = false; // évite de retenter à chaque mot si non configuré
 
+/* GRAMMAR:BEGIN — expressions de grammaire courantes, reconnues localement (gratuit,
+   sans API). Un dictionnaire comme KRDict ne connaît que des mots isolés : il ne sait
+   pas que "탈 수 있어요" veut dire "pouvoir prendre". Ici, on repère l'expression sur
+   plusieurs mots d'une phrase et on affiche son sens.
+   - tests : un test par mot consécutif (RegExp ou fonction)
+   - fn    : positions des mots purement grammaticaux (수, 있어요…) : pas de recherche
+             dictionnaire pour eux, seulement l'explication de l'expression
+   - stem  : comment retrouver la forme du dictionnaire du verbe (position 0) */
+function hFinal(ch){ const c = (ch||'').charCodeAt(0) - 0xAC00; return (c>=0 && c<11172) ? c % 28 : -1; }
+function endsRieul(t){ return t.endsWith('을') || hFinal(t.slice(-1))===8; }
+function endsNieun(t){ return t.endsWith('은') || hFinal(t.slice(-1))===4; }
+function dropFinal(syl){ const f = hFinal(syl); return f>0 ? String.fromCharCode(syl.charCodeAt(0)-f) : syl; }
+function stripSuffixes(t, sufs){
+  for(const s of sufs){ if(t.length>s.length && t.endsWith(s)) return t.slice(0,-s.length); }
+  return null;
+}
+const GRAMMAR_STEMS = {
+  go:      t=>stripSuffixes(t,['고']),
+  ji:      t=>stripSuffixes(t,['지']),
+  gi:      t=>stripSuffixes(t,['기']),
+  reo:     t=>stripSuffixes(t,['으러','러']),
+  ryeogo:  t=>stripSuffixes(t,['으려고','려고']),
+  seyo:    t=>stripSuffixes(t,['으세요','세요']),
+  rieul:   t=>{ if(t.endsWith('을') && t.length>1) return t.slice(0,-1); if(hFinal(t.slice(-1))===8) return t.slice(0,-1)+dropFinal(t.slice(-1)); return null; },
+  rieul2:  t=>GRAMMAR_STEMS.rieul(t.slice(0,-2)),
+  nieun:   t=>{ if(t.endsWith('은') && t.length>1) return t.slice(0,-1); if(hFinal(t.slice(-1))===4) return t.slice(0,-1)+dropFinal(t.slice(-1)); return null; }
+};
+// Forme du dictionnaire d'un verbe conjugué ("탈" -> "타다"), ou null si on ne sait pas
+function verbDictionaryForm(token, stemKey){
+  const f = GRAMMAR_STEMS[stemKey]; if(!f) return null;
+  const base = f(token);
+  return base ? base + '다' : null;
+}
+const AO_END = /[아어여해와워줘봐]$/; // forme en -아/어 (pour distinguer "도와 주세요" de "커피 주세요")
+// version plus large pour "보다" : toute syllabe ouverte en ㅏ/ㅐ/ㅓ/ㅕ ("가 봤어요"), mais pas "영화 봤어요"
+function aoEndWide(t){
+  const last = t.slice(-1), c = last.charCodeAt(0) - 0xAC00;
+  if(AO_END.test(t)) return true;
+  return c>=0 && c<11172 && c%28===0 && [0,1,4,6].includes(Math.floor(c/28)%21);
+}
+const GRAMMAR_PATTERNS = [
+  { label:'ㄹ/을 수 있다', fr:'pouvoir (faire quelque chose)', ex:'먹을 수 있어요 = je peux manger', tests:[endsRieul, /^수$/, /^있/], fn:[1,2], stem:'rieul' },
+  { label:'ㄹ/을 수 없다', fr:'ne pas pouvoir (faire quelque chose)', ex:'갈 수 없어요 = je ne peux pas y aller', tests:[endsRieul, /^수$/, /^없/], fn:[1,2], stem:'rieul' },
+  { label:'ㄹ/을 줄 알다', fr:'savoir (faire quelque chose)', ex:'운전할 줄 알아요 = je sais conduire', tests:[endsRieul, /^줄$/, /^(알|모르)/], fn:[1,2], stem:'rieul' },
+  { label:'ㄹ/을 때', fr:'quand, au moment où (on fait…)', ex:'갈 때 = quand je vais / en allant', tests:[endsRieul, /^때/], fn:[1], stem:'rieul' },
+  { label:'ㄹ/을 거예요', fr:'futur ou intention : je vais (faire…)', ex:'갈 거예요 = j\'irai / je vais y aller', tests:[endsRieul, /^거(예요|에요|야|입니다)/], fn:[1], stem:'rieul' },
+  { label:'ㄴ/는/ㄹ 것 같다', fr:'il me semble que… / on dirait que…', ex:'비가 올 것 같아요 = on dirait qu\'il va pleuvoir', tests:[/./, /^것$/, /^같/], fn:[1,2] },
+  { label:'고 싶다', fr:'vouloir (faire quelque chose)', ex:'가고 싶어요 = je veux y aller', tests:[/.고$/, /^싶/], fn:[1], stem:'go' },
+  { label:'고 있다', fr:'être en train de (faire quelque chose)', ex:'먹고 있어요 = je suis en train de manger', tests:[/.고$/, /^있/], fn:[1], stem:'go' },
+  { label:'고 나서', fr:'après avoir (fait quelque chose)', ex:'먹고 나서 = après avoir mangé', tests:[/.고$/, /^나서/], fn:[1], stem:'go' },
+  { label:'는 중이다', fr:'être en train de (faire quelque chose)', ex:'공부하는 중이에요 = je suis en train d\'étudier', tests:[/.는$/, /^중/], fn:[1] },
+  { label:'지 않다', fr:'ne pas (négation)', ex:'먹지 않아요 = je ne mange pas', tests:[/.지$/, /^않/], fn:[1], stem:'ji' },
+  { label:'지 못하다', fr:'ne pas pouvoir (impossibilité)', ex:'가지 못해요 = je ne peux pas y aller', tests:[/.지$/, /^못/], fn:[1], stem:'ji' },
+  { label:'지 마세요', fr:'ne pas faire (demande ou interdiction polie)', ex:'가지 마세요 = n\'y allez pas', tests:[/.지$/, /^마(세요|십시오)/], fn:[1], stem:'ji' },
+  { label:'아/어야 하다', fr:'devoir (faire quelque chose)', ex:'가야 해요 = je dois y aller', tests:[/.야$/, /^(하|해|합|돼|되)/], fn:[1] },
+  { label:'아/어도 되다', fr:'avoir la permission de (faire) : « je peux… ? »', ex:'들어가도 돼요? = je peux entrer ?', tests:[/.도$/, /^(돼|되|됩)/], fn:[1] },
+  { label:'(으)면 안 되다', fr:'ne pas devoir (faire) : c\'est interdit', ex:'들어가면 안 돼요 = il ne faut pas entrer', tests:[/.면$/, /^안$/, /^(돼|되|됩)/], fn:[1,2] },
+  { label:'아/어 주세요', fr:'faire quelque chose pour moi, s\'il vous plaît', ex:'도와 주세요 = aidez-moi, s\'il vous plaît', tests:[AO_END, /^주(세요|십시오|시겠어요|실래요)/], fn:[1] },
+  { label:'아/어 보다', fr:'essayer de (faire quelque chose), faire pour voir', ex:'먹어 보세요 = goûtez / essayez de manger', tests:[aoEndWide, /^(보|봐|봤|볼)/], fn:[1] },
+  { label:'(으)러 가다/오다', fr:'aller ou venir pour (faire quelque chose)', ex:'먹으러 가요 = je vais manger', tests:[/.러$/, /^(가|와|갑|옵|오|갔|왔)/], fn:[1], stem:'reo' },
+  { label:'(으)려고 하다', fr:'avoir l\'intention de (faire quelque chose)', ex:'가려고 해요 = j\'ai l\'intention d\'y aller', tests:[/.려고$/, /^(하|해|합)/], fn:[1], stem:'ryeogo' },
+  { label:'기 전에', fr:'avant de (faire quelque chose)', ex:'먹기 전에 = avant de manger', tests:[/.기$/, /^전(에|에는)?$/], fn:[1], stem:'gi' },
+  { label:'기 때문에', fr:'parce que…', ex:'바쁘기 때문에 = parce que je suis occupé', tests:[/.기$/, /^때문/], fn:[1], stem:'gi' },
+  { label:'(으)ㄴ 후에 / 다음에', fr:'après (avoir fait quelque chose)', ex:'먹은 후에 = après avoir mangé', tests:[endsNieun, /^(후|다음)/], fn:[1], stem:'nieun' },
+  // expressions écrites en un seul mot
+  { label:'(으)세요', fr:'forme polie (honorifique) ou demande polie : « faites… / vous faites… »', ex:'가세요 = allez-y / vous allez', tests:[t=>/.세요$/.test(t) && t!=='안녕하세요'], fn:[], stem:'seyo' },
+  { label:'(으)ㄹ까요?', fr:'proposition ou question : « on …? », « est-ce que je …? »', ex:'같이 갈까요? = on y va ensemble ?', tests:[t=>t.length>=3 && t.endsWith('까요') && endsRieul(t.slice(0,-2))], fn:[], stem:'rieul2' },
+  { label:'(으)ㄹ게요', fr:'décision ou promesse : « je vais le faire », « je m\'en occupe »', ex:'제가 갈게요 = j\'y vais (je m\'en charge)', tests:[t=>t.length>=3 && t.endsWith('게요') && endsRieul(t.slice(0,-2))], fn:[], stem:'rieul2' },
+  { label:'(으)ㄹ래요', fr:'envie ou proposition : « je veux… », « tu veux… ? »', ex:'먹을래요? = tu veux manger ?', tests:[t=>t.length>=3 && t.endsWith('래요') && endsRieul(t.slice(0,-2))], fn:[], stem:'rieul2' },
+  { label:'(으)ㅂ시다', fr:'proposition : « faisons… »', ex:'같이 갑시다 = allons-y ensemble', tests:[t=>t.length>=3 && t.endsWith('시다') && hFinal(t.slice(-3,-2))===17], fn:[] },
+  { label:'네요', fr:'constat, surprise : « tiens, … ! », « ah, … ! »', ex:'예쁘네요 = comme c\'est joli !', tests:[t=>t.length>=3 && t.endsWith('네요')], fn:[] },
+  { label:'(으)니까', fr:'parce que / comme… (raison)', ex:'비가 오니까 = comme il pleut', tests:[t=>t.length>=3 && t.endsWith('니까')], fn:[] },
+  { label:'아/어서', fr:'parce que… / et ensuite… (cause ou enchaînement)', ex:'바빠서 = parce que je suis occupé', tests:[t=>t.length>=2 && /서$/.test(t) && hFinal(t.slice(-2,-1))===0 && !/(에서|에게서|한테서|로서|기서)$/.test(t) && !['도서','어서'].includes(t)], fn:[] },
+  { label:'(으)면', fr:'si… (condition)', ex:'가면 = si j\'y vais', tests:[t=>/(으면|하면)$/.test(t) || /^(가|오|보|주|되|자|타|사)면$/.test(t)], fn:[] }
+];
+function grammarTestOk(test, tok){ return typeof test === 'function' ? !!test(tok) : test.test(tok); }
+// words : liste des mots nettoyés d'une phrase (sans ponctuation).
+// Renvoie pour chaque mot la liste des expressions qui le contiennent.
+function findGrammarPatterns(words){
+  const perWord = words.map(()=>[]);
+  GRAMMAR_PATTERNS.forEach(pat=>{
+    const n = pat.tests.length;
+    for(let i=0; i+n<=words.length; i++){
+      let ok = true;
+      for(let k=0; k<n; k++){ if(!grammarTestOk(pat.tests[k], words[i+k])){ ok=false; break; } }
+      if(!ok) continue;
+      const text = words.slice(i,i+n).join(' ');
+      for(let k=0; k<n; k++) perWord[i+k].push({ pat, pos:k, text });
+    }
+  });
+  return perWord;
+}
+/* GRAMMAR:END */
+
 async function translateWordKoFr(word){
   const stem = stripKoParticle(word);
 
@@ -1059,7 +1153,7 @@ function renderWeakWordsPractice(){
   const nextBtn = el('<button class="btn ghost" style="margin-top:12px;display:none;">Suivant →</button>'); wrap.appendChild(nextBtn);
   const doCheck = ()=>{
     if(input.disabled) return;
-    const ok = input.value.trim().toLowerCase() === (item.meaning||'').trim().toLowerCase();
+    const ok = frAnswerOk(input.value, item.meaning);
     if(ok){ state.reviewCorrectCount=(state.reviewCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍</div>`; }
     else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${escapeHtml(item.meaning||'')}".</div>`; }
     checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
@@ -1068,6 +1162,18 @@ function renderWeakWordsPractice(){
   input.onkeydown = (e)=>{ if(e.key==='Enter') doCheck(); };
   nextBtn.onclick = ()=>{ state.reviewExerciseIndex++; render(); };
   return wrap;
+}
+
+// Bloc cliquable décrivant une expression de grammaire ; un clic la garde dans "Mots à revoir"
+function buildGrammarChip(pat){
+  const chip = el(`<button type="button" class="mono" title="Garder dans Mots à revoir" style="font-size:11.5px;line-height:1.5;padding:4px 10px;margin:2px 4px 4px 0;border:1.5px solid var(--seal);border-radius:10px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;max-width:100%;">📘 <b class="kr">${escapeHtml(pat.label)}</b> : ${escapeHtml(pat.fr)}<br><span class="gram-ex" style="color:var(--ink-soft);">ex. ${escapeHtml(pat.ex)}</span></button>`);
+  chip.onclick = async (e)=>{
+    e.stopPropagation();
+    chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
+    chip.querySelector('.gram-ex').style.color='#fff';
+    await sbAddWeakWord(pat.label, pat.fr);
+  };
+  return chip;
 }
 
 function renderTraduction(lesson){
@@ -1083,36 +1189,61 @@ function renderTraduction(lesson){
 
   const textCard = el('<div class="item-card kr" style="text-align:left;font-size:19px;line-height:2.2;padding:20px;margin-bottom:16px;white-space:pre-wrap;"></div>');
   const tokens = (item.text||'').split(/(\s+)/);
+  const cleanOf = tok => tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  // expressions de grammaire repérées sur plusieurs mots (ex. "탈 수 있어요")
+  const wordsClean = tokens.filter(tok=> tok!=='' && !/^\s+$/.test(tok)).map(cleanOf).filter(Boolean);
+  const grammarPerWord = findGrammarPatterns(wordsClean);
+  const hasGrammar = grammarPerWord.some(g=>g.length>0);
+  let wordIdx = -1;
   tokens.forEach(tok=>{
     if(tok==='' ){ return; }
     if(/^\s+$/.test(tok)){ textCard.appendChild(document.createTextNode(tok)); return; }
-    const clean = tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    const clean = cleanOf(tok);
     if(!clean){ textCard.appendChild(document.createTextNode(tok)); return; }
-    const span = el(`<span style="cursor:pointer;border-bottom:1.5px dashed var(--celadon-dark);">${escapeHtml(tok)}</span>`);
+    wordIdx++;
+    const gram = grammarPerWord[wordIdx] || [];
+    const span = el(`<span style="cursor:pointer;border-bottom:1.5px dashed ${gram.length?'var(--seal)':'var(--celadon-dark)'};">${escapeHtml(tok)}</span>`);
     const variantsWrap = el('<span></span>');
     let revealed = false;
     span.onclick = async ()=>{
       if(span.dataset.busy==='1') return;
       if(revealed){ revealed=false; variantsWrap.innerHTML=''; return; }
       span.dataset.busy='1';
-      variantsWrap.innerHTML = ' <span class="mono" style="font-size:11px;color:var(--ink-soft);">…</span>';
+      variantsWrap.innerHTML = '';
+      variantsWrap.appendChild(document.createTextNode(' '));
+      gram.forEach(g=> variantsWrap.appendChild(buildGrammarChip(g.pat)));
+      // mot purement grammatical (수, 있어요…) : l'explication de l'expression suffit
+      if(gram.length && gram.every(g=>g.pat.fn.includes(g.pos))){
+        revealed = true; span.dataset.busy='0'; return;
+      }
+      const loading = el('<span class="mono" style="font-size:11px;color:var(--ink-soft);">…</span>');
+      variantsWrap.appendChild(loading);
+      // verbe conjugué dans une expression : on cherche sa forme du dictionnaire
+      // ("탈" -> "타다") plutôt que le nom "탈" (masque) qui n'a aucun rapport
+      let lookup = clean;
+      const verbHit = gram.find(g=>g.pos===0 && g.pat.stem);
+      if(verbHit){ const base = verbDictionaryForm(clean, verbHit.pat.stem); if(base) lookup = base; }
       try{
-        const variants = await translateWordKoFr(clean);
-        variantsWrap.innerHTML = '';
-        variantsWrap.appendChild(document.createTextNode(' '));
+        const variants = await translateWordKoFr(lookup);
+        loading.remove();
+        if(lookup!==clean){
+          variantsWrap.appendChild(el(`<span class="kr" style="font-size:12px;margin-right:4px;">${escapeHtml(lookup)} :</span>`));
+        }
         variants.forEach(v=>{
-          const chip = el(`<button type="button" class="mono" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(v)}</button>`);
+          const chip = el(`<button type="button" class="mono var-chip" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(v)}</button>`);
           chip.onclick = async (e)=>{
             e.stopPropagation();
-            [...variantsWrap.querySelectorAll('button')].forEach(b=>{ b.style.borderColor='var(--line)'; b.style.background='var(--paper)'; b.style.color='var(--ink)'; });
+            [...variantsWrap.querySelectorAll('button.var-chip')].forEach(b=>{ b.style.borderColor='var(--line)'; b.style.background='var(--paper)'; b.style.color='var(--ink)'; });
             chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
-            await sbAddWeakWord(clean, v);
+            await sbAddWeakWord(lookup, v);
           };
           variantsWrap.appendChild(chip);
         });
         revealed = true;
       }catch(e){
-        variantsWrap.innerHTML = ' <span style="font-size:11px;color:var(--danger);">(indisponible)</span>';
+        loading.remove();
+        if(gram.length){ variantsWrap.appendChild(el('<span style="font-size:11px;color:var(--ink-soft);">(pas de traduction pour le mot seul)</span>')); revealed = true; }
+        else variantsWrap.innerHTML = ' <span style="font-size:11px;color:var(--danger);">(indisponible)</span>';
       }
       span.dataset.busy='0';
     };
@@ -1120,7 +1251,7 @@ function renderTraduction(lesson){
     textCard.appendChild(variantsWrap);
   });
   wrap.appendChild(textCard);
-  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).</div>'));
+  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).' + (hasGrammar ? ' Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d\'une expression de grammaire : clique dessus pour voir son sens, et sur 📘 pour la garder dans "Mots à revoir".' : '') + '</div>'));
 
   const textarea = el('<textarea style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:14px;" placeholder="Ta traduction en français..."></textarea>');
   textarea.value = state.translationDraft || '';
