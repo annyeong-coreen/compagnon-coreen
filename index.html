@@ -976,7 +976,7 @@ async function renderSidebar(){
         <span>📒 Aide-mémoire grammaire (${GRAMMAR_SEEN.length})</span>
       </div>`);
       grammarBtn.style.cursor='pointer';
-      grammarBtn.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarMode = true; render(); };
+      grammarBtn.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
       box.appendChild(grammarBtn);
       const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
         <span>🌐 Quiz global</span>
@@ -1283,46 +1283,84 @@ async function renderGlobalQuiz(){
   return wrap;
 }
 
+// Aide-mémoire : une page d'accueil avec les catégories, puis la liste de la catégorie choisie
+const GRAMMAR_CATEGORIES = [
+  { kind:'particule', icon:'🔹', title:'Particules et copule', hint:"Les petits mots qui s'accrochent aux noms (를, 에서, 가…)", items:()=>Object.entries(PARTICLE_REF) },
+  { kind:'classificateur', icon:'🔢', title:'Classificateurs', hint:"Les mots qui accompagnent les nombres (개, 명, 번…)", items:()=>Object.entries(COUNTER_REF) },
+  { kind:'expression', icon:'📘', title:'Expressions de grammaire', hint:"Les tournures sur plusieurs mots (ㄹ 수 있다, 고 싶다…)", items:()=>GRAMMAR_PATTERNS.map(pt=>[pt.label, pt]) }
+];
 function renderGrammarNotebook(){
   const wrap = el('<div></div>');
-  wrap.appendChild(el('<h2 style="margin:0 0 4px;">📒 Aide-mémoire grammaire</h2>'));
-  wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure, pour les avoir sous la main.</div>`));
-  if(!GRAMMAR_TABLE_OK){
-    wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ La sauvegarde de cette liste n'est pas encore activée : elle ne dure que le temps de cette session. Demande à celui qui gère l'outil de lancer <b>migration-grammaire.sql</b> dans Supabase.</div>`));
+  const entryOf = (kind,key)=>GRAMMAR_SEEN.find(x=>x.kind===kind && x.key===key);
+  // éléments déjà croisés d'une catégorie, les plus récents en premier
+  const seenItems = (cat)=> cat.items().filter(([key])=>entryOf(cat.kind,key))
+    .sort((x,y)=> String((entryOf(cat.kind,y[0])||{}).created_at||'').localeCompare(String((entryOf(cat.kind,x[0])||{}).created_at||'')));
+  const cat = GRAMMAR_CATEGORIES.find(c=>c.kind===state.grammarCategory);
+
+  if(!cat){
+    // ----- accueil : les catégories -----
+    wrap.appendChild(el('<h2 style="margin:0 0 4px;">📒 Aide-mémoire grammaire</h2>'));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure. Choisis une catégorie.</div>`));
+    if(!GRAMMAR_TABLE_OK){
+      wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ La sauvegarde de cette liste n'est pas encore activée : elle ne dure que le temps de cette session. Demande à celui qui gère l'outil de lancer <b>migration-grammaire.sql</b> dans Supabase.</div>`));
+    }
+    const grid = el('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;"></div>');
+    GRAMMAR_CATEGORIES.forEach(c=>{
+      const list = seenItems(c);
+      const nNew = list.filter(([key])=>isGrammarEntryNew(entryOf(c.kind,key))).length;
+      const tile = el(`<button type="button" class="gm-cat" data-kind="${c.kind}" style="text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;background:var(--paper);border:1.5px solid ${list.length?'var(--ink)':'var(--line)'};border-radius:12px;padding:16px 18px;${list.length?'':'opacity:.7;'}">
+        <div style="font-size:26px;line-height:1;">${c.icon}</div>
+        <div style="font-size:16px;font-weight:600;margin:8px 0 2px;">${escapeHtml(c.title)}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.45;">${escapeHtml(c.hint)}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="mono gm-count" style="font-size:12.5px;">${list.length ? (list.length+' rencontré'+(list.length>1?'s':'')) : 'Rien pour l\'instant'}</span>
+          ${nNew?`<span class="gm-new mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">${nNew} nouveau${nNew>1?'x':''}</span>`:''}
+        </div>
+      </button>`);
+      tile.onclick = ()=>{ state.grammarCategory = c.kind; render(); };
+      grid.appendChild(tile);
+    });
+    wrap.appendChild(grid);
+    return wrap;
   }
-  const groups = [
-    { kind:'particule', title:'Particules et copule', items:Object.entries(PARTICLE_REF) },
-    { kind:'classificateur', title:'Classificateurs', items:Object.entries(COUNTER_REF) },
-    { kind:'expression', title:'Expressions de grammaire', items:GRAMMAR_PATTERNS.map(pt=>[pt.label, pt]) }
-  ];
-  const entryOf = (g,key)=>GRAMMAR_SEEN.find(x=>x.kind===g.kind && x.key===key);
-  let shown = 0;
-  groups.forEach(g=>{
-    // uniquement ce que l'élève a déjà croisé, les plus récents en premier
-    const list = g.items.filter(([key])=>entryOf(g,key))
-      .sort((x,y)=> String((entryOf(g,y[0])||{}).created_at||'').localeCompare(String((entryOf(g,x[0])||{}).created_at||'')));
-    if(list.length===0) return;
-    shown += list.length;
-    const section = el(`<div class="section-block" style="margin-bottom:24px;"><h3 style="margin:0 0 10px;">${escapeHtml(g.title)} <span class="mono" style="font-size:12px;color:var(--ink-soft);">(${list.length})</span></h3></div>`);
-    list.forEach(([key,ref])=>{
-      const isNew = isGrammarEntryNew(entryOf(g,key));
-      const card = el(`<div class="item-card" style="text-align:left;padding:12px 16px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;"><span class="kr" style="font-size:22px;">${escapeHtml(ref.label)}</span>${isNew?'<span class="gm-new mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">nouveau</span>':''}</div>
-        <div style="margin-top:4px;">${escapeHtml(ref.fr)}</div>
+
+  // ----- une catégorie : la liste de ce que l'élève a croisé -----
+  const back = el('<button class="btn ghost small gm-back" style="margin-bottom:14px;">← Aide-mémoire</button>');
+  back.onclick = ()=>{ state.grammarCategory = null; render(); };
+  wrap.appendChild(back);
+  wrap.appendChild(el(`<h2 style="margin:0 0 4px;">${cat.icon} ${escapeHtml(cat.title)}</h2>`));
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;font-size:12.5px;">${escapeHtml(cat.hint)}. Clique sur un élément pour voir le détail.</div>`));
+  const list = seenItems(cat);
+  if(list.length===0){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien dans cette catégorie pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
+    return wrap;
+  }
+  list.forEach(([key,ref])=>{
+    const isNew = isGrammarEntryNew(entryOf(cat.kind,key));
+    const card = el(`<div class="item-card gm-item" style="text-align:left;padding:0;margin-bottom:10px;overflow:hidden;">
+      <button type="button" class="gm-head" style="display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;font-family:inherit;color:var(--ink);background:none;border:none;padding:12px 16px;cursor:pointer;">
+        <span class="kr" style="font-size:22px;">${escapeHtml(ref.label)}</span>
+        <span style="font-size:13px;color:var(--ink-soft);flex:1;">${escapeHtml(ref.fr)}</span>
+        ${isNew?'<span class="gm-new mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">nouveau</span>':''}
+        <span class="gm-arrow" style="color:var(--ink-soft);">▾</span>
+      </button>
+      <div class="gm-detail" style="display:none;padding:0 16px 14px;">
         ${ref.note?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">${escapeHtml(ref.note)}</div>`:''}
         ${ref.nums?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Nombres : ${escapeHtml(ref.nums)}</div>`:''}
         <div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px;">ex. ${escapeHtml(ref.ex)}</div>
-      </div>`);
-      const rm = el('<button class="btn ghost small" style="margin-top:8px;">Retirer de ma liste</button>');
-      rm.onclick = async ()=>{ await unmarkGrammarSeen(g.kind, key); render(); };
-      card.appendChild(rm);
-      section.appendChild(card);
-    });
-    wrap.appendChild(section);
+      </div>
+    </div>`);
+    const detail = card.querySelector('.gm-detail');
+    const rm = el('<button class="btn ghost small" style="margin-top:10px;">Retirer de ma liste</button>');
+    rm.onclick = async ()=>{ await unmarkGrammarSeen(cat.kind, key); render(); };
+    detail.appendChild(rm);
+    card.querySelector('.gm-head').onclick = ()=>{
+      const open = detail.style.display==='none';
+      detail.style.display = open ? 'block' : 'none';
+      card.querySelector('.gm-arrow').textContent = open ? '▴' : '▾';
+    };
+    wrap.appendChild(card);
   });
-  if(shown===0){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien pour l'instant — clique sur les mots d'un texte dans Traduction : les particules, classificateurs et expressions que tu croiseras viendront ici.</div></div>`));
-  }
   return wrap;
 }
 
