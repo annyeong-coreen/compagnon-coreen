@@ -1337,26 +1337,38 @@ function listenSetInput(text, andSearch){
     if(LISTEN.tokens.length<=1) listenSearch(LISTEN.tokens[0]||text); else { LISTEN.result=null; LISTEN.msg='Plusieurs mots : clique sur celui que tu veux chercher.'; render(); }
   }
 }
+let LISTEN_REC = null, LISTEN_TIMER = null;
+function listenStopMic(){ try{ if(LISTEN_REC) LISTEN_REC.stop(); }catch(e){} }
 function listenStartMic(){
   const SR = speechRecognitionCtor(); if(!SR) return;
   if(LISTEN.listening) return;
   let rec; try{ rec = new SR(); }catch(e){ LISTEN.msg="Le micro n'est pas disponible ici. Tape le mot à la place."; render(); return; }
+  LISTEN_REC = rec;
   rec.lang='ko-KR'; rec.maxAlternatives=5; rec.interimResults=false; rec.continuous=false;
-  LISTEN.listening=true; LISTEN.msg=''; LISTEN.result=null; LISTEN.cands=[]; render();
+  LISTEN.listening=true; LISTEN.msg=''; LISTEN.result=null; LISTEN.cands=[]; LISTEN.tokens=[]; render();
+  const finish = ()=>{ clearTimeout(LISTEN_TIMER); if(LISTEN.listening){ LISTEN.listening=false; render(); } };
+  LISTEN_TIMER = setTimeout(()=>{ listenStopMic(); setTimeout(()=>{ if(LISTEN.listening){ LISTEN.msg="Le micro n'a rien renvoyé. Réessaie, ou tape le mot."; finish(); } }, 1500); }, 8000);
   rec.onresult = (ev)=>{
     const r = ev.results && ev.results[0]; const alts=[];
     if(r) for(let i=0;i<r.length;i++){ const t=(r[i].transcript||'').trim(); if(t && !alts.includes(t)) alts.push(t); }
-    LISTEN.cands = alts;
-    if(alts.length) listenSetInput(alts[0], true);
+    LISTEN.listening=false; clearTimeout(LISTEN_TIMER);
+    const hangul = alts.filter(t=>/[\uAC00-\uD7A3]/.test(t));
+    if(hangul.length){ LISTEN.cands = hangul; listenSetInput(hangul[0], true); }
+    else if(alts.length){ LISTEN.msg = "J'ai entendu « "+alts[0]+" », mais ce n'est pas du coréen. Réessaie en parlant plus lentement, ou tape le mot."; render(); }
     else { LISTEN.msg="Je n'ai rien compris. Réessaie ou tape le mot."; render(); }
   };
   rec.onerror = (ev)=>{
     const e = ev && ev.error;
-    LISTEN.msg = e==='not-allowed' || e==='service-not-allowed' ? "Le micro est bloqué : autorise-le dans ton navigateur, ou tape le mot."
+    LISTEN.msg = e==='not-allowed' || e==='service-not-allowed' ? "Le micro est bloqué : autorise-le dans ton navigateur (cadenas à côté de l'adresse), ou tape le mot."
       : e==='no-speech' ? "Je n'ai rien entendu. Réessaie en parlant plus près du micro, ou tape le mot."
-      : "La reconnaissance vocale n'a pas marché. Tape le mot (par exemple d'après les sous-titres).";
+      : e==='audio-capture' ? "Aucun micro détecté sur cet appareil. Tape le mot."
+      : e==='network' ? "La reconnaissance vocale a besoin d'Internet et n'a pas pu joindre son service. Tape le mot."
+      : e==='language-not-supported' ? "Ce navigateur ne reconnaît pas le coréen à la voix. Tape le mot."
+      : "La reconnaissance vocale n'a pas marché ("+(e||'erreur')+"). Tape le mot (par exemple d'après les sous-titres).";
+    finish();
   };
-  rec.onend = ()=>{ LISTEN.listening=false; render(); };
+  rec.onspeechend = ()=>{ try{ rec.stop(); }catch(e){} };
+  rec.onend = ()=>{ finish(); };
   try{ rec.start(); }catch(e){ LISTEN.listening=false; LISTEN.msg="Le micro n'est pas disponible ici. Tape le mot à la place."; render(); }
 }
 function renderListen(){
@@ -1366,8 +1378,8 @@ function renderListen(){
   const SR = speechRecognitionCtor();
   const row = el('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;"></div>');
   if(SR){
-    const mic = el(`<button class="btn ${LISTEN.listening?'seal':''}" style="min-width:150px;" ${LISTEN.listening?'disabled':''}>${LISTEN.listening?'🎤 Je t\'écoute…':'🎤 Dire le mot'}</button>`);
-    mic.onclick = listenStartMic; row.appendChild(mic);
+    const mic = el(`<button class="btn ${LISTEN.listening?'seal':''}" style="min-width:150px;">${LISTEN.listening?'⏹ Parle… (arrêter)':'🎤 Dire le mot'}</button>`);
+    mic.onclick = ()=>{ if(LISTEN.listening) listenStopMic(); else listenStartMic(); }; row.appendChild(mic);
   }
   const inp = el(`<input type="text" lang="ko" placeholder="ou écris-le ici : 한글" value="${escapeHtml(LISTEN.input)}" style="flex:1;min-width:160px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:16px;">`);
   inp.oninput = ()=>{ LISTEN.input = inp.value; };
