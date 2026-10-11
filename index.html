@@ -142,7 +142,7 @@ let ACTIVE_GROUP_ID = null; // for teacher: which group's chat she's currently v
 let state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
   controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
   exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
-  reviewMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+  reviewMode:false, grammarMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
   globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
   reviewSelected:{},
   translationDraft:'', translationValidated:false };
@@ -212,6 +212,48 @@ async function sbRemoveWeakWordsBulk(words){
   await sb.from('weak_words').delete().eq('student_id', SESSION.user.id).in('word', words);
   WEAK_WORDS = WEAK_WORDS.filter(w=>!words.includes(w.word));
 }
+// Aide-mémoire de grammaire : particules, classificateurs et expressions que l'élève a croisés
+// (table grammar_seen — voir migration-grammaire.sql). Si la table n'existe pas encore,
+// tout continue de marcher, mais la liste n'est gardée que le temps de la session.
+let GRAMMAR_SEEN = [];
+let GRAMMAR_TABLE_OK = true;
+async function sbLoadGrammarSeen(){
+  GRAMMAR_SEEN = []; GRAMMAR_TABLE_OK = true;
+  if(!SESSION || !PROFILE || PROFILE.role!=='student') return;
+  try{
+    const res = await sb.from('grammar_seen').select('*').eq('student_id', SESSION.user.id);
+    if(res.error) throw res.error;
+    GRAMMAR_SEEN = res.data || [];
+  }catch(e){ GRAMMAR_TABLE_OK = false; }
+}
+async function markGrammarSeen(kind, key){
+  if(!SESSION || !PROFILE || PROFILE.role!=='student') return;
+  if(GRAMMAR_SEEN.some(g=>g.kind===kind && g.key===key)) return;
+  GRAMMAR_SEEN.push({ kind, key, created_at:new Date().toISOString(), _session:true });
+  if(!GRAMMAR_TABLE_OK) return;
+  try{
+    const res = await sb.from('grammar_seen').upsert({ student_id:SESSION.user.id, kind, key }, { onConflict:'student_id,kind,key', ignoreDuplicates:true });
+    if(res && res.error) GRAMMAR_TABLE_OK = false;
+  }catch(e){ GRAMMAR_TABLE_OK = false; }
+}
+// Repère « dernière visite de l'aide-mémoire » : sert uniquement à afficher « nouveau » (confort propre à
+// cet appareil, jamais essentiel). null = stockage du navigateur indisponible.
+let GRAMMAR_VISIT_BASELINE = null;
+function grammarVisitKey(){ return 'grammarNotebookVisit:' + (SESSION ? SESSION.user.id : ''); }
+function openGrammarNotebookVisit(){
+  try{
+    GRAMMAR_VISIT_BASELINE = localStorage.getItem(grammarVisitKey()) || '';
+    localStorage.setItem(grammarVisitKey(), new Date().toISOString());
+  }catch(e){ GRAMMAR_VISIT_BASELINE = null; }
+}
+function isGrammarEntryNew(entry){
+  return !!(entry && (entry._session || (GRAMMAR_VISIT_BASELINE!==null && (entry.created_at||'') > GRAMMAR_VISIT_BASELINE)));
+}
+async function unmarkGrammarSeen(kind, key){
+  GRAMMAR_SEEN = GRAMMAR_SEEN.filter(g=>!(g.kind===kind && g.key===key));
+  if(!GRAMMAR_TABLE_OK) return;
+  try{ await sb.from('grammar_seen').delete().eq('student_id', SESSION.user.id).eq('kind', kind).eq('key', key); }catch(e){}
+}
 // Traduction automatique coréen -> français via MyMemory : API publique, gratuite,
 // sans clé ni compte requis. Elle traduit chaque mot isolément (sans regarder
 // la phrase autour), donc elle se trompe régulièrement sur des mots courts ou
@@ -241,6 +283,20 @@ function stripSuffixes(t, sufs){
   for(const s of sufs){ if(t.length>s.length && t.endsWith(s)) return t.slice(0,-s.length); }
   return null;
 }
+// Radical d'une forme en -아/어 : "가" -> "가", "먹어" -> "먹", "해" -> "하", "와" -> "오", "봐" -> "보", "줘" -> "주", "마셔" -> "마시"
+function aoBase(t){
+  if(!t) return null;
+  const last = t.slice(-1), c = last.charCodeAt(0) - 0xAC00;
+  if(t.length>1 && (last==='아' || last==='어')) return t.slice(0,-1);
+  if(last==='해') return t.slice(0,-1) + '하';
+  if(c>=0 && c<11172 && c%28===0){
+    const v = Math.floor(c/28) % 21;
+    if(v===0 || v===4) return t;                                              // 가, 서, 사… (voyelle de 아/어 absorbée)
+    if(v===9 || v===14) return t.slice(0,-1) + String.fromCharCode(0xAC00+c-28);   // 와->오, 봐->보, 줘->주
+    if(v===6) return t.slice(0,-1) + String.fromCharCode(0xAC00+c+14*28);          // 셔->시
+  }
+  return null;
+}
 const GRAMMAR_STEMS = {
   go:      t=>stripSuffixes(t,['고']),
   ji:      t=>stripSuffixes(t,['지']),
@@ -250,6 +306,11 @@ const GRAMMAR_STEMS = {
   seyo:    t=>stripSuffixes(t,['으세요','세요']),
   rieul:   t=>{ if(t.endsWith('을') && t.length>1) return t.slice(0,-1); if(hFinal(t.slice(-1))===8) return t.slice(0,-1)+dropFinal(t.slice(-1)); return null; },
   rieul2:  t=>GRAMMAR_STEMS.rieul(t.slice(0,-2)),
+  ao:      t=>aoBase(t),
+  aoya:    t=>{ const r = stripSuffixes(t,['야']); return r ? aoBase(r) : null; },
+  aodo:    t=>{ const r = stripSuffixes(t,['도']); return r ? aoBase(r) : null; },
+  myeon:   t=>stripSuffixes(t,['으면','면']),
+  neun:    t=>stripSuffixes(t,['는']),
   nieun:   t=>{ if(t.endsWith('은') && t.length>1) return t.slice(0,-1); if(hFinal(t.slice(-1))===4) return t.slice(0,-1)+dropFinal(t.slice(-1)); return null; }
 };
 // Forme du dictionnaire d'un verbe conjugué ("탈" -> "타다"), ou null si on ne sait pas
@@ -275,15 +336,15 @@ const GRAMMAR_PATTERNS = [
   { label:'고 싶다', fr:'vouloir (faire quelque chose)', ex:'가고 싶어요 = je veux y aller', tests:[/.고$/, /^싶/], fn:[1], stem:'go' },
   { label:'고 있다', fr:'être en train de (faire quelque chose)', ex:'먹고 있어요 = je suis en train de manger', tests:[/.고$/, /^있/], fn:[1], stem:'go' },
   { label:'고 나서', fr:'après avoir (fait quelque chose)', ex:'먹고 나서 = après avoir mangé', tests:[/.고$/, /^나서/], fn:[1], stem:'go' },
-  { label:'는 중이다', fr:'être en train de (faire quelque chose)', ex:'공부하는 중이에요 = je suis en train d\'étudier', tests:[/.는$/, /^중/], fn:[1] },
+  { label:'는 중이다', fr:'être en train de (faire quelque chose)', ex:'공부하는 중이에요 = je suis en train d\'étudier', tests:[/.는$/, /^중/], fn:[1], stem:'neun' },
   { label:'지 않다', fr:'ne pas (négation)', ex:'먹지 않아요 = je ne mange pas', tests:[/.지$/, /^않/], fn:[1], stem:'ji' },
   { label:'지 못하다', fr:'ne pas pouvoir (impossibilité)', ex:'가지 못해요 = je ne peux pas y aller', tests:[/.지$/, /^못/], fn:[1], stem:'ji' },
   { label:'지 마세요', fr:'ne pas faire (demande ou interdiction polie)', ex:'가지 마세요 = n\'y allez pas', tests:[/.지$/, /^마(세요|십시오)/], fn:[1], stem:'ji' },
-  { label:'아/어야 하다', fr:'devoir (faire quelque chose)', ex:'가야 해요 = je dois y aller', tests:[/.야$/, /^(하|해|합|돼|되)/], fn:[1] },
-  { label:'아/어도 되다', fr:'avoir la permission de (faire) : « je peux… ? »', ex:'들어가도 돼요? = je peux entrer ?', tests:[/.도$/, /^(돼|되|됩)/], fn:[1] },
-  { label:'(으)면 안 되다', fr:'ne pas devoir (faire) : c\'est interdit', ex:'들어가면 안 돼요 = il ne faut pas entrer', tests:[/.면$/, /^안$/, /^(돼|되|됩)/], fn:[1,2] },
-  { label:'아/어 주세요', fr:'faire quelque chose pour moi, s\'il vous plaît', ex:'도와 주세요 = aidez-moi, s\'il vous plaît', tests:[AO_END, /^주(세요|십시오|시겠어요|실래요)/], fn:[1] },
-  { label:'아/어 보다', fr:'essayer de (faire quelque chose), faire pour voir', ex:'먹어 보세요 = goûtez / essayez de manger', tests:[aoEndWide, /^(보|봐|봤|볼)/], fn:[1] },
+  { label:'아/어야 하다', fr:'devoir (faire quelque chose)', ex:'가야 해요 = je dois y aller', tests:[/.야$/, /^(하|해|합|돼|되)/], fn:[1], stem:'aoya' },
+  { label:'아/어도 되다', fr:'avoir la permission de (faire) : « je peux… ? »', ex:'들어가도 돼요? = je peux entrer ?', tests:[/.도$/, /^(돼|되|됩)/], fn:[1], stem:'aodo' },
+  { label:'(으)면 안 되다', fr:'ne pas devoir (faire) : c\'est interdit', ex:'들어가면 안 돼요 = il ne faut pas entrer', tests:[/.면$/, /^안$/, /^(돼|되|됩)/], fn:[1,2], stem:'myeon' },
+  { label:'아/어 주세요', fr:'faire quelque chose pour moi, s\'il vous plaît', ex:'도와 주세요 = aidez-moi, s\'il vous plaît', tests:[AO_END, /^주(세요|십시오|시겠어요|실래요)/], fn:[1], stem:'ao' },
+  { label:'아/어 보다', fr:'essayer de (faire quelque chose), faire pour voir', ex:'먹어 보세요 = goûtez / essayez de manger', tests:[aoEndWide, /^(보|봐|봤|볼)/], fn:[1], stem:'ao' },
   { label:'(으)러 가다/오다', fr:'aller ou venir pour (faire quelque chose)', ex:'먹으러 가요 = je vais manger', tests:[/.러$/, /^(가|와|갑|옵|오|갔|왔)/], fn:[1], stem:'reo' },
   { label:'(으)려고 하다', fr:'avoir l\'intention de (faire quelque chose)', ex:'가려고 해요 = j\'ai l\'intention d\'y aller', tests:[/.려고$/, /^(하|해|합)/], fn:[1], stem:'ryeogo' },
   { label:'기 전에', fr:'avant de (faire quelque chose)', ex:'먹기 전에 = avant de manger', tests:[/.기$/, /^전(에|에는)?$/], fn:[1], stem:'gi' },
@@ -301,36 +362,28 @@ const GRAMMAR_PATTERNS = [
   { label:'(으)면', fr:'si… (condition)', ex:'가면 = si j\'y vais', tests:[t=>/(으면|하면)$/.test(t) || /^(가|오|보|주|되|자|타|사)면$/.test(t)], fn:[] }
 ];
 // Formes de dictionnaire possibles d'un verbe conjugué courant ("가요" -> "가다").
-// On les essaie dans KRDict seul : si le dictionnaire ne les connaît pas (ex. "냉장고" n'est pas
-// "냉장" + 고), on retombe sur la recherche normale du mot tel quel.
+// "strong" : terminaisons qui sont presque toujours un verbe (…요, …습니다) -> on les essaie
+// avant le mot entier. "weak" : terminaisons ambiguës (…고, …지 : 바지, 냉장고) -> après le mot entier.
+// Tout est vérifié dans KRDict seul : une forme inconnue du dictionnaire est simplement écartée.
 function guessVerbBases(t){
-  const out = []; const add = b=>{ if(b && b.length>=2 && !out.includes(b)) out.push(b); };
+  const strong = [], weak = [];
+  const add = (arr, b)=>{ if(b && b.length>=2 && !strong.includes(b) && !weak.includes(b)) arr.push(b); };
   let m;
-  if((m = t.match(/^(.+)(했어요|했습니다|합니다|해요|하세요|하고|하지|하는)$/))) add(m[1]+'하다');
-  if((m = t.match(/^(.+)(습니다|았어요|었어요|아요|어요|으세요|세요|고|지)$/))) add(m[1]+'다');
-  if(t.endsWith('니다') && hFinal(t.slice(-3,-2))===17) add(t.slice(0,-3)+dropFinal(t.slice(-3,-2))+'다');
+  if((m = t.match(/^(.+)(했어요|했습니다|합니다|해요|하세요)$/))) add(strong, m[1]+'하다');
+  if((m = t.match(/^(.+)(습니다|았어요|었어요|아요|어요|으세요|세요)$/))) add(strong, m[1]+'다');
+  if(t.endsWith('니다') && hFinal(t.slice(-3,-2))===17) add(strong, t.slice(0,-3)+dropFinal(t.slice(-3,-2))+'다');
   if(t.endsWith('요') && t.length>=2){
     const syl = t.slice(-2,-1), c = syl.charCodeAt(0)-0xAC00;
     if(c>=0 && c<11172 && c%28===0){
       const v = Math.floor(c/28)%21, pre = t.slice(0,-2);
-      if(v===0 || v===4) add(t.slice(0,-1)+'다');                                   // 가요, 서요
-      else if(v===9)  add(pre+String.fromCharCode(0xAC00+c-28)+'다');                // 와요 -> 오다, 봐요 -> 보다
-      else if(v===14) add(pre+String.fromCharCode(0xAC00+c-28)+'다');                // 줘요 -> 주다
-      else if(v===6)  add(pre+String.fromCharCode(0xAC00+c+14*28)+'다');             // 마셔요 -> 마시다
+      if(v===0 || v===4) add(strong, t.slice(0,-1)+'다');                                   // 가요, 서요
+      else if(v===9 || v===14) add(strong, pre+String.fromCharCode(0xAC00+c-28)+'다');       // 와요 -> 오다, 봐요 -> 보다, 줘요 -> 주다
+      else if(v===6)  add(strong, pre+String.fromCharCode(0xAC00+c+14*28)+'다');             // 마셔요 -> 마시다
     }
   }
-  return out;
-}
-// Cherche le mot dans KRDict en essayant d'abord la forme du dictionnaire du verbe
-// (si on la connaît), puis le mot tel quel. Renvoie { word, variants }.
-async function lookupWordSmart(clean, preferredBase){
-  const cands = [];
-  if(preferredBase) cands.push(preferredBase);
-  guessVerbBases(clean).forEach(b=>{ if(!cands.includes(b)) cands.push(b); });
-  for(const b of cands){
-    try{ const v = await translateWordKoFr(b, {dictOnly:true}); if(v && v.length) return { word:b, variants:v }; }catch(e){}
-  }
-  return { word:clean, variants: await translateWordKoFr(clean) };
+  if((m = t.match(/^(.+)(하고|하지|하는)$/))) add(weak, m[1]+'하다');
+  if((m = t.match(/^(.+)(고|지)$/))) add(weak, m[1]+'다');
+  return { strong, weak };
 }
 function grammarTestOk(test, tok){ return typeof test === 'function' ? !!test(tok) : test.test(tok); }
 // words : liste des mots nettoyés d'une phrase (sans ponctuation).
@@ -349,11 +402,140 @@ function findGrammarPatterns(words){
   });
   return perWord;
 }
+
+/* ---------- Particules, copule et classificateurs ---------- */
+const PARTICLE_REF = {
+  '은/는':   { label:'은 / 는', fr:"particule de thème : « quant à… », sert à présenter un sujet ou à opposer", note:"은 après une consonne, 는 après une voyelle", ex:"저는 학생이에요 = moi, je suis étudiant" },
+  '이/가':   { label:'이 / 가', fr:"particule de sujet : marque ce dont on parle ou qui fait l'action", note:"이 après une consonne, 가 après une voyelle", ex:"비가 와요 = il pleut" },
+  '을/를':   { label:'을 / 를', fr:"particule d'objet direct : marque ce que l'on mange, prend, voit…", note:"을 après une consonne, 를 après une voyelle", ex:"택시를 타요 = je prends un taxi" },
+  '에':      { label:'에', fr:"à, vers, dans (destination, lieu où l'on se trouve) ; à (heure, jour, date)", note:"", ex:"학교에 가요 = je vais à l'école · 세 시에 만나요 = on se retrouve à trois heures" },
+  '에서':    { label:'에서', fr:"à, dans (lieu où se déroule l'action) ; depuis, de (point de départ)", note:"", ex:"서울에서 살아요 = j'habite à Séoul" },
+  '에게/한테': { label:'에게 / 한테', fr:"à (une personne) : donner, dire, appeler… (한테 est plus courant à l'oral)", note:"", ex:"친구에게 선물을 줘요 = je donne un cadeau à un ami" },
+  '께':      { label:'께', fr:"forme respectueuse de 에게 / 한테, pour une personne que l'on honore", note:"", ex:"선생님께 질문해요 = je pose une question au professeur" },
+  '도':      { label:'도', fr:"aussi, même (remplace 은/는, 이/가 ou 을/를)", note:"", ex:"저도 갈래요 = moi aussi, je veux bien y aller" },
+  '만':      { label:'만', fr:"seulement", note:"", ex:"물만 마셔요 = je bois seulement de l'eau" },
+  '으로/로':  { label:'으로 / 로', fr:"vers (direction) ; avec, en (moyen : transport, outil)", note:"으로 après une consonne, 로 après une voyelle ou ㄹ", ex:"버스로 가요 = j'y vais en bus" },
+  '와/과':   { label:'와 / 과', fr:"et (entre deux noms) ; avec", note:"과 après une consonne, 와 après une voyelle", ex:"빵과 우유 = du pain et du lait" },
+  '하고':    { label:'하고', fr:"et, avec (courant à l'oral)", note:"", ex:"친구하고 같이 가요 = je vais avec un ami" },
+  '(이)랑':  { label:'(이)랑', fr:"et, avec (très familier, à l'oral)", note:"이랑 après une consonne, 랑 après une voyelle", ex:"친구랑 영화를 봐요 = je regarde un film avec un ami" },
+  '의':      { label:'의', fr:"de (possession) : A의 B = le B de A", note:"", ex:"친구의 가방 = le sac de mon ami" },
+  '부터':    { label:'부터', fr:"depuis, à partir de (début dans le temps)", note:"", ex:"아홉 시부터 일해요 = je travaille à partir de neuf heures" },
+  '까지':    { label:'까지', fr:"jusqu'à", note:"", ex:"여섯 시까지 일해요 = je travaille jusqu'à six heures" },
+  '보다':    { label:'보다', fr:"plus que (comparaison)", note:"", ex:"여름보다 겨울이 좋아요 = je préfère l'hiver à l'été" },
+  '마다':    { label:'마다', fr:"chaque, tous les", note:"", ex:"주말마다 영화를 봐요 = je regarde un film chaque week-end" },
+  '처럼':    { label:'처럼', fr:"comme, à la manière de", note:"", ex:"한국 사람처럼 말해요 = il/elle parle comme un Coréen" },
+  '이에요/예요': { label:'이에요 / 예요', fr:"« être » (copule polie) ; 입니다 est la forme formelle", note:"이에요 après une consonne, 예요 après une voyelle", ex:"학생이에요 = je suis étudiant" }
+};
+const PARTICLE_SURFACE_TO_KEY = {'은':'은/는','는':'은/는','이':'이/가','가':'이/가','을':'을/를','를':'을/를','에':'에','에서':'에서','에게':'에게/한테','한테':'에게/한테','께':'께','도':'도','만':'만','으로':'으로/로','로':'으로/로','와':'와/과','과':'와/과','하고':'하고','이랑':'(이)랑','랑':'(이)랑','의':'의','부터':'부터','까지':'까지','보다':'보다','마다':'마다','처럼':'처럼','이에요':'이에요/예요','예요':'이에요/예요','입니다':'이에요/예요'};
+const PARTICLE_ENDINGS = Object.keys(PARTICLE_SURFACE_TO_KEY).sort((a,b)=>b.length-a.length);
+// Particules qui, seules entre deux espaces, ne peuvent pas être un autre mot (contrairement à 이, 도, 만…)
+const BARE_PARTICLES = ['가','를','을','는','은','에','에서','에게','한테','께','부터','까지','로','으로','와','과','의','하고','랑'];
+// Retire jusqu'à 2 particules collées en fin de mot : "서울에서는" -> [{stem:'서울에서', parts:['는']}, {stem:'서울', parts:['에서','는']}]
+function particleCandidates(tok){
+  const out = []; let cur = tok, parts = [];
+  for(let i=0; i<2; i++){
+    const hit = PARTICLE_ENDINGS.find(p=> cur.length>p.length && cur.endsWith(p));
+    if(!hit) break;
+    parts = [hit].concat(parts); cur = cur.slice(0,-hit.length);
+    out.push({ stem:cur, parts:parts.slice() });
+  }
+  return out;
+}
+function particleKeysOf(parts){ return [...new Set(parts.map(p=>PARTICLE_SURFACE_TO_KEY[p]).filter(Boolean))]; }
+
+const COUNTER_REF = {
+  '개':   { label:'개', fr:"objets, choses (le classificateur le plus courant)", nums:"nombres natifs (한, 두, 세, 네…)", ex:"사과 세 개 = trois pommes" },
+  '명':   { label:'명', fr:"personnes", nums:"nombres natifs", ex:"학생 두 명 = deux étudiants" },
+  '분':   { label:'분', fr:"personnes (forme respectueuse) ou minutes", nums:"natifs pour les personnes (두 분), sino-coréens pour les minutes (오 분)", ex:"두 분 = deux personnes (respectueux) · 오 분 = cinq minutes" },
+  '마리': { label:'마리', fr:"animaux", nums:"nombres natifs", ex:"고양이 한 마리 = un chat" },
+  '병':   { label:'병', fr:"bouteilles", nums:"nombres natifs", ex:"물 두 병 = deux bouteilles d'eau" },
+  '잔':   { label:'잔', fr:"verres, tasses (boissons)", nums:"nombres natifs", ex:"커피 한 잔 = un café" },
+  '권':   { label:'권', fr:"livres, cahiers", nums:"nombres natifs", ex:"책 세 권 = trois livres" },
+  '장':   { label:'장', fr:"objets plats : feuilles, billets, tickets, photos", nums:"nombres natifs", ex:"표 두 장 = deux billets" },
+  '대':   { label:'대', fr:"machines, véhicules", nums:"nombres natifs", ex:"차 한 대 = une voiture" },
+  '번':   { label:'번', fr:"fois (nombre d'occurrences) ; avec les nombres sino-coréens : numéro", nums:"natifs pour les fois (세 번), sino-coréens pour un numéro (삼 번)", ex:"한국에 세 번 갔어요 = je suis allé trois fois en Corée" },
+  '번째': { label:'번째', fr:"ordinal : première, deuxième… fois / position", nums:"nombres natifs", ex:"두 번째 = la deuxième (fois)" },
+  '살':   { label:'살', fr:"âge (ans)", nums:"nombres natifs", ex:"스물다섯 살 = vingt-cinq ans" },
+  '시':   { label:'시', fr:"heures (sur l'horloge)", nums:"nombres natifs (les minutes, elles, en sino-coréen avec 분)", ex:"세 시 = trois heures" },
+  '시간': { label:'시간', fr:"durée en heures", nums:"nombres natifs", ex:"두 시간 = deux heures (de temps)" },
+  '층':   { label:'층', fr:"étages", nums:"nombres sino-coréens (일, 이, 삼…)", ex:"삼 층 = troisième étage" },
+  '원':   { label:'원', fr:"wons (monnaie coréenne)", nums:"nombres sino-coréens", ex:"오천 원 = cinq mille wons" },
+  '월':   { label:'월', fr:"mois du calendrier", nums:"nombres sino-coréens", ex:"삼 월 = mars" },
+  '년':   { label:'년', fr:"années", nums:"nombres sino-coréens", ex:"이천이십육 년 = l'année 2026" },
+  '달':   { label:'달', fr:"durée en mois", nums:"nombres natifs", ex:"두 달 = deux mois" },
+  '개월': { label:'개월', fr:"durée en mois", nums:"nombres sino-coréens", ex:"삼 개월 = trois mois" },
+  '곳':   { label:'곳', fr:"endroits", nums:"nombres natifs", ex:"두 곳 = deux endroits" },
+  '켤레': { label:'켤레', fr:"paires (chaussures, chaussettes)", nums:"nombres natifs", ex:"신발 한 켤레 = une paire de chaussures" },
+  '송이': { label:'송이', fr:"fleurs, grappes", nums:"nombres natifs", ex:"꽃 한 송이 = une fleur" },
+  '그릇': { label:'그릇', fr:"bols (de riz, de soupe)", nums:"nombres natifs", ex:"밥 한 그릇 = un bol de riz" }
+};
+const COUNTER_KEYS = Object.keys(COUNTER_REF).sort((a,b)=>b.length-a.length);
+const COUNTER_REST = ['','이','가','은','는','을','를','도','만','에','에서','씩','째','쯤','이나','나','밖에','정도','이에요','예요','입니다','으로','로','의','와','과','하고','까지','부터','마다','이고','요'];
+const KO_DET = {한:1,두:2,세:3,석:3,서:3,네:4,넉:4,너:4};
+const FR_NUMBERS = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf','vingt'];
+// Valeur d'un nombre placé devant un classificateur : chiffres, sino-coréen, natif (한, 두, 세, 네, 스무, 열두…)
+function counterNumberValue(w){
+  if(/^\d[\d,]*$/.test(w)) return parseInt(w.replace(/,/g,''),10);
+  if(w==='스무') return 20;
+  if(w in KO_DET) return KO_DET[w];
+  for(const t of Object.keys(KO_NATIVE_TENS)){
+    if(w.startsWith(t) && (w.slice(t.length) in KO_DET)) return KO_NATIVE_TENS[t] + KO_DET[w.slice(t.length)];
+  }
+  return koNumeralToNumber(w);
+}
+function matchCounterWord(w){
+  for(const c of COUNTER_KEYS){
+    if(w.startsWith(c) && COUNTER_REST.includes(w.slice(c.length))) return c;
+  }
+  return null;
+}
+// Pour chaque mot : null, ou { role:'number'|'counter', key, number } quand il fait partie d'un "nombre + classificateur"
+function findCounters(words){
+  const out = words.map(()=>null);
+  for(let i=0; i<words.length; i++){
+    const m = words[i].match(/^(\d[\d,]*)(\D.*)$/);                       // 3명, 12개
+    if(m){ const c = matchCounterWord(m[2]); if(c) out[i] = { role:'counter', key:c, number:parseInt(m[1].replace(/,/g,''),10) }; continue; }
+    if(i+1 >= words.length) continue;
+    const val = counterNumberValue(words[i]);
+    if(val===null) continue;
+    const c = matchCounterWord(words[i+1]);
+    if(!c) continue;
+    if(words[i]==='이' && !['층','원','월','년','시'].includes(c)) continue;   // "이 분" = « cette personne », pas « 2 personnes »
+    out[i]   = { role:'number',  key:c, number:val };
+    out[i+1] = { role:'counter', key:c, number:val };
+  }
+  return out;
+}
+function frNumberWord(n){ return (n>=0 && n<=20) ? FR_NUMBERS[n] : String(n); }
+
+// Cherche un mot dans KRDict (verbe sous sa forme du dictionnaire, mot entier, particules en moins),
+// puis en dernier recours avec le repli habituel. Renvoie { word, variants, particles }.
+async function lookupWordSmart(clean, preferredBase){
+  const tryDict = async (w)=>{
+    try{ const v = await translateWordKoFr(w, {dictOnly:true, noStrip:true}); return (v && v.length) ? v : null; }
+    catch(e){ return null; }
+  };
+  const guess = guessVerbBases(clean);
+  const strong = (preferredBase ? [preferredBase] : []).concat(guess.strong.filter(b=>b!==preferredBase));
+  for(const b of strong){ const v = await tryDict(b); if(v) return { word:b, variants:v, particles:[] }; }
+  const cands = particleCandidates(clean);
+  const whole = await tryDict(clean);
+  // Mot entier connu ET courant (débutant/intermédiaire) : c'est lui. Sinon (ex. "비가" = élégie, rare) on regarde
+  // d'abord si "mot + particule" donne un mot courant, car c'est presque toujours ce que l'élève a sous les yeux.
+  const wholeIsCommon = whole && (!whole.meta || whole.meta.common !== false);
+  if(whole && wholeIsCommon) return { word:clean, variants:whole, particles:[] };
+  for(const b of guess.weak){ const v = await tryDict(b); if(v) return { word:b, variants:v, particles:[] }; }
+  for(const c of cands){ const v = await tryDict(c.stem); if(v) return { word:c.stem, variants:v, particles:c.parts }; }
+  if(whole) return { word:clean, variants:whole, particles:[] };
+  const last = cands.length ? cands[cands.length-1] : null;
+  const fb = last ? last.stem : clean;
+  return { word:fb, variants: await translateWordKoFr(fb, {noStrip:true}), particles: last ? last.parts : [] };
+}
 /* GRAMMAR:END */
 
 async function translateWordKoFr(word, opts){
   opts = opts || {};
-  const stem = stripKoParticle(word);
+  const stem = opts.noStrip ? word : stripKoParticle(word);
 
   // 1) Dictionnaire coréen officiel (KRDict) si configuré — bien plus fiable
   // que MyMemory pour distinguer les vrais sens différents d'un mot (ex.
@@ -365,14 +547,28 @@ async function translateWordKoFr(word, opts){
       if(!error && data){
         if(data.configured === false){ KRDICT_UNAVAILABLE = true; }
         else if(data.senses && data.senses.length){
+          let senses = data.senses;
+          // Mot exact seulement : KRDict renvoie aussi des mots composés (맛있다 pour 있다, 가요제 pour 가요).
+          // (Nécessite la version à jour de la fonction krdict-lookup ; l'ancienne ne donne pas le mot exact.)
+          const normHead = x=>String(x||'').replace(/[\s\d\-^·]/g,'');
+          if(senses.some(s=>s.word)) senses = senses.filter(s=>normHead(s.word)===normHead(stem));
+          // Sens de niveau débutant puis intermédiaire d'abord (les sens rares passent après)
+          const GRADE_ORDER = {'초급':0,'중급':1,'고급':2};
+          const gradeOf = s=> (s.grade in GRADE_ORDER) ? GRADE_ORDER[s.grade] : 3;
+          const hasGrade = senses.some(s=>gradeOf(s)<3);
+          if(hasGrade) senses = senses.map((s,i)=>({s,i})).sort((a,b)=> (gradeOf(a.s)-gradeOf(b.s)) || (a.i-b.i)).map(x=>x.s);
           const seenDict = new Set();
           const dictVariants = [];
-          data.senses.forEach(s=>{
+          senses.forEach(s=>{
             const t = (s.translation||'').trim();
             const key = t.toLowerCase();
             if(t && !seenDict.has(key)){ seenDict.add(key); dictVariants.push(t); }
           });
-          if(dictVariants.length) return dictVariants.slice(0,4);
+          if(dictVariants.length){
+            const out = dictVariants.slice(0,4);
+            out.meta = { common: hasGrade ? senses.some(s=>gradeOf(s)<=1) : null };   // mot courant ? (null = inconnu)
+            return out;
+          }
         }
       }
     }catch(e){ /* on retombe sur MyMemory en cas de souci */ }
@@ -492,6 +688,7 @@ async function loadOwnProfile(){
     if(PROFILE.role==='student'){
       ACTIVE_GROUP_ID = PROFILE.group_id || null;
       WEAK_WORDS = await sbWeakWords();
+      await sbLoadGrammarSeen();
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
     }
     else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); }
@@ -518,7 +715,7 @@ async function doLogout(){
   state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
     controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
     exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
-    reviewMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+    reviewMode:false, grammarMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
     globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
     reviewSelected:{}, translationDraft:'', translationValidated:false };
   render();
@@ -724,7 +921,7 @@ function renderSpaceTabs(){
       if(state.space===key) return;
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
-      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.globalQuizMode=false;
+      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false;
       if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
@@ -760,7 +957,7 @@ async function renderSidebar(){
     PERSO_LEVELS.forEach(lv=>{
       const b = el(`<button class="level-tab ${state.level===lv?'active':''}">${LEVEL_LABELS[lv]}</button>`);
       b.onclick = async ()=>{
-        state.reviewMode = false; state.globalQuizMode = false;
+        state.reviewMode=false; state.grammarMode=false; state.globalQuizMode = false;
         state.level = lv; state.lastPersoLevel = lv; state.lessonId=null; state.controlResult=null; state.quizResult=null;
         if(PROFILE.role==='student' && PROFILE.level!==lv){ PROFILE.level=lv; await sb.from('profiles').update({level:lv}).eq('id',SESSION.user.id); }
         render();
@@ -773,13 +970,19 @@ async function renderSidebar(){
         <span>🔁 Mots à revoir (${WEAK_WORDS.length})</span>
       </div>`);
       reviewBtn.style.cursor='pointer';
-      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.globalQuizMode=false; state.lessonId=null; render(); };
+      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
       box.appendChild(reviewBtn);
+      const grammarBtn = el(`<div class="lesson-node ${state.grammarMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--seal);">
+        <span>📒 Aide-mémoire grammaire (${GRAMMAR_SEEN.length})</span>
+      </div>`);
+      grammarBtn.style.cursor='pointer';
+      grammarBtn.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarMode = true; render(); };
+      box.appendChild(grammarBtn);
       const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
         <span>🌐 Quiz global</span>
       </div>`);
       globalQuizBtn.style.cursor='pointer';
-      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
+      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.grammarMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
       box.appendChild(globalQuizBtn);
     }
   } else {
@@ -796,14 +999,14 @@ async function renderSidebar(){
     const unlocked = isUnlockedSync(list, idx);
     const pr = PROGRESS[l.id];
     const done = pr && pr.control && pr.control.passed;
-    const active = !state.reviewMode && !state.globalQuizMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
+    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
     const node = el(`<div class="lesson-node ${active?'active':''} ${unlocked?'':'locked'} ${done?'done':''}">
       <span style="display:flex;align-items:center;gap:10px;">
       ${done?'<span class="seal-badge">印</span>':unlocked?'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">'+(idx+1)+'</span>':'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">🔒</span>'}
       <span>${escapeHtml(l.title)}</span></span>
     </div>`);
     if(unlocked){
-      node.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
+      node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
       node.style.cursor='pointer';
     }
     path.appendChild(node);
@@ -816,6 +1019,10 @@ async function renderMain(){
   const card = el('<div class="main-card"></div>');
   if(state.space==='manage'){
     card.appendChild(await renderManage());
+    return card;
+  }
+  if(state.grammarMode){
+    card.appendChild(renderGrammarNotebook());
     return card;
   }
   if(state.reviewMode){
@@ -1076,6 +1283,49 @@ async function renderGlobalQuiz(){
   return wrap;
 }
 
+function renderGrammarNotebook(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el('<h2 style="margin:0 0 4px;">📒 Aide-mémoire grammaire</h2>'));
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure, pour les avoir sous la main.</div>`));
+  if(!GRAMMAR_TABLE_OK){
+    wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ La sauvegarde de cette liste n'est pas encore activée : elle ne dure que le temps de cette session. Demande à celui qui gère l'outil de lancer <b>migration-grammaire.sql</b> dans Supabase.</div>`));
+  }
+  const groups = [
+    { kind:'particule', title:'Particules et copule', items:Object.entries(PARTICLE_REF) },
+    { kind:'classificateur', title:'Classificateurs', items:Object.entries(COUNTER_REF) },
+    { kind:'expression', title:'Expressions de grammaire', items:GRAMMAR_PATTERNS.map(pt=>[pt.label, pt]) }
+  ];
+  const entryOf = (g,key)=>GRAMMAR_SEEN.find(x=>x.kind===g.kind && x.key===key);
+  let shown = 0;
+  groups.forEach(g=>{
+    // uniquement ce que l'élève a déjà croisé, les plus récents en premier
+    const list = g.items.filter(([key])=>entryOf(g,key))
+      .sort((x,y)=> String((entryOf(g,y[0])||{}).created_at||'').localeCompare(String((entryOf(g,x[0])||{}).created_at||'')));
+    if(list.length===0) return;
+    shown += list.length;
+    const section = el(`<div class="section-block" style="margin-bottom:24px;"><h3 style="margin:0 0 10px;">${escapeHtml(g.title)} <span class="mono" style="font-size:12px;color:var(--ink-soft);">(${list.length})</span></h3></div>`);
+    list.forEach(([key,ref])=>{
+      const isNew = isGrammarEntryNew(entryOf(g,key));
+      const card = el(`<div class="item-card" style="text-align:left;padding:12px 16px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;"><span class="kr" style="font-size:22px;">${escapeHtml(ref.label)}</span>${isNew?'<span class="gm-new mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">nouveau</span>':''}</div>
+        <div style="margin-top:4px;">${escapeHtml(ref.fr)}</div>
+        ${ref.note?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">${escapeHtml(ref.note)}</div>`:''}
+        ${ref.nums?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">Nombres : ${escapeHtml(ref.nums)}</div>`:''}
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px;">ex. ${escapeHtml(ref.ex)}</div>
+      </div>`);
+      const rm = el('<button class="btn ghost small" style="margin-top:8px;">Retirer de ma liste</button>');
+      rm.onclick = async ()=>{ await unmarkGrammarSeen(g.kind, key); render(); };
+      card.appendChild(rm);
+      section.appendChild(card);
+    });
+    wrap.appendChild(section);
+  });
+  if(shown===0){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien pour l'instant — clique sur les mots d'un texte dans Traduction : les particules, classificateurs et expressions que tu croiseras viendront ici.</div></div>`));
+  }
+  return wrap;
+}
+
 function renderWeakWordsPractice(){
   const wrap = el('<div></div>');
   wrap.appendChild(el(`<h2 style="margin:0 0 4px;">🔁 Mots à revoir</h2>`));
@@ -1204,16 +1454,34 @@ function buildGrammarChip(pat, foundText){
   const chip = el(`<button type="button" title="Garder dans Mots à revoir" style="display:block;width:100%;max-width:560px;text-align:left;font-family:inherit;line-height:1.45;padding:10px 14px;margin:0 0 10px;border:1.5px solid var(--seal);border-radius:10px;background:var(--paper);color:var(--ink);cursor:pointer;">
     <div style="font-size:15px;">📘 <b>${escapeHtml(pat.label)}</b> <span style="color:var(--ink-soft);font-size:13px;">— ${escapeHtml(pat.fr)}</span></div>
     <div class="gram-sub" style="font-size:12px;margin-top:3px;color:var(--ink-soft);">${foundText?('Dans ta phrase : <b>'+escapeHtml(foundText)+'</b><br>'):''}ex. ${escapeHtml(pat.ex)}</div>
-    <div class="gram-keep" style="font-size:12px;margin-top:6px;color:var(--seal);">＋ Garder dans « Mots à revoir »</div>
+    ${(PROFILE && PROFILE.role==='student') ? '<div class="gram-memo" style="font-size:12px;margin-top:6px;color:var(--celadon-dark);">📒 Ajouté à ton aide-mémoire grammaire</div>' : ''}
+    <div class="gram-keep" style="font-size:12px;margin-top:4px;color:var(--seal);">＋ Garder dans « Mots à revoir »</div>
   </button>`);
   chip.onclick = async (e)=>{
     e.stopPropagation();
     chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
     chip.querySelector('.gram-sub').style.color='#fff';
     const keep = chip.querySelector('.gram-keep'); keep.style.color='#fff'; keep.textContent='✓ Gardé dans « Mots à revoir »';
+    const memo = chip.querySelector('.gram-memo'); if(memo) memo.style.color='#fff';
     await sbAddWeakWord(pat.label, pat.fr);
   };
   return chip;
+}
+
+// Encadrés d'explication d'une particule / d'un classificateur (affichés sous le texte)
+function infoBoxHtml(icon, label, fr, lines){
+  const memo = (PROFILE && PROFILE.role==='student') ? '<div style="font-size:12px;margin-top:6px;color:var(--celadon-dark);">📒 Ajouté à ton aide-mémoire grammaire</div>' : '';
+  return `<div class="gram-box" style="max-width:560px;border:1.5px solid var(--celadon-dark);border-radius:10px;background:var(--paper);padding:10px 14px;margin:0 0 10px;line-height:1.45;">
+    <div style="font-size:15px;">${icon} <b>${escapeHtml(label)}</b> <span style="color:var(--ink-soft);font-size:13px;">— ${escapeHtml(fr)}</span></div>
+    <div style="font-size:12px;margin-top:3px;color:var(--ink-soft);">${lines.filter(Boolean).map(escapeHtml).join('<br>')}</div>${memo}</div>`;
+}
+function buildParticleChip(key){
+  const r = PARTICLE_REF[key];
+  return el(infoBoxHtml('🔹', r.label, r.fr, [r.note, 'ex. '+r.ex]));
+}
+function buildCounterChip(key){
+  const r = COUNTER_REF[key];
+  return el(infoBoxHtml('🔢', r.label+'  (classificateur)', r.fr, ['Nombres : '+r.nums, 'ex. '+r.ex]));
 }
 
 function renderTraduction(lesson){
@@ -1230,12 +1498,14 @@ function renderTraduction(lesson){
   const textCard = el('<div class="item-card kr" style="text-align:left;font-size:19px;line-height:2.2;padding:20px;margin-bottom:16px;white-space:pre-wrap;"></div>');
   const tokens = (item.text||'').split(/(\s+)/);
   const cleanOf = tok => tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-  // expressions de grammaire repérées sur plusieurs mots (ex. "탈 수 있어요")
+  // expressions de grammaire (ex. "탈 수 있어요") et "nombre + classificateur" (ex. "세 번")
   const wordsClean = tokens.filter(tok=> tok!=='' && !/^\s+$/.test(tok)).map(cleanOf).filter(Boolean);
   const grammarPerWord = findGrammarPatterns(wordsClean);
-  const hasGrammar = grammarPerWord.some(g=>g.length>0);
+  const counterPerWord = findCounters(wordsClean);
+  const hasGrammar = grammarPerWord.some(g=>g.length>0) || counterPerWord.some(Boolean);
   let wordIdx = -1;
   let gramOwner = null;
+  let openClose = null;                    // une seule bulle de traduction ouverte à la fois
   const gramPanel = el('<div></div>');
   tokens.forEach(tok=>{
     if(tok==='' ){ return; }
@@ -1244,66 +1514,81 @@ function renderTraduction(lesson){
     if(!clean){ textCard.appendChild(document.createTextNode(tok)); return; }
     wordIdx++;
     const gram = grammarPerWord[wordIdx] || [];
-    const span = el(`<span style="cursor:pointer;border-bottom:1.5px dashed ${gram.length?'var(--seal)':'var(--celadon-dark)'};">${escapeHtml(tok)}</span>`);
+    const cinfo = counterPerWord[wordIdx];
+    const span = el(`<span style="cursor:pointer;border-bottom:1.5px dashed ${(gram.length||cinfo)?'var(--seal)':'var(--celadon-dark)'};">${escapeHtml(tok)}</span>`);
     const variantsWrap = el('<span></span>');
     let revealed = false;
+    const closeMe = ()=>{ revealed = false; variantsWrap.innerHTML = ''; };
+    const makeVariantChip = (label, onPick)=>{
+      const chip = el(`<button type="button" class="mono var-chip" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(label)}</button>`);
+      chip.onclick = async (e)=>{
+        e.stopPropagation();
+        [...variantsWrap.querySelectorAll('button.var-chip')].forEach(b=>{ b.style.borderColor='var(--line)'; b.style.background='var(--paper)'; b.style.color='var(--ink)'; });
+        chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
+        await onPick();
+      };
+      return chip;
+    };
     span.onclick = async ()=>{
       if(span.dataset.busy==='1') return;
       if(revealed){
-        revealed=false; variantsWrap.innerHTML='';
+        closeMe(); if(openClose===closeMe) openClose = null;
         if(gramOwner===span){ gramPanel.innerHTML=''; gramOwner=null; }
         return;
       }
-      span.dataset.busy='1';
+      if(openClose) openClose();           // on referme le mot précédemment ouvert
+      openClose = closeMe;
+      span.dataset.busy = '1';
       variantsWrap.innerHTML = '';
       variantsWrap.appendChild(document.createTextNode(' '));
-      if(gram.length){   // l'explication s'affiche dans l'encadré sous le texte, un à la fois
-        gramPanel.innerHTML = '';
-        gram.forEach(g=> gramPanel.appendChild(buildGrammarChip(g.pat, g.text)));
-        gramOwner = span;
+      gramPanel.innerHTML = ''; gramOwner = span;   // l'explication de grammaire s'affiche sous le texte
+      gram.forEach(g=>{ gramPanel.appendChild(buildGrammarChip(g.pat, g.text)); markGrammarSeen('expression', g.pat.label); });
+      if(cinfo){ gramPanel.appendChild(buildCounterChip(cinfo.key)); markGrammarSeen('classificateur', cinfo.key); }
+      const finish = ()=>{ revealed = true; span.dataset.busy = '0'; };
+      // a) mot purement grammatical d'une expression (수, 있어요…) ou classificateur : l'explication suffit
+      if((gram.length && gram.every(g=>g.pat.fn.includes(g.pos))) || (cinfo && cinfo.role==='counter')){ finish(); return; }
+      // b) nombre placé devant un classificateur : on le calcule (한/두/세/네…)
+      if(cinfo && cinfo.role==='number'){
+        const fr = frNumberWord(cinfo.number);
+        variantsWrap.appendChild(makeVariantChip(`${fr} (${cinfo.number})`, ()=>sbAddWeakWord(clean, fr)));
+        finish(); return;
       }
-      // mot purement grammatical (수, 있어요…) : l'explication de l'expression suffit
-      if(gram.length && gram.every(g=>g.pat.fn.includes(g.pos))){
-        revealed = true; span.dataset.busy='0'; return;
+      // c) particule isolée (가, 를, 에서…) : c'est une particule, pas un nom ni un verbe
+      const verbHit = gram.find(g=>g.pos===0 && g.pat.stem);
+      if(BARE_PARTICLES.includes(clean) && !verbHit){
+        const key = PARTICLE_SURFACE_TO_KEY[clean];
+        gramPanel.appendChild(buildParticleChip(key)); markGrammarSeen('particule', key);
+        finish(); return;
       }
+      // d) mot : forme du dictionnaire du verbe ("탈" -> "타다", "가" dans "가 봤어요" -> "가다"),
+      //    ou nom + particule(s) collée(s) ("택시를" -> "택시" + 를)
       const loading = el('<span class="mono" style="font-size:11px;color:var(--ink-soft);">…</span>');
       variantsWrap.appendChild(loading);
-      // verbe conjugué : on cherche sa forme du dictionnaire ("탈" -> "타다", "가요" -> "가다")
-      // plutôt qu'un nom qui s'écrit pareil ("탈" = masque, "가요" = chanson populaire)
-      let preferred = null;
-      const verbHit = gram.find(g=>g.pos===0 && g.pat.stem);
-      if(verbHit) preferred = verbDictionaryForm(clean, verbHit.pat.stem);
+      const preferred = verbHit ? verbDictionaryForm(clean, verbHit.pat.stem) : null;
       try{
         const found = await lookupWordSmart(clean, preferred);
-        const lookup = found.word;
+        if(openClose!==closeMe){ span.dataset.busy='0'; return; }   // l'élève a cliqué ailleurs entre-temps
         loading.remove();
-        if(lookup!==clean){
-          variantsWrap.appendChild(el(`<span style="font-size:12px;margin-right:4px;color:var(--ink-soft);"><b>${escapeHtml(lookup)}</b> :</span>`));
+        if(found.word!==clean){
+          variantsWrap.appendChild(el(`<span style="font-size:12px;margin-right:4px;color:var(--ink-soft);"><b>${escapeHtml(found.word)}</b> :</span>`));
         }
-        found.variants.forEach(v=>{
-          const chip = el(`<button type="button" class="mono var-chip" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(v)}</button>`);
-          chip.onclick = async (e)=>{
-            e.stopPropagation();
-            [...variantsWrap.querySelectorAll('button.var-chip')].forEach(b=>{ b.style.borderColor='var(--line)'; b.style.background='var(--paper)'; b.style.color='var(--ink)'; });
-            chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
-            await sbAddWeakWord(lookup, v);
-          };
-          variantsWrap.appendChild(chip);
-        });
+        found.variants.forEach(v=> variantsWrap.appendChild(makeVariantChip(v, ()=>sbAddWeakWord(found.word, v))));
+        particleKeysOf(found.particles || []).forEach(key=>{ gramPanel.appendChild(buildParticleChip(key)); markGrammarSeen('particule', key); });
         revealed = true;
       }catch(e){
+        if(openClose!==closeMe){ span.dataset.busy='0'; return; }
         loading.remove();
         if(gram.length){ variantsWrap.appendChild(el('<span style="font-size:11px;color:var(--ink-soft);">(pas de traduction pour ce mot seul)</span>')); revealed = true; }
         else variantsWrap.innerHTML = ' <span style="font-size:11px;color:var(--danger);">(indisponible)</span>';
       }
-      span.dataset.busy='0';
+      span.dataset.busy = '0';
     };
     textCard.appendChild(span);
     textCard.appendChild(variantsWrap);
   });
   wrap.appendChild(textCard);
   wrap.appendChild(gramPanel);
-  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).' + (hasGrammar ? ' Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d\'une expression de grammaire : clique dessus pour voir son sens, l\'explication s\'affiche sous le texte, avec un bouton pour la garder dans "Mots à revoir".' : '') + '</div>'));
+  wrap.appendChild(el(`<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l'IA). Un mot suivi d'une particule (을/를, 에서, 가…) ? Clique dessus : la particule est expliquée sous le texte.${hasGrammar ? ` Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d'une expression de grammaire ou d'un nombre avec son classificateur.` : ''}${PROFILE && PROFILE.role==='student' ? ` Tout ce que tu croises s'ajoute à ton 📒 Aide-mémoire grammaire.` : ''}</div>`));
 
   const textarea = el('<textarea style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:14px;" placeholder="Ta traduction en français..."></textarea>');
   textarea.value = state.translationDraft || '';
@@ -2671,7 +2956,7 @@ async function renderDMPanel(){
 
 /* ---- Boîte de réception de la prof : une conversation par élève ---- */
 async function enterInbox(preferredStudentId){
-  state.space = 'inbox'; state.lessonId = null; state.reviewMode = false; state.globalQuizMode = false;
+  state.space = 'inbox'; state.lessonId = null; state.reviewMode=false; state.grammarMode=false; state.globalQuizMode = false;
   unsubscribeChat();
   ALL_PROFILES = await sbAllProfiles();
   await loadDMState();
