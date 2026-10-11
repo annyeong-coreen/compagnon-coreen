@@ -300,6 +300,38 @@ const GRAMMAR_PATTERNS = [
   { label:'아/어서', fr:'parce que… / et ensuite… (cause ou enchaînement)', ex:'바빠서 = parce que je suis occupé', tests:[t=>t.length>=2 && /서$/.test(t) && hFinal(t.slice(-2,-1))===0 && !/(에서|에게서|한테서|로서|기서)$/.test(t) && !['도서','어서'].includes(t)], fn:[] },
   { label:'(으)면', fr:'si… (condition)', ex:'가면 = si j\'y vais', tests:[t=>/(으면|하면)$/.test(t) || /^(가|오|보|주|되|자|타|사)면$/.test(t)], fn:[] }
 ];
+// Formes de dictionnaire possibles d'un verbe conjugué courant ("가요" -> "가다").
+// On les essaie dans KRDict seul : si le dictionnaire ne les connaît pas (ex. "냉장고" n'est pas
+// "냉장" + 고), on retombe sur la recherche normale du mot tel quel.
+function guessVerbBases(t){
+  const out = []; const add = b=>{ if(b && b.length>=2 && !out.includes(b)) out.push(b); };
+  let m;
+  if((m = t.match(/^(.+)(했어요|했습니다|합니다|해요|하세요|하고|하지|하는)$/))) add(m[1]+'하다');
+  if((m = t.match(/^(.+)(습니다|았어요|었어요|아요|어요|으세요|세요|고|지)$/))) add(m[1]+'다');
+  if(t.endsWith('니다') && hFinal(t.slice(-3,-2))===17) add(t.slice(0,-3)+dropFinal(t.slice(-3,-2))+'다');
+  if(t.endsWith('요') && t.length>=2){
+    const syl = t.slice(-2,-1), c = syl.charCodeAt(0)-0xAC00;
+    if(c>=0 && c<11172 && c%28===0){
+      const v = Math.floor(c/28)%21, pre = t.slice(0,-2);
+      if(v===0 || v===4) add(t.slice(0,-1)+'다');                                   // 가요, 서요
+      else if(v===9)  add(pre+String.fromCharCode(0xAC00+c-28)+'다');                // 와요 -> 오다, 봐요 -> 보다
+      else if(v===14) add(pre+String.fromCharCode(0xAC00+c-28)+'다');                // 줘요 -> 주다
+      else if(v===6)  add(pre+String.fromCharCode(0xAC00+c+14*28)+'다');             // 마셔요 -> 마시다
+    }
+  }
+  return out;
+}
+// Cherche le mot dans KRDict en essayant d'abord la forme du dictionnaire du verbe
+// (si on la connaît), puis le mot tel quel. Renvoie { word, variants }.
+async function lookupWordSmart(clean, preferredBase){
+  const cands = [];
+  if(preferredBase) cands.push(preferredBase);
+  guessVerbBases(clean).forEach(b=>{ if(!cands.includes(b)) cands.push(b); });
+  for(const b of cands){
+    try{ const v = await translateWordKoFr(b, {dictOnly:true}); if(v && v.length) return { word:b, variants:v }; }catch(e){}
+  }
+  return { word:clean, variants: await translateWordKoFr(clean) };
+}
 function grammarTestOk(test, tok){ return typeof test === 'function' ? !!test(tok) : test.test(tok); }
 // words : liste des mots nettoyés d'une phrase (sans ponctuation).
 // Renvoie pour chaque mot la liste des expressions qui le contiennent.
@@ -319,7 +351,8 @@ function findGrammarPatterns(words){
 }
 /* GRAMMAR:END */
 
-async function translateWordKoFr(word){
+async function translateWordKoFr(word, opts){
+  opts = opts || {};
   const stem = stripKoParticle(word);
 
   // 1) Dictionnaire coréen officiel (KRDict) si configuré — bien plus fiable
@@ -344,6 +377,8 @@ async function translateWordKoFr(word){
       }
     }catch(e){ /* on retombe sur MyMemory en cas de souci */ }
   }
+
+  if(opts.dictOnly) throw new Error('not in dictionary'); // pas de repli : on préfère ne rien afficher que du faux
 
   // 2) Repli : MyMemory (base de traductions existantes, moins fiable sur les
   // mots courts/ambigus mais fonctionne sans configuration).
@@ -1164,13 +1199,18 @@ function renderWeakWordsPractice(){
   return wrap;
 }
 
-// Bloc cliquable décrivant une expression de grammaire ; un clic la garde dans "Mots à revoir"
-function buildGrammarChip(pat){
-  const chip = el(`<button type="button" class="mono" title="Garder dans Mots à revoir" style="font-size:11.5px;line-height:1.5;padding:4px 10px;margin:2px 4px 4px 0;border:1.5px solid var(--seal);border-radius:10px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;max-width:100%;">📘 <b class="kr">${escapeHtml(pat.label)}</b> : ${escapeHtml(pat.fr)}<br><span class="gram-ex" style="color:var(--ink-soft);">ex. ${escapeHtml(pat.ex)}</span></button>`);
+// Encadré décrivant une expression de grammaire ; un clic la garde dans "Mots à revoir"
+function buildGrammarChip(pat, foundText){
+  const chip = el(`<button type="button" title="Garder dans Mots à revoir" style="display:block;width:100%;max-width:560px;text-align:left;font-family:inherit;line-height:1.45;padding:10px 14px;margin:0 0 10px;border:1.5px solid var(--seal);border-radius:10px;background:var(--paper);color:var(--ink);cursor:pointer;">
+    <div style="font-size:15px;">📘 <b>${escapeHtml(pat.label)}</b> <span style="color:var(--ink-soft);font-size:13px;">— ${escapeHtml(pat.fr)}</span></div>
+    <div class="gram-sub" style="font-size:12px;margin-top:3px;color:var(--ink-soft);">${foundText?('Dans ta phrase : <b>'+escapeHtml(foundText)+'</b><br>'):''}ex. ${escapeHtml(pat.ex)}</div>
+    <div class="gram-keep" style="font-size:12px;margin-top:6px;color:var(--seal);">＋ Garder dans « Mots à revoir »</div>
+  </button>`);
   chip.onclick = async (e)=>{
     e.stopPropagation();
     chip.style.borderColor='var(--celadon-dark)'; chip.style.background='var(--celadon)'; chip.style.color='#fff';
-    chip.querySelector('.gram-ex').style.color='#fff';
+    chip.querySelector('.gram-sub').style.color='#fff';
+    const keep = chip.querySelector('.gram-keep'); keep.style.color='#fff'; keep.textContent='✓ Gardé dans « Mots à revoir »';
     await sbAddWeakWord(pat.label, pat.fr);
   };
   return chip;
@@ -1195,6 +1235,8 @@ function renderTraduction(lesson){
   const grammarPerWord = findGrammarPatterns(wordsClean);
   const hasGrammar = grammarPerWord.some(g=>g.length>0);
   let wordIdx = -1;
+  let gramOwner = null;
+  const gramPanel = el('<div></div>');
   tokens.forEach(tok=>{
     if(tok==='' ){ return; }
     if(/^\s+$/.test(tok)){ textCard.appendChild(document.createTextNode(tok)); return; }
@@ -1207,29 +1249,38 @@ function renderTraduction(lesson){
     let revealed = false;
     span.onclick = async ()=>{
       if(span.dataset.busy==='1') return;
-      if(revealed){ revealed=false; variantsWrap.innerHTML=''; return; }
+      if(revealed){
+        revealed=false; variantsWrap.innerHTML='';
+        if(gramOwner===span){ gramPanel.innerHTML=''; gramOwner=null; }
+        return;
+      }
       span.dataset.busy='1';
       variantsWrap.innerHTML = '';
       variantsWrap.appendChild(document.createTextNode(' '));
-      gram.forEach(g=> variantsWrap.appendChild(buildGrammarChip(g.pat)));
+      if(gram.length){   // l'explication s'affiche dans l'encadré sous le texte, un à la fois
+        gramPanel.innerHTML = '';
+        gram.forEach(g=> gramPanel.appendChild(buildGrammarChip(g.pat, g.text)));
+        gramOwner = span;
+      }
       // mot purement grammatical (수, 있어요…) : l'explication de l'expression suffit
       if(gram.length && gram.every(g=>g.pat.fn.includes(g.pos))){
         revealed = true; span.dataset.busy='0'; return;
       }
       const loading = el('<span class="mono" style="font-size:11px;color:var(--ink-soft);">…</span>');
       variantsWrap.appendChild(loading);
-      // verbe conjugué dans une expression : on cherche sa forme du dictionnaire
-      // ("탈" -> "타다") plutôt que le nom "탈" (masque) qui n'a aucun rapport
-      let lookup = clean;
+      // verbe conjugué : on cherche sa forme du dictionnaire ("탈" -> "타다", "가요" -> "가다")
+      // plutôt qu'un nom qui s'écrit pareil ("탈" = masque, "가요" = chanson populaire)
+      let preferred = null;
       const verbHit = gram.find(g=>g.pos===0 && g.pat.stem);
-      if(verbHit){ const base = verbDictionaryForm(clean, verbHit.pat.stem); if(base) lookup = base; }
+      if(verbHit) preferred = verbDictionaryForm(clean, verbHit.pat.stem);
       try{
-        const variants = await translateWordKoFr(lookup);
+        const found = await lookupWordSmart(clean, preferred);
+        const lookup = found.word;
         loading.remove();
         if(lookup!==clean){
-          variantsWrap.appendChild(el(`<span class="kr" style="font-size:12px;margin-right:4px;">${escapeHtml(lookup)} :</span>`));
+          variantsWrap.appendChild(el(`<span style="font-size:12px;margin-right:4px;color:var(--ink-soft);"><b>${escapeHtml(lookup)}</b> :</span>`));
         }
-        variants.forEach(v=>{
+        found.variants.forEach(v=>{
           const chip = el(`<button type="button" class="mono var-chip" style="font-size:11px;padding:2px 8px;margin:0 3px 3px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);cursor:pointer;">${escapeHtml(v)}</button>`);
           chip.onclick = async (e)=>{
             e.stopPropagation();
@@ -1242,7 +1293,7 @@ function renderTraduction(lesson){
         revealed = true;
       }catch(e){
         loading.remove();
-        if(gram.length){ variantsWrap.appendChild(el('<span style="font-size:11px;color:var(--ink-soft);">(pas de traduction pour le mot seul)</span>')); revealed = true; }
+        if(gram.length){ variantsWrap.appendChild(el('<span style="font-size:11px;color:var(--ink-soft);">(pas de traduction pour ce mot seul)</span>')); revealed = true; }
         else variantsWrap.innerHTML = ' <span style="font-size:11px;color:var(--danger);">(indisponible)</span>';
       }
       span.dataset.busy='0';
@@ -1251,7 +1302,8 @@ function renderTraduction(lesson){
     textCard.appendChild(variantsWrap);
   });
   wrap.appendChild(textCard);
-  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).' + (hasGrammar ? ' Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d\'une expression de grammaire : clique dessus pour voir son sens, et sur 📘 pour la garder dans "Mots à revoir".' : '') + '</div>'));
+  wrap.appendChild(gramPanel);
+  wrap.appendChild(el('<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l\'IA).' + (hasGrammar ? ' Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d\'une expression de grammaire : clique dessus pour voir son sens, l\'explication s\'affiche sous le texte, avec un bouton pour la garder dans "Mots à revoir".' : '') + '</div>'));
 
   const textarea = el('<textarea style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:14px;" placeholder="Ta traduction en français..."></textarea>');
   textarea.value = state.translationDraft || '';
