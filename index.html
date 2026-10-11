@@ -1081,7 +1081,7 @@ async function renderMain(){
   card.appendChild(el(`<div class="lesson-title"><span class="eyebrow">${LEVEL_LABELS[state.level]} · Leçon ${idx+1}</span></div><h2 style="margin:0 0 14px;">${escapeHtml(lesson.title)}</h2>`));
 
   const tabs = el('<div class="tabs"></div>');
-  [['cours','Cours'],['memoriser','À mémoriser'],['exercices','Exercices'],['traduction','Traduction'],['quiz','Quiz'],['controle','Contrôle'],['revision','Révision']].forEach(([key,label])=>{
+  [['cours','Cours'],['memoriser','À mémoriser'],['exercices','Exercices'],['traduction','Traduction'],['pratique','Texte d\'entraînement'],['quiz','Quiz'],['controle','Contrôle'],['revision','Révision']].forEach(([key,label])=>{
     const b = el(`<button class="tab-btn ${state.tab===key?'active':''}">${label}</button>`);
     b.onclick = ()=>{ state.tab=key; if(key!=='controle') state.controlResult=null; if(key!=='quiz') state.quizResult=null; if(key!=='exercices'){ state.exerciseIndex=0; state.exerciseCorrectCount=0; } render(); };
     tabs.appendChild(b);
@@ -1093,6 +1093,7 @@ async function renderMain(){
   if(state.tab==='memoriser') body.appendChild(renderMemorize(lesson));
   if(state.tab==='exercices') body.appendChild(renderExercices(lesson));
   if(state.tab==='traduction') body.appendChild(renderTraduction(lesson));
+  if(state.tab==='pratique') body.appendChild(renderPractice(lesson));
   if(state.tab==='quiz') body.appendChild(renderQuiz(lesson));
   if(state.tab==='controle') body.appendChild(renderControle(lesson, list, idx));
   if(state.tab==='revision') body.appendChild(await renderRevision());
@@ -1326,10 +1327,10 @@ const GRAMMAR_CATEGORIES = [
 /* ===== Mot entendu (voix ou saisie) ===== */
 const LISTEN = { input:'', note:'', cands:[], tokens:[], result:null, msg:'', busy:false, listening:false, added:null };
 function speechRecognitionCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
-function speakKo(text){
+function speakKo(text, rate){
   try{
     if(!window.speechSynthesis) return false;
-    const u = new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=0.8;
+    const u = new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=rate||0.8;
     const v = (speechSynthesis.getVoices()||[]).find(v=>/^ko/i.test(v.lang)); if(v) u.voice=v;
     speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
   }catch(e){ return false; }
@@ -1705,7 +1706,102 @@ function buildCounterChip(key){
   return el(infoBoxHtml('🔢', r.label+'  (classificateur)', r.fr, ['Nombres : '+r.nums, 'ex. '+r.ex]));
 }
 
-function renderTraduction(lesson){
+/* ===== Texte d'entraînement : construit uniquement à partir du cours ===== */
+const PRACTICE_TEMPLATES = [
+  { id:'copule', kr:(n)=> n + (hFinal(n.slice(-1))>0 ? '이에요' : '예요') + '.', fr:(f)=> "C'est " + f + '.' },
+  { id:'existe', kr:(n)=> n + (hFinal(n.slice(-1))>0 ? '이' : '가') + ' 있어요.', fr:(f)=> 'Il y a ' + f + '.' },
+  { id:'aime',   kr:(n)=> '저는 ' + n + (hFinal(n.slice(-1))>0 ? '을' : '를') + ' 좋아해요.', fr:(f)=> "J'aime " + f + '.' }
+];
+function practiceFrNoun(fr){
+  const f = String(fr||'').trim().replace(/\s*\(.*?\)\s*/g,' ').replace(/\s+/g,' ').trim();
+  if(!f) return '';
+  if(/^(le|la|l'|l’|les|un|une|des|mon|ma|mes|ton|ta|tes|son|sa|ses)\b/i.test(f) || /^(l'|l’)/i.test(f)) return f;
+  return '« ' + f + ' »';
+}
+function collectLessonMaterial(lesson){
+  const sentences = [], nouns = [], seen = new Set();
+  const isKo = t => /[가-힣]/.test(t);
+  (lesson.dialogue||[]).forEach(ex=>{
+    if(ex.equiv) return;
+    (ex.segments||[]).forEach(seg=>{
+      const kr = String(seg.kr||'').trim(), fr = String(seg.fr||'').trim();
+      if(seg.gloss || !kr || !fr || !isKo(kr)) return;
+      if(/[A-Za-zÀ-ÿ]{3,}/.test(kr)) return;                 // ligne mêlée de français : on ne la prend pas
+      const words = kr.split(/\s+/).length;
+      if(words>=2 || /[.?!]$/.test(kr)){ if(!seen.has(kr)){ seen.add(kr); sentences.push({kr, fr}); } }
+      else if(!/다$/.test(kr)) nouns.push({kr, fr});
+    });
+  });
+  (lesson.vocab||[]).forEach(v=>{
+    const kr = String(v.kr||'').trim(), fr = String(v.fr||'').trim();
+    if(!kr || !fr || !isKo(kr) || /\s/.test(kr) || /다$/.test(kr) || /[^가-힣]/.test(kr)) return;
+    nouns.push({kr, fr});
+  });
+  // exemples dans les notes de grammaire : « 한국어 = français », « 한국어 → français » ou « 한국어 (français) »
+  (lesson.grammar||[]).forEach(g=>{
+    String(g).replace(/<[^>]*>/g,'\n').split(/\n/).forEach(line=>{
+      const m = line.match(/([가-힣][가-힣\s,]*[가-힣][.?!]?)\s*(?:=|→|:|\()\s*([^()=→가-힣]{4,}?)\)?\s*$/);
+      if(m){ const kr=m[1].trim(), fr=m[2].trim(); if(kr.split(/\s+/).length>=2 && /[a-zà-ÿ]/i.test(fr) && !seen.has(kr)){ seen.add(kr); sentences.push({kr, fr}); } }
+    });
+  });
+  const uniq = []; const sn = new Set(); nouns.forEach(n=>{ if(!sn.has(n.kr)){ sn.add(n.kr); uniq.push(n); } });
+  return { sentences, nouns: uniq };
+}
+function buildPracticeText(lesson, rnd){
+  rnd = rnd || Math.random;
+  const { sentences, nouns } = collectLessonMaterial(lesson);
+  const pick = [];
+  if(sentences.length){
+    const n = Math.min(5, sentences.length);
+    const start = sentences.length>n ? Math.floor(rnd()*(sentences.length-n+1)) : 0;   // fenêtre continue : le texte garde son fil
+    sentences.slice(start, start+n).forEach(x=>pick.push(x));
+  }
+  if(pick.length<4 && nouns.length){
+    const pool = nouns.slice().sort(()=>rnd()-0.5);
+    for(let i=0; i<pool.length && pick.length<4; i++){
+      const noun = pool[i], tpl = PRACTICE_TEMPLATES[(i + Math.floor(rnd()*3)) % PRACTICE_TEMPLATES.length];
+      pick.push({ kr: tpl.kr(noun.kr), fr: tpl.fr(practiceFrNoun(noun.fr)), template:true });
+    }
+  }
+  if(pick.length<2) return null;
+  return { text: pick.map(x=>x.kr).join('\n'), ref: pick.map(x=>x.fr).join('\n'),
+           fromCourse: pick.filter(x=>!x.template).length, generated: pick.filter(x=>x.template).length };
+}
+function renderPractice(lesson){
+  const wrap = el('<div></div>');
+  const cur = state.practice && state.practice.lessonId===lesson.id ? state.practice : null;
+  const make = ()=>{
+    const r = buildPracticeText(lesson);
+    state.practiceDraft = ''; state.practiceValidated = false;
+    state.practice = r ? Object.assign({lessonId:lesson.id}, r) : { lessonId:lesson.id, empty:true };
+    render();
+  };
+  if(!cur){
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:14px;">Tu veux t'entraîner à lire ? Je compose un petit texte <b>à partir de ta leçon</b> (ses phrases et son vocabulaire). Il est généré automatiquement et n'est pas écrit par ta professeur.</div>`));
+    const b = el('<button class="btn celadon">✨ Créer un texte pour m\'entraîner</button>'); b.onclick = make; wrap.appendChild(b);
+    return wrap;
+  }
+  if(cur.empty){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">아직이에요</span><div>Il n'y a pas encore assez de phrases ou de vocabulaire dans cette leçon pour composer un texte. Reviens quand ta professeur aura complété le cours.</div></div>`));
+    const b = el('<button class="btn ghost small">Réessayer</button>'); b.onclick = make; wrap.appendChild(b);
+    return wrap;
+  }
+  const bar = el('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;"></div>');
+  const again = el('<button class="btn ghost small">🔄 Un autre texte</button>'); again.onclick = make;
+  const listen = el('<button class="btn ghost small" title="Voix de l\'ordinateur">🔊 Écouter</button>');
+  listen.onclick = ()=>{ if(!speakKo(cur.text.replace(/\n/g,'. '))){ alert("La lecture à voix haute n'est pas disponible sur ce navigateur."); } };
+  const slow = el('<button class="btn ghost small" title="Voix de l\'ordinateur, plus lente">🐢 Lent</button>');
+  slow.onclick = ()=>{ if(!speakKo(cur.text.replace(/\n/g,'. '), 0.55)){ alert("La lecture à voix haute n'est pas disponible sur ce navigateur."); } };
+  bar.appendChild(again); bar.appendChild(listen); bar.appendChild(slow);
+  wrap.appendChild(bar);
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:12px;font-size:12.5px;border-color:var(--celadon-dark);">📝 Texte généré automatiquement à partir de ta leçon (${cur.fromCourse} phrase${cur.fromCourse>1?'s':''} de ton cours${cur.generated?` + ${cur.generated} phrase${cur.generated>1?'s':''} simple${cur.generated>1?'s':''} construite${cur.generated>1?'s':''} avec ton vocabulaire`:''}). La voix 🔊 est celle de ton appareil : elle peut se tromper, ce n'est pas la prononciation de ta professeur.</div>`));
+  wrap.appendChild(renderTraduction(Object.assign({}, lesson, { translations:[{ text:cur.text, ref:cur.ref, help:[] }] }), { generated:true }));
+  return wrap;
+}
+
+function renderTraduction(lesson, opts){
+  opts = opts || {};
+  const dk = opts.generated ? 'practiceDraft' : 'translationDraft', vk = opts.generated ? 'practiceValidated' : 'translationValidated';
   const wrap = el('<div></div>');
   const items = lesson.translations || [];
   if(items.length===0){
@@ -1812,23 +1908,23 @@ function renderTraduction(lesson){
   wrap.appendChild(el(`<div class="note" style="margin-top:-8px;margin-bottom:16px;font-size:12px;">Clique sur la proposition qui te semble la plus juste pour la valider — elle part alors dans "Mots à revoir" (choisie par toi, pas imposée par l'IA). Un mot suivi d'une particule (을/를, 에서, 가…) ? Clique dessus : la particule est expliquée sous le texte.${hasGrammar ? ` Les mots soulignés en <b style="color:var(--seal);">rouge</b> font partie d'une expression de grammaire ou d'un nombre avec son classificateur.` : ''}${PROFILE && PROFILE.role==='student' ? ` Tout ce que tu croises s'ajoute à ton 📒 Aide-mémoire grammaire.` : ''}</div>`));
 
   const textarea = el('<textarea style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:14px;" placeholder="Ta traduction en français..."></textarea>');
-  textarea.value = state.translationDraft || '';
-  textarea.disabled = state.translationValidated;
-  textarea.oninput = (e)=>{ state.translationDraft = e.target.value; };
+  textarea.value = state[dk] || '';
+  textarea.disabled = state[vk];
+  textarea.oninput = (e)=>{ state[dk] = e.target.value; };
   wrap.appendChild(textarea);
 
-  if(!state.translationValidated){
+  if(!state[vk]){
     const validateBtn = el('<button class="btn celadon" style="margin-top:10px;">✓ Valider ma traduction</button>');
     validateBtn.onclick = ()=>{
       if(!textarea.value.trim()){ alert('Écris ta traduction avant de valider.'); return; }
-      state.translationValidated = true;
+      state[vk] = true;
       render();
     };
     wrap.appendChild(validateBtn);
   } else {
     const editAgainBtn = el('<button class="btn ghost small" style="margin-top:10px;">✏️ Modifier ma traduction</button>');
-    editAgainBtn.onclick = ()=>{ state.translationValidated = false; render(); };
-    wrap.appendChild(el('<div class="note" style="margin-top:10px;border-color:var(--celadon-dark);font-size:12.5px;">Traduction validée ✓ — la référence de la professeur est débloquée plus bas.</div>'));
+    editAgainBtn.onclick = ()=>{ state[vk] = false; render(); };
+    wrap.appendChild(el('<div class="note" style="margin-top:10px;border-color:var(--celadon-dark);font-size:12.5px;">Traduction validée ✓ — la référence est débloquée plus bas.</div>'));
     wrap.appendChild(editAgainBtn);
   }
 
@@ -1853,14 +1949,14 @@ function renderTraduction(lesson){
 
   if(item.ref || item.refAudio){
     const revealWrap = el('<div class="section-block" style="margin-top:24px;border-top:1.5px solid var(--line);padding-top:20px;"></div>');
-    revealWrap.appendChild(el('<h3>Traduction de référence</h3>'));
-    if(!state.translationValidated){
-      revealWrap.appendChild(el('<div class="note" style="font-size:12.5px;">🔒 Valide d\'abord ta propre traduction ci-dessus pour débloquer celle de ta professeur.</div>'));
+    revealWrap.appendChild(el(`<h3>${opts.generated?'Traduction de référence (tirée de ton cours)':'Traduction de référence'}</h3>`));
+    if(!state[vk]){
+      revealWrap.appendChild(el('<div class="note" style="font-size:12.5px;">🔒 Valide d\'abord ta propre traduction ci-dessus pour débloquer la référence.</div>'));
       wrap.appendChild(revealWrap);
       return wrap;
     }
-    revealWrap.appendChild(el('<div class="note" style="margin-bottom:10px;font-size:12.5px;">De ta professeur — fiable, contrairement à l\'aide automatique ci-dessus.</div>'));
-    const revealBtn = el('<button class="btn ghost">Révéler la traduction de la professeur</button>');
+    revealWrap.appendChild(el('<div class="note" style="margin-bottom:10px;font-size:12.5px;">'+(opts.generated?'Construite à partir des phrases et du vocabulaire de ta leçon — fiable, contrairement à l\'aide automatique ci-dessus. Les phrases très simples (« C\'est… », « Il y a… ») sont générées par un modèle fixe.':'De ta professeur — fiable, contrairement à l\'aide automatique ci-dessus.')+'</div>'));
+    const revealBtn = el('<button class="btn ghost">Révéler la traduction de référence</button>');
     const refBox = el('<div class="item-card" style="text-align:left;margin-top:12px;padding:16px 18px;display:none;white-space:pre-wrap;"></div>');
     revealBtn.onclick = ()=>{
       let html = '';
