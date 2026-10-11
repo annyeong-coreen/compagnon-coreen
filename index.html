@@ -518,7 +518,23 @@ function frNumberWord(n){ return (n>=0 && n<=20) ? FR_NUMBERS[n] : String(n); }
 
 // Cherche un mot dans KRDict (verbe sous sa forme du dictionnaire, mot entier, particules en moins),
 // puis en dernier recours avec le repli habituel. Renvoie { word, variants, particles }.
+/* Formules toutes faites : le dictionnaire ne les contient pas telles quelles, et les ramener à un verbe donnerait un faux sens (안녕하세요 ≠ « calme ») */
+const FIXED_PHRASES = {
+  '안녕하세요':['bonjour (poli)'], '안녕하십니까':['bonjour (très formel)'], '안녕':['salut (familier)','au revoir (familier)'],
+  '안녕히계세요':['au revoir (à celui qui reste)'], '안녕히가세요':['au revoir (à celui qui part)'],
+  '감사합니다':['merci (formel)'], '고맙습니다':['merci (formel)'], '고마워요':['merci'], '고마워':['merci (familier)'], '감사해요':['merci'],
+  '죄송합니다':['je suis désolé(e) (formel)'], '죄송해요':['je suis désolé(e)'], '미안해요':['désolé(e)'], '미안합니다':['désolé(e) (formel)'], '미안해':['désolé(e) (familier)'],
+  '괜찮아요':['ça va, ce n\'est pas grave'], '괜찮습니다':['ça va, ce n\'est pas grave (formel)'], '괜찮아':['ça va (familier)'],
+  '실례합니다':['excusez-moi','pardon'], '어서오세요':['bienvenue'], '처음뵙겠습니다':['enchanté(e) (première rencontre)'],
+  '잘먹겠습니다':['merci pour le repas (avant de manger)'], '잘먹었습니다':['merci pour le repas (après avoir mangé)'],
+  '수고하셨습니다':['merci pour votre travail'], '수고하세요':['bon courage'], '안녕히주무세요':['bonne nuit (poli)'],
+  '축하해요':['félicitations'], '축하합니다':['félicitations (formel)'], '환영합니다':['bienvenue (formel)'], '또만나요':['à bientôt'],
+  '여보세요':['allô'], '화이팅':['courage ! allez !'], '파이팅':['courage ! allez !'], '대박':['incroyable, génial (familier)'], '아이고':['oh là là, aïe'],
+  '맞아요':['c\'est ça, exact'], '알겠습니다':['compris (formel)'], '알겠어요':['compris'], '몰라요':['je ne sais pas'], '그래요':['c\'est vrai ? / oui, en effet'],
+  '네':['oui'], '아니요':['non'], '잠깐만요':['un instant'], '천만에요':['de rien']
+};
 async function lookupWordSmart(clean, preferredBase){
+  { const fp = FIXED_PHRASES[String(clean).replace(/\s+/g,'')]; if(fp) return { word:clean, variants:fp.slice(), particles:[] }; }
   const tryDict = async (w)=>{
     try{ const v = await translateWordKoFr(w, {dictOnly:true, noStrip:true}); return (v && v.length) ? v : null; }
     catch(e){ return null; }
@@ -1371,6 +1387,20 @@ function listenStartMic(){
   rec.onend = ()=>{ finish(); };
   try{ rec.start(); }catch(e){ LISTEN.listening=false; LISTEN.msg="Le micro n'est pas disponible ici. Tape le mot à la place."; render(); }
 }
+async function askTeacherAbout(word, meanings, context){
+  if(!SESSION || PROFILE.role!=='student') return;
+  let t = "Bonjour, j'ai un doute sur le mot « "+word+" »";
+  if(meanings && meanings.length) t += " : l'outil propose « "+meanings.slice(0,3).join(' / ')+" »";
+  if(context) t += " (entendu : "+context+")";
+  t += ". Est-ce que c'est bien ça ?";
+  DM_DRAFTS[SESSION.user.id] = t;
+  state.space='dm'; state.lessonId=null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
+  unsubscribeChat();
+  ACTIVE_DM_STUDENT_ID = SESSION.user.id;
+  DM = await sbDMMessages(ACTIVE_DM_STUDENT_ID);
+  markThreadSeen(ACTIVE_DM_STUDENT_ID);
+  render();
+}
 function renderListen(){
   const wrap = el('<div></div>');
   wrap.appendChild(el('<h2 style="margin:0 0 6px;">🎧 Mot entendu</h2>'));
@@ -1433,6 +1463,10 @@ function renderListen(){
     });
     card.appendChild(vw);
     if(LISTEN.added) card.appendChild(el('<div style="font-size:12px;color:var(--celadon-dark);margin-top:4px;">✓ Ajouté à « Mots à revoir ».</div>'));
+    card.appendChild(el('<div style="font-size:12px;color:var(--ink-soft);margin-top:10px;border-top:1px solid var(--line);padding-top:8px;">Un doute sur ce sens ? L\'outil peut se tromper : tu peux demander à ta professeur.</div>'));
+    const ask = el('<button type="button" class="btn ghost small" style="margin-top:6px;">💬 Demander à la professeur</button>');
+    ask.onclick = ()=> askTeacherAbout(r.word, r.variants, LISTEN.note.trim());
+    card.appendChild(ask);
     wrap.appendChild(card);
   }
   return wrap;
