@@ -142,7 +142,7 @@ let ACTIVE_GROUP_ID = null; // for teacher: which group's chat she's currently v
 let state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
   controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
   exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
-  reviewMode:false, grammarMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+  reviewMode:false, grammarMode:false, listenMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
   globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
   reviewSelected:{},
   translationDraft:'', translationValidated:false };
@@ -187,12 +187,20 @@ async function sbDeleteStudent(studentId){
 }
 async function sbSetGroupTopic(groupId, topic){ await sb.from('groups').update({current_topic:topic}).eq('id', groupId); }
 async function sbWeakWords(){ const {data} = await sb.from('weak_words').select('*').order('created_at',{ascending:false}); return data||[]; }
-async function sbAddWeakWord(word, meaning){
+async function sbAddWeakWord(word, meaning, note){
   if(!SESSION || PROFILE.role!=='student') return;
   const existing = WEAK_WORDS.find(w=>w.word===word);
   if(existing) return; // déjà suivi
-  await sb.from('weak_words').upsert({student_id:SESSION.user.id, word, meaning, hit_count:1}, {onConflict:'student_id,word'});
-  WEAK_WORDS.push({word, meaning});
+  const row = {student_id:SESSION.user.id, word, meaning, hit_count:1};
+  let savedNote = null;
+  if(note){
+    const r = await sb.from('weak_words').upsert(Object.assign({note}, row), {onConflict:'student_id,word'});
+    if(!r || !r.error) savedNote = note;
+    else await sb.from('weak_words').upsert(row, {onConflict:'student_id,word'});   // colonne « note » pas encore créée
+  }else{
+    await sb.from('weak_words').upsert(row, {onConflict:'student_id,word'});
+  }
+  WEAK_WORDS.push({word, meaning, note: savedNote || note || null});
 }
 async function sbAddWeakWordsBulk(items){
   if(!SESSION || PROFILE.role!=='student' || items.length===0) return 0;
@@ -715,7 +723,7 @@ async function doLogout(){
   state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lessonId:null, tab:'cours',
     controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
     exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
-    reviewMode:false, grammarMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
+    reviewMode:false, grammarMode:false, listenMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
     globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
     reviewSelected:{}, translationDraft:'', translationValidated:false };
   render();
@@ -921,7 +929,7 @@ function renderSpaceTabs(){
       if(state.space===key) return;
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
-      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false;
+      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
       if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
@@ -957,7 +965,7 @@ async function renderSidebar(){
     PERSO_LEVELS.forEach(lv=>{
       const b = el(`<button class="level-tab ${state.level===lv?'active':''}">${LEVEL_LABELS[lv]}</button>`);
       b.onclick = async ()=>{
-        state.reviewMode=false; state.grammarMode=false; state.globalQuizMode = false;
+        state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode = false;
         state.level = lv; state.lastPersoLevel = lv; state.lessonId=null; state.controlResult=null; state.quizResult=null;
         if(PROFILE.role==='student' && PROFILE.level!==lv){ PROFILE.level=lv; await sb.from('profiles').update({level:lv}).eq('id',SESSION.user.id); }
         render();
@@ -970,19 +978,25 @@ async function renderSidebar(){
         <span>🔁 Mots à revoir (${WEAK_WORDS.length})</span>
       </div>`);
       reviewBtn.style.cursor='pointer';
-      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
+      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
       box.appendChild(reviewBtn);
+      const listenBtn = el(`<div class="lesson-node ${state.listenMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--celadon-dark);">
+        <span>🎧 Mot entendu</span>
+      </div>`);
+      listenBtn.style.cursor='pointer';
+      listenBtn.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=null; state.listenMode=true; render(); };
+      box.appendChild(listenBtn);
       const grammarBtn = el(`<div class="lesson-node ${state.grammarMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--seal);">
         <span>📒 Aide-mémoire grammaire (${GRAMMAR_SEEN.length})</span>
       </div>`);
       grammarBtn.style.cursor='pointer';
-      grammarBtn.onclick = ()=>{ state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
+      grammarBtn.onclick = ()=>{ state.listenMode=false; state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
       box.appendChild(grammarBtn);
       const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
         <span>🌐 Quiz global</span>
       </div>`);
       globalQuizBtn.style.cursor='pointer';
-      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.grammarMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
+      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
       box.appendChild(globalQuizBtn);
     }
   } else {
@@ -999,14 +1013,14 @@ async function renderSidebar(){
     const unlocked = isUnlockedSync(list, idx);
     const pr = PROGRESS[l.id];
     const done = pr && pr.control && pr.control.passed;
-    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
+    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && !state.listenMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
     const node = el(`<div class="lesson-node ${active?'active':''} ${unlocked?'':'locked'} ${done?'done':''}">
       <span style="display:flex;align-items:center;gap:10px;">
       ${done?'<span class="seal-badge">印</span>':unlocked?'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">'+(idx+1)+'</span>':'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">🔒</span>'}
       <span>${escapeHtml(l.title)}</span></span>
     </div>`);
     if(unlocked){
-      node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
+      node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
       node.style.cursor='pointer';
     }
     path.appendChild(node);
@@ -1019,6 +1033,10 @@ async function renderMain(){
   const card = el('<div class="main-card"></div>');
   if(state.space==='manage'){
     card.appendChild(await renderManage());
+    return card;
+  }
+  if(state.listenMode){
+    card.appendChild(renderListen());
     return card;
   }
   if(state.grammarMode){
@@ -1289,6 +1307,125 @@ const GRAMMAR_CATEGORIES = [
   { kind:'classificateur', icon:'🔢', title:'Classificateurs', hint:"Les mots qui accompagnent les nombres (개, 명, 번…)", items:()=>Object.entries(COUNTER_REF) },
   { kind:'expression', icon:'📘', title:'Expressions de grammaire', hint:"Les tournures sur plusieurs mots (ㄹ 수 있다, 고 싶다…)", items:()=>GRAMMAR_PATTERNS.map(pt=>[pt.label, pt]) }
 ];
+/* ===== Mot entendu (voix ou saisie) ===== */
+const LISTEN = { input:'', note:'', cands:[], tokens:[], result:null, msg:'', busy:false, listening:false, added:null };
+function speechRecognitionCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
+function speakKo(text){
+  try{
+    if(!window.speechSynthesis) return false;
+    const u = new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=0.8;
+    const v = (speechSynthesis.getVoices()||[]).find(v=>/^ko/i.test(v.lang)); if(v) u.voice=v;
+    speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
+  }catch(e){ return false; }
+}
+async function listenSearch(rawWord){
+  const clean = String(rawWord||'').replace(/[^가-힣]/g,'');
+  LISTEN.added = null;
+  if(!clean){ LISTEN.result=null; LISTEN.msg="Écris le mot en hangul (한글), par exemple copié depuis les sous-titres."; render(); return; }
+  LISTEN.busy = true; LISTEN.msg=''; LISTEN.result=null; render();
+  try{
+    const found = await lookupWordSmart(clean);
+    if(found && found.variants && found.variants.length){ LISTEN.result = {heard:clean, word:found.word, variants:found.variants}; }
+    else LISTEN.msg = "Je ne trouve pas ce mot dans le dictionnaire. Vérifie l'écriture (sous-titres) ou essaie un autre choix.";
+  }catch(e){ LISTEN.msg = "Je ne trouve pas ce mot dans le dictionnaire. Vérifie l'écriture (sous-titres) ou essaie un autre choix."; }
+  LISTEN.busy = false; render();
+}
+function listenSetInput(text, andSearch){
+  LISTEN.input = text;
+  LISTEN.tokens = String(text).trim().split(/\s+/).filter(t=>/[가-힣]/.test(t));
+  if(andSearch){
+    if(LISTEN.tokens.length<=1) listenSearch(LISTEN.tokens[0]||text); else { LISTEN.result=null; LISTEN.msg='Plusieurs mots : clique sur celui que tu veux chercher.'; render(); }
+  }
+}
+function listenStartMic(){
+  const SR = speechRecognitionCtor(); if(!SR) return;
+  if(LISTEN.listening) return;
+  let rec; try{ rec = new SR(); }catch(e){ LISTEN.msg="Le micro n'est pas disponible ici. Tape le mot à la place."; render(); return; }
+  rec.lang='ko-KR'; rec.maxAlternatives=5; rec.interimResults=false; rec.continuous=false;
+  LISTEN.listening=true; LISTEN.msg=''; LISTEN.result=null; LISTEN.cands=[]; render();
+  rec.onresult = (ev)=>{
+    const r = ev.results && ev.results[0]; const alts=[];
+    if(r) for(let i=0;i<r.length;i++){ const t=(r[i].transcript||'').trim(); if(t && !alts.includes(t)) alts.push(t); }
+    LISTEN.cands = alts;
+    if(alts.length) listenSetInput(alts[0], true);
+    else { LISTEN.msg="Je n'ai rien compris. Réessaie ou tape le mot."; render(); }
+  };
+  rec.onerror = (ev)=>{
+    const e = ev && ev.error;
+    LISTEN.msg = e==='not-allowed' || e==='service-not-allowed' ? "Le micro est bloqué : autorise-le dans ton navigateur, ou tape le mot."
+      : e==='no-speech' ? "Je n'ai rien entendu. Réessaie en parlant plus près du micro, ou tape le mot."
+      : "La reconnaissance vocale n'a pas marché. Tape le mot (par exemple d'après les sous-titres).";
+  };
+  rec.onend = ()=>{ LISTEN.listening=false; render(); };
+  try{ rec.start(); }catch(e){ LISTEN.listening=false; LISTEN.msg="Le micro n'est pas disponible ici. Tape le mot à la place."; render(); }
+}
+function renderListen(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el('<h2 style="margin:0 0 6px;">🎧 Mot entendu</h2>'));
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:14px;font-size:12.5px;">Tu as entendu un nouveau mot dans un drama ? Dis-le à voix haute, ou écris-le (les sous-titres aident). Je cherche le sens, et tu peux le garder dans « Mots à revoir ».</div>`));
+  const SR = speechRecognitionCtor();
+  const row = el('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;"></div>');
+  if(SR){
+    const mic = el(`<button class="btn ${LISTEN.listening?'seal':''}" style="min-width:150px;" ${LISTEN.listening?'disabled':''}>${LISTEN.listening?'🎤 Je t\'écoute…':'🎤 Dire le mot'}</button>`);
+    mic.onclick = listenStartMic; row.appendChild(mic);
+  }
+  const inp = el(`<input type="text" lang="ko" placeholder="ou écris-le ici : 한글" value="${escapeHtml(LISTEN.input)}" style="flex:1;min-width:160px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:16px;">`);
+  inp.oninput = ()=>{ LISTEN.input = inp.value; };
+  inp.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); listenSetInput(inp.value, true); } };
+  row.appendChild(inp);
+  const go = el('<button class="btn ghost">Chercher</button>'); go.onclick = ()=> listenSetInput(inp.value, true);
+  row.appendChild(go);
+  wrap.appendChild(row);
+  if(!SR) wrap.appendChild(el('<div class="note" style="font-size:12px;margin-bottom:8px;">La reconnaissance vocale n\'est pas disponible sur ce navigateur (Chrome ou Edge la proposent). Tu peux écrire le mot.</div>'));
+  const noteInp = el(`<input type="text" placeholder="Où tu l'as entendu ? (facultatif : nom du drama, la phrase…)" value="${escapeHtml(LISTEN.note)}" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;margin-bottom:12px;">`);
+  noteInp.oninput = ()=>{ LISTEN.note = noteInp.value; };
+  wrap.appendChild(noteInp);
+
+  if(LISTEN.cands.length>1){
+    const cw = el('<div style="margin-bottom:10px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">J\'ai peut-être entendu :</div></div>');
+    LISTEN.cands.forEach(c=>{
+      const b = el(`<button type="button" class="mono listen-cand" style="font-size:15px;padding:4px 12px;margin:0 6px 6px 0;border:1.5px solid ${c===LISTEN.input?'var(--celadon-dark)':'var(--line)'};border-radius:999px;background:var(--paper);cursor:pointer;">${escapeHtml(c)}</button>`);
+      b.onclick = ()=> listenSetInput(c, true);
+      cw.appendChild(b);
+    });
+    wrap.appendChild(cw);
+  }
+  if(LISTEN.tokens.length>1){
+    const tw = el('<div style="margin-bottom:10px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">Quel mot veux-tu chercher ?</div></div>');
+    LISTEN.tokens.forEach(t=>{
+      const b = el(`<button type="button" class="mono listen-tok" style="font-size:15px;padding:4px 12px;margin:0 6px 6px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);cursor:pointer;">${escapeHtml(t)}</button>`);
+      b.onclick = ()=> listenSearch(t);
+      tw.appendChild(b);
+    });
+    wrap.appendChild(tw);
+  }
+  if(LISTEN.busy) wrap.appendChild(el('<div class="note">Je cherche…</div>'));
+  if(LISTEN.msg) wrap.appendChild(el(`<div class="note" style="color:var(--seal);margin-bottom:8px;">${escapeHtml(LISTEN.msg)}</div>`));
+
+  const r = LISTEN.result;
+  if(r){
+    const card = el('<div style="border:1.5px solid var(--line);border-radius:12px;padding:14px;background:var(--paper);"></div>');
+    const head = el(`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span class="kr" style="font-size:26px;">${escapeHtml(r.word)}</span></div>`);
+    if(r.word!==r.heard) head.appendChild(el(`<span style="font-size:12px;color:var(--ink-soft);">(entendu : ${escapeHtml(r.heard)})</span>`));
+    const sp = el('<button type="button" class="btn ghost small" title="Écouter la prononciation">🔊</button>');
+    sp.onclick = ()=>{ if(!speakKo(r.word)){ LISTEN.msg="La lecture à voix haute n'est pas disponible sur ce navigateur."; render(); } };
+    head.appendChild(sp);
+    card.appendChild(head);
+    const already = WEAK_WORDS.some(w=>w.word===r.word);
+    card.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">${already?'📌 Déjà dans « Mots à revoir ».':'Clique sur le sens qui correspond pour garder le mot :'}</div>`));
+    const vw = el('<div></div>');
+    r.variants.forEach(v=>{
+      const chip = el(`<button type="button" class="mono var-chip" ${already||LISTEN.added?'disabled':''} style="font-size:13px;padding:4px 12px;margin:0 6px 6px 0;border:1.5px solid ${LISTEN.added===v?'var(--celadon-dark)':'var(--line)'};border-radius:999px;background:${LISTEN.added===v?'var(--celadon)':'var(--paper)'};color:${LISTEN.added===v?'#fff':'var(--ink)'};cursor:pointer;">${escapeHtml(v)}</button>`);
+      chip.onclick = async ()=>{ LISTEN.added=v; await sbAddWeakWord(r.word, v, LISTEN.note.trim()||null); render(); };
+      vw.appendChild(chip);
+    });
+    card.appendChild(vw);
+    if(LISTEN.added) card.appendChild(el('<div style="font-size:12px;color:var(--celadon-dark);margin-top:4px;">✓ Ajouté à « Mots à revoir ».</div>'));
+    wrap.appendChild(card);
+  }
+  return wrap;
+}
+
 function renderGrammarNotebook(){
   const wrap = el('<div></div>');
   const entryOf = (kind,key)=>GRAMMAR_SEEN.find(x=>x.kind===kind && x.key===key);
@@ -1439,7 +1576,7 @@ function renderWeakWordsPractice(){
       c.onclick = ()=>{
         revealed = !revealed; c.classList.toggle('revealed', revealed);
         c.querySelector('div').innerHTML = revealed
-          ? `<span class="kr">${escapeHtml(w.word)}</span><div class="meaning">${escapeHtml(w.meaning||'')}</div>`
+          ? `<span class="kr">${escapeHtml(w.word)}</span><div class="meaning">${escapeHtml(w.meaning||'')}</div>${w.note?`<div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">🎧 ${escapeHtml(w.note)}</div>`:''}`
           : `<span class="kr">${escapeHtml(w.word)}</span>`;
       };
       cell.appendChild(c);
@@ -2994,7 +3131,7 @@ async function renderDMPanel(){
 
 /* ---- Boîte de réception de la prof : une conversation par élève ---- */
 async function enterInbox(preferredStudentId){
-  state.space = 'inbox'; state.lessonId = null; state.reviewMode=false; state.grammarMode=false; state.globalQuizMode = false;
+  state.space = 'inbox'; state.lessonId = null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode = false;
   unsubscribeChat();
   ALL_PROFILES = await sbAllProfiles();
   await loadDMState();
