@@ -1327,14 +1327,6 @@ const GRAMMAR_CATEGORIES = [
 /* ===== Mot entendu (voix ou saisie) ===== */
 const LISTEN = { input:'', note:'', cands:[], tokens:[], result:null, msg:'', busy:false, listening:false, added:null };
 function speechRecognitionCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
-function speakKo(text, rate){
-  try{
-    if(!window.speechSynthesis) return false;
-    const u = new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=rate||0.8;
-    const v = (speechSynthesis.getVoices()||[]).find(v=>/^ko/i.test(v.lang)); if(v) u.voice=v;
-    speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
-  }catch(e){ return false; }
-}
 async function listenSearch(rawWord){
   const clean = String(rawWord||'').replace(/[^가-힣]/g,'');
   LISTEN.added = null;
@@ -1450,9 +1442,6 @@ function renderListen(){
     const card = el('<div style="border:1.5px solid var(--line);border-radius:12px;padding:14px;background:var(--paper);"></div>');
     const head = el(`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span class="kr" style="font-size:26px;">${escapeHtml(r.word)}</span></div>`);
     if(r.word!==r.heard) head.appendChild(el(`<span style="font-size:12px;color:var(--ink-soft);">(entendu : ${escapeHtml(r.heard)})</span>`));
-    const sp = el('<button type="button" class="btn ghost small" title="Écouter la prononciation">🔊</button>');
-    sp.onclick = ()=>{ if(!speakKo(r.word)){ LISTEN.msg="La lecture à voix haute n'est pas disponible sur ce navigateur."; render(); } };
-    head.appendChild(sp);
     card.appendChild(head);
     const already = WEAK_WORDS.some(w=>w.word===r.word);
     card.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">${already?'📌 Déjà dans « Mots à revoir ».':'Clique sur le sens qui correspond pour garder le mot :'}</div>`));
@@ -1788,13 +1777,9 @@ function renderPractice(lesson){
   }
   const bar = el('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;"></div>');
   const again = el('<button class="btn ghost small">🔄 Un autre texte</button>'); again.onclick = make;
-  const listen = el('<button class="btn ghost small" title="Voix de l\'ordinateur">🔊 Écouter</button>');
-  listen.onclick = ()=>{ if(!speakKo(cur.text.replace(/\n/g,'. '))){ alert("La lecture à voix haute n'est pas disponible sur ce navigateur."); } };
-  const slow = el('<button class="btn ghost small" title="Voix de l\'ordinateur, plus lente">🐢 Lent</button>');
-  slow.onclick = ()=>{ if(!speakKo(cur.text.replace(/\n/g,'. '), 0.55)){ alert("La lecture à voix haute n'est pas disponible sur ce navigateur."); } };
-  bar.appendChild(again); bar.appendChild(listen); bar.appendChild(slow);
+  bar.appendChild(again);
   wrap.appendChild(bar);
-  wrap.appendChild(el(`<div class="note" style="margin-bottom:12px;font-size:12.5px;border-color:var(--celadon-dark);">📝 Texte généré automatiquement à partir de ta leçon (${cur.fromCourse} phrase${cur.fromCourse>1?'s':''} de ton cours${cur.generated?` + ${cur.generated} phrase${cur.generated>1?'s':''} simple${cur.generated>1?'s':''} construite${cur.generated>1?'s':''} avec ton vocabulaire`:''}). La voix 🔊 est celle de ton appareil : elle peut se tromper, ce n'est pas la prononciation de ta professeur.</div>`));
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:12px;font-size:12.5px;border-color:var(--celadon-dark);">📝 Texte généré automatiquement à partir de ta leçon (${cur.fromCourse} phrase${cur.fromCourse>1?'s':''} de ton cours${cur.generated?` + ${cur.generated} phrase${cur.generated>1?'s':''} simple${cur.generated>1?'s':''} construite${cur.generated>1?'s':''} avec ton vocabulaire`:''}).</div>`));
   wrap.appendChild(renderTraduction(Object.assign({}, lesson, { translations:[{ text:cur.text, ref:cur.ref, help:[] }] }), { generated:true }));
   return wrap;
 }
