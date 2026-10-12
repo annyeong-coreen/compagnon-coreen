@@ -59,6 +59,7 @@
   .tabs{display:flex;gap:4px;margin:18px 0 22px;border-bottom:1.5px solid var(--line);flex-wrap:wrap;}
   .tab-btn{padding:9px 16px;border:none;background:none;font-size:14px;font-weight:600;color:var(--ink-soft);border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
   .tab-btn.active{color:var(--ink);border-bottom-color:var(--seal);}
+  @media(max-width:600px){ .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;border-bottom:none;margin:14px 0 18px;} .tab-btn{padding:8px 2px;font-size:12px;line-height:1.2;border:1.5px solid var(--line);border-radius:8px;background:var(--card);margin-bottom:0;} .tab-btn.active{border-color:var(--ink);background:var(--paper-dim);} }
   .section-block{margin-bottom:26px;} .section-block h3{font-size:17px;margin:0 0 10px;}
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
   .item-card{background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:14px 12px;text-align:center;}
@@ -829,17 +830,16 @@ function renderHeader(){
     pill.onclick = openPuzzle;
     right.appendChild(pill);
   }
-  // petites icônes : 💡 une idée / ⚠️ un problème (l'élève) ; 💡 la boîte à suggestions (la professeure)
-  const iconStyle = 'cursor:pointer;padding:5px 10px;position:relative;';
-  const nNewSug = (SUGGESTIONS||[]).filter(x=>x.status==='nouveau').length;
-  const bulb = el(`<div class="stat-pill" style="${iconStyle}" title="${PROFILE.role==='teacher'?'Suggestions des élèves':'Une idée pour améliorer l\'outil ?'}" role="button" aria-label="Suggestions">💡${PROFILE.role==='teacher' && nNewSug>0 ? `<span style="background:var(--seal);color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px;">${nNewSug}</span>` : ''}</div>`);
+  // petites icônes : 💡 idées et ⚠️ problèmes, deux pages séparées (la professeure voit le nombre de nouveaux messages de chaque type)
+  const iconStyle = 'cursor:pointer;padding:5px 10px;';
+  const badge = n => n>0 ? `<span style="background:var(--seal);color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px;">${n}</span>` : '';
+  const newOf = k => PROFILE.role==='teacher' ? (SUGGESTIONS||[]).filter(x=>x.status==='nouveau' && x.kind===k).length : 0;
+  const bulb = el(`<div class="stat-pill" style="${iconStyle}" title="${PROFILE.role==='teacher'?'Idées des élèves':'Une idée pour améliorer l\'outil ?'}" role="button" aria-label="Idées">💡${badge(newOf('idee'))}</div>`);
   bulb.onclick = ()=> openSuggest('idee');
   right.appendChild(bulb);
-  if(PROFILE.role==='student'){
-    const warn = el(`<div class="stat-pill" style="${iconStyle}" title="Signaler un problème" role="button" aria-label="Signaler un problème">⚠️</div>`);
-    warn.onclick = ()=> openSuggest('probleme');
-    right.appendChild(warn);
-  }
+  const warn = el(`<div class="stat-pill" style="${iconStyle}" title="${PROFILE.role==='teacher'?'Problèmes signalés par les élèves':'Signaler un problème'}" role="button" aria-label="Problèmes">⚠️${badge(newOf('probleme'))}</div>`);
+  warn.onclick = ()=> openSuggest('probleme');
+  right.appendChild(warn);
   const optionsWrap = el('<div style="position:relative;"></div>');
   const optionsBtn = el('<button class="btn ghost small">⚙️ Options ▾</button>');
   optionsBtn.onclick = (e)=>{ e.stopPropagation(); state.headerMenuOpen = !state.headerMenuOpen; render(); };
@@ -975,7 +975,13 @@ function renderSpaceTabs(){
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
     b.onclick = async ()=>{
-      if(state.space===key) return;
+      if(state.space===key){
+        // déjà dans cet espace : si un outil est ouvert (puzzle, mots à revoir, grammaire…), on revient à l'écran principal
+        if(key==='perso' && (state.puzzleMode||state.reviewMode||state.grammarMode||state.listenMode||state.globalQuizMode)){
+          state.puzzleMode=false; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.lessonId=null; state.menuOpen=false; render();
+        }
+        return;
+      }
       if(key==='suggest') SUGGEST_CTX = suggestContextLabel();
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
@@ -3793,24 +3799,18 @@ function copyText(txt){
 function renderSuggestions(){
   const teacher = PROFILE.role==='teacher';
   const box = el('<div class="main-card"></div>');
-  box.appendChild(el('<h2 style="margin:0 0 4px;">💡 Suggestions</h2>'));
+  const KIND = state.suggestKind === 'probleme' ? 'probleme' : 'idee';
+  const isProb = KIND==='probleme';
+  box.appendChild(el(`<h2 style="margin:0 0 4px;">${teacher ? (isProb?'⚠️ Problèmes signalés':'💡 Idées des élèves') : (isProb?'⚠️ Signaler un problème':'💡 Une idée pour l\'outil')}</h2>`));
   if(!SUGGEST_OK){
     box.appendChild(el('<div class="note">Cette fonction n\'est pas encore activée : il faut lancer <b>migration-suggestions.sql</b> dans Supabase.</div>'));
     return box;
   }
   if(!teacher){
-    box.appendChild(el('<div class="note" style="margin-bottom:16px;">Une idée pour améliorer l\'outil, ou un problème rencontré ? Écris-le ici : ta professeure le lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.</div>'));
+    box.appendChild(el(`<div class="note" style="margin-bottom:16px;">${isProb ? 'Quelque chose ne marche pas ? Dis-nous ce qui s\'est passé et où : ta professeure le lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.' : 'Une idée pour améliorer l\'outil ? Écris-la ici : ta professeure la lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.'}</div>`));
     const form = el('<div class="field"></div>');
-    let kind = state.suggestKind === 'probleme' ? 'probleme' : 'idee';
-    const kinds = el('<div style="display:flex;gap:8px;margin-bottom:10px;"></div>');
-    const kb = {};
-    Object.keys(SUGGEST_KIND).forEach(k=>{
-      const b = el(`<button type="button" class="level-tab ${k===kind?'active':''}">${SUGGEST_KIND[k]}</button>`);
-      b.onclick = ()=>{ kind = k; Object.keys(kb).forEach(x=>kb[x].classList.toggle('active', x===kind)); };
-      kb[k] = b; kinds.appendChild(b);
-    });
-    form.appendChild(kinds);
-    const ta = el('<textarea maxlength="2000" style="min-height:110px;" placeholder="Décris ton idée ou le problème (que s\'est-il passé ? sur quelle page ?)"></textarea>');
+    const kind = KIND;
+    const ta = el(`<textarea maxlength="2000" style="min-height:110px;" placeholder="${isProb ? 'Que s\'est-il passé ? Sur quelle page ? Que voulais-tu faire ?' : 'Décris ton idée…'}"></textarea>`);
     form.appendChild(ta);
     if(SUGGEST_CTX) form.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">📍 Page jointe automatiquement : ${escapeHtml(SUGGEST_CTX)}</div>`));
     const msg = el('<div style="margin-top:8px;font-size:13px;"></div>');
@@ -3826,9 +3826,10 @@ function renderSuggestions(){
     form.appendChild(send); form.appendChild(msg);
     if(state.suggestSent){ state.suggestSent = false; box.appendChild(el('<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">Merci, ton message a bien été envoyé à ta professeure ! 🙏</div>')); }
     box.appendChild(form);
-    if(SUGGESTIONS.length){
-      box.appendChild(el('<h3 style="margin:26px 0 8px;font-size:15px;">Mes messages envoyés</h3>'));
-      SUGGESTIONS.forEach(x=>{
+    const mine = SUGGESTIONS.filter(x=>x.kind===KIND);
+    if(mine.length){
+      box.appendChild(el(`<h3 style="margin:26px 0 8px;font-size:15px;">${isProb?'Mes problèmes signalés':'Mes idées envoyées'}</h3>`));
+      mine.forEach(x=>{
         box.appendChild(el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:8px;"><div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · ${suggestDate(x.created_at)}${x.status==='traite'?' · ✔ vu par la professeure':''}</div><div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(x.body)}</div></div>`));
       });
     }
@@ -3836,22 +3837,23 @@ function renderSuggestions(){
   }
   // --- côté professeure
   const all = !!state.suggestAll;
-  const list = SUGGESTIONS.filter(x=> all || x.status==='nouveau');
-  const nNew = SUGGESTIONS.filter(x=>x.status==='nouveau').length;
-  box.appendChild(el('<div class="note" style="margin-bottom:14px;">Idées et problèmes envoyés par les élèves. Marque-les « traité » une fois lus. Le bouton « Copier » rassemble les messages non traités en un seul texte, pratique pour les transmettre à la personne qui s\'occupe de l\'outil.</div>'));
+  const ofKind = SUGGESTIONS.filter(x=>x.kind===KIND);
+  const list = ofKind.filter(x=> all || x.status==='nouveau');
+  const nNew = ofKind.filter(x=>x.status==='nouveau').length;
+  box.appendChild(el(`<div class="note" style="margin-bottom:14px;">${isProb?'Les problèmes signalés':'Les idées envoyées'} par les élèves. Marque-les « traité » une fois lus. Le bouton « Copier » rassemble les messages non traités en un seul texte, pratique pour les transmettre à la personne qui s\'occupe de l\'outil.</div>`));
   const bar = el('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>');
   const fb = el(`<button class="btn ghost small">${all?'Voir seulement les non traités':'Voir aussi les traités'}</button>`);
   fb.onclick = ()=>{ state.suggestAll = !all; render(); };
   const cp = el(`<button class="btn celadon small">📋 Copier les non traités (${nNew})</button>`);
   cp.onclick = async ()=>{
-    const rows = SUGGESTIONS.filter(x=>x.status==='nouveau');
+    const rows = ofKind.filter(x=>x.status==='nouveau');
     if(!rows.length){ cp.textContent = 'Rien à copier'; return; }
     const txt = rows.map(x=> `[${(SUGGEST_KIND[x.kind]||'').replace(/^\S+\s/,'')}] ${(x.author&&x.author.name)||'?'} — ${suggestDate(x.created_at)}${x.context?`\nPage : ${x.context}`:''}\n${x.body}`).join('\n\n---\n\n');
     const ok = await copyText(txt);
     cp.textContent = ok ? '✔ Copié !' : 'Copie impossible';
   };
   bar.appendChild(fb); bar.appendChild(cp); box.appendChild(bar);
-  if(!list.length) box.appendChild(el('<div class="empty-state">Aucune suggestion pour le moment.</div>'));
+  if(!list.length) box.appendChild(el(`<div class="empty-state">${isProb?'Aucun problème signalé':'Aucune idée'} pour le moment.</div>`));
   list.forEach(x=>{
     const done = x.status==='traite';
     const card = el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:10px;${done?'opacity:.65;':''}"></div>`);
