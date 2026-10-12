@@ -829,6 +829,17 @@ function renderHeader(){
     pill.onclick = openPuzzle;
     right.appendChild(pill);
   }
+  // petites icônes : 💡 une idée / ⚠️ un problème (l'élève) ; 💡 la boîte à suggestions (la professeure)
+  const iconStyle = 'cursor:pointer;padding:5px 10px;position:relative;';
+  const nNewSug = (SUGGESTIONS||[]).filter(x=>x.status==='nouveau').length;
+  const bulb = el(`<div class="stat-pill" style="${iconStyle}" title="${PROFILE.role==='teacher'?'Suggestions des élèves':'Une idée pour améliorer l\'outil ?'}" role="button" aria-label="Suggestions">💡${PROFILE.role==='teacher' && nNewSug>0 ? `<span style="background:var(--seal);color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px;">${nNewSug}</span>` : ''}</div>`);
+  bulb.onclick = ()=> openSuggest('idee');
+  right.appendChild(bulb);
+  if(PROFILE.role==='student'){
+    const warn = el(`<div class="stat-pill" style="${iconStyle}" title="Signaler un problème" role="button" aria-label="Signaler un problème">⚠️</div>`);
+    warn.onclick = ()=> openSuggest('probleme');
+    right.appendChild(warn);
+  }
   const optionsWrap = el('<div style="position:relative;"></div>');
   const optionsBtn = el('<button class="btn ghost small">⚙️ Options ▾</button>');
   optionsBtn.onclick = (e)=>{ e.stopPropagation(); state.headerMenuOpen = !state.headerMenuOpen; render(); };
@@ -959,8 +970,8 @@ async function renderAssignmentBanner(){
 function renderSpaceTabs(){
   const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
   const spaces = PROFILE.role==='teacher'
-    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves'], ['suggest', suggestTabLabel()]]
-    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')], ['suggest','💡 Suggestions']]);
+    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves']]
+    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')]]);
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
     b.onclick = async ()=>{
@@ -3734,6 +3745,15 @@ async function exportLessons(fmt){
   setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
 
+async function openSuggest(kind){
+  if(state.space!=='suggest') SUGGEST_CTX = suggestContextLabel();
+  state.suggestKind = kind || 'idee';
+  state.space = 'suggest'; state.lessonId=null; state.controlResult=null; state.quizResult=null; state.headerMenuOpen=false;
+  state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
+  unsubscribeChat();
+  SUGGESTIONS = await sbSuggestions();
+  render();
+}
 /* ---- Suggestions : idées et problèmes des élèves, lus par la professeure ---- */
 async function sbSuggestions(){
   try{
@@ -3781,7 +3801,7 @@ function renderSuggestions(){
   if(!teacher){
     box.appendChild(el('<div class="note" style="margin-bottom:16px;">Une idée pour améliorer l\'outil, ou un problème rencontré ? Écris-le ici : ta professeure le lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.</div>'));
     const form = el('<div class="field"></div>');
-    let kind = 'idee';
+    let kind = state.suggestKind === 'probleme' ? 'probleme' : 'idee';
     const kinds = el('<div style="display:flex;gap:8px;margin-bottom:10px;"></div>');
     const kb = {};
     Object.keys(SUGGEST_KIND).forEach(k=>{
