@@ -1180,13 +1180,14 @@ function classifyStudyItem(v){
   // « (exception) 춥다 » : l'annotation entre parenthèses passe du côté du sens
   const ann = [];
   kr = kr.replace(/\(([^()]*)\)/g, (m, inner)=>{ if(hasLatin(inner) && !hasKo(inner)){ ann.push(inner.trim()); return ' '; } return m; }).replace(/\s+/g,' ').trim();
+  const annOrig = ann.slice();
   if(ann.length) fr = (fr ? fr + ' ' : '') + '(' + ann.join(', ') + ')';
   if(kr && !hasKo(kr) && fr && hasKo(fr) && !hasLatin(fr)){ const t = kr; kr = fr; fr = t; }   // entrée écrite à l'envers (« nominalisation = 것 ») : on la remet dans le bon sens
   if(!kr || !hasKo(kr) || hasLatin(kr)) return { kind:'note', kr, fr, rom };       // explication en français : sa place est dans le Cours
-  if(/[ㄱ-ㅎ]|[가-힣]\/[가-힣ㄱ-ㅎ]|~|…|\.\.\.|\+/.test(kr)) return { kind:'grammar', kr, fr, rom };   // ㄹ/을, 은/ㄴ, ~…
+  if(/[ㄱ-ㅎ]|[가-힣]\/[가-힣ㄱ-ㅎ]|~|…|\.\.\.|\+/.test(kr)) return { kind:'grammar', kr, fr, rom, ann:annOrig };   // ㄹ/을, 은/ㄴ, ~…
   const tokens = kr.split(/\s+/).length;
   if(/[.?!]$/.test(kr) || tokens>=3 || kr.length>14) return { kind:'phrase', kr, fr, rom };
-  return { kind:'word', kr, fr, rom };
+  return { kind:'word', kr, fr, rom, ann:annOrig };
 }
 // Répare ce que l'analyse du cours a pu abîmer, et sort les petites gloses « mot(sens) » en cartes à part.
 function expandStudyItem(v){
@@ -1225,12 +1226,49 @@ function expandStudyItem(v){
   if(c.kind!=='note') out.push(c);
   return out;
 }
+// Une règle de grammaire garde ses exemples (« 춥다 → 추운 것 ») : on les relie à la règle au lieu d'en faire des mots à part.
 function lessonStudyGroups(lesson){
   const out = { word:[], grammar:[], phrase:[], note:[] };
   const seen = new Set();
-  const add = (c)=>{ const k = c.kind + '|' + c.kr; if(seen.has(k)) return; seen.add(k); out[c.kind].push(c); };
+  const add = (c)=>{ const k = c.kind + '|' + c.kr; if(seen.has(k)) return false; seen.add(k); out[c.kind].push(c); return true; };
   (lesson.vowels||[]).forEach(v=> add({kind:'word', kr:v.kr, fr:v.fr, rom:v.rom||''}));
-  (lesson.vocab||[]).forEach(v=> expandStudyItem(v).forEach(add));
+  const vocab = lesson.vocab || [];
+  const isHeading = v=>{ const k = String(v.kr||'').trim(); return !!k && !/[가-힣]/.test(k) && !/[가-힣]/.test(String(v.fr||'')) && !/^\d/.test(k) && k.split(/\s+/).length<=5 && !/[.:?!()=]/.test(k); };
+  const syl = t=>{ const n = String(t||'').trim().charCodeAt(0) - 0xAC00; return n>=0 && n<11172 ? [Math.floor(n/588), Math.floor((n%588)/28)] : null; };
+  const related = (a,b)=>{ const x = syl(a), y = syl(b); return !!(x && y && x[0]===y[0] && x[1]===y[1]); };   // 먹다 → 먹어 보다, 춥다 → 추운 것
+  const cap = t=> t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+  const soloWord = v=>{ if(isHeading(v)) return null; const p = expandStudyItem(v); return (p.length===1 && p[0].kind==='word') ? p[0] : null; };
+  let heading = null, headingUsed = true, lastRule = null, adj = false;
+  for(let i=0; i<vocab.length; i++){
+    const v = vocab[i];
+    if(isHeading(v)){ heading = String(v.kr).trim(); headingUsed = false; lastRule = null; adj = true; continue; }
+    if(adj && (lastRule || !headingUsed)){
+      // les paires qui suivent directement une règle (ou un titre) sont ses exemples
+      let j = i; const pairs = [];
+      while(j+1 < vocab.length){
+        const a = soloWord(vocab[j]), b = soloWord(vocab[j+1]);
+        if(!a || !b || !related(a.kr, b.kr)) break;
+        pairs.push({ a:a.kr, b:b.kr, note:(a.ann||[]).concat(b.ann||[]).join(', ') });
+        j += 2;
+      }
+      if(pairs.length){
+        if(!lastRule){ lastRule = { kind:'grammar', kr:heading, fr:'', rom:'', examples:[], isTitle:true }; headingUsed = true; add(lastRule); }
+        lastRule.examples.push(...pairs);
+        i = j-1; adj = true; continue;
+      }
+    }
+    const parts = expandStudyItem(v);
+    parts.forEach(c=>{
+      if(c.kind==='grammar'){
+        // l'explication du professeur est montrée telle quelle, une seule fois (jamais la traduction automatique de la ligne)
+        if(c.ann && c.ann.length) c.fr = cap(c.ann.join(', '));
+        c.examples = [];
+        headingUsed = true;
+        if(add(c)) lastRule = c; else lastRule = out.grammar.find(x=>x.kr===c.kr) || lastRule;
+      } else add(c);
+    });
+    adj = parts.length===1 && parts[0].kind==='grammar';
+  }
   // un mot sans sens donné par la professeure mais déjà présent avec un sens : on garde celui qui a un sens
   out.word = out.word.filter(w=> w.fr || !out.word.some(o=> o!==w && o.kr===w.kr && o.fr));
   return out;
@@ -1244,7 +1282,23 @@ function renderMemorize(lesson){
     let revealed=false;
     c.onclick = ()=>{
       revealed = !revealed; c.classList.toggle('revealed', revealed);
-      c.querySelector('div').innerHTML = revealed ? `<span class="kr">${escapeHtml(v.kr)}</span>${v.rom?`<div class="meaning mono">${escapeHtml(v.rom)}</div>`:''}<div class="meaning">${v.fr?escapeHtml(v.fr):'<span style="color:var(--ink-soft);font-size:12px;">pas de traduction dans le cours</span>'}</div>` : `<span class="kr">${escapeHtml(v.kr)}</span>`;
+      const exo = (v.examples && v.examples.length) ? '<div class="meaning" style="margin-top:8px;text-align:left;font-size:13px;">' + v.examples.map(e=>`<div><span class="kr" style="font-size:15px;">${escapeHtml(e.a)} → ${escapeHtml(e.b)}</span>${e.note?` <span style="color:var(--ink-soft);">(${escapeHtml(e.note)})</span>`:''}</div>`).join('') + '</div>' : '';
+      const sens = v.fr ? `<div class="meaning">${escapeHtml(v.fr)}</div>` : ((v.examples && v.examples.length) ? '' : '<div class="meaning"><span style="color:var(--ink-soft);font-size:12px;">pas de traduction dans le cours</span></div>');
+      const paint = (auto)=>{
+        const noFr = !v.fr && !(v.examples && v.examples.length);
+        const sens2 = (noFr && auto!==undefined) ? (auto ? `<div class="meaning">${escapeHtml(auto)}</div><div style="font-size:11px;color:var(--ink-soft);">suggestion du dictionnaire (KRDict) — le professeur n'a pas donné de sens</div>` : sens) : sens;
+        c.querySelector('div').innerHTML = revealed ? `<span class="kr">${escapeHtml(v.kr)}</span>${v.rom?`<div class="meaning mono">${escapeHtml(v.rom)}</div>`:''}${sens2}${exo}` : `<span class="kr">${escapeHtml(v.kr)}</span>`;
+      };
+      paint();
+      // un mot sans sens dans le cours : on propose celui du dictionnaire, sans toucher au cours ni à sa traduction
+      if(revealed && v.kind==='word' && !v.fr){
+        state.memoAuto = state.memoAuto || {};
+        if(v.kr in state.memoAuto) paint(state.memoAuto[v.kr]);
+        else translateWordKoFr(v.kr, {dictOnly:true, noStrip:true}).then(r=>{
+          const txt = (r && r.length) ? r.slice(0,2).map(x=>typeof x==='string'?x:(x.fr||x.text||'')).filter(Boolean).join(' / ') : '';
+          state.memoAuto[v.kr] = txt; if(revealed) paint(txt);
+        }).catch(()=>{ state.memoAuto[v.kr] = ''; });
+      }
     };
     return c;
   };
