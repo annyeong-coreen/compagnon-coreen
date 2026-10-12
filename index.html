@@ -39,7 +39,8 @@
   .btn.small{padding:6px 10px;font-size:12px;}
   .layout{display:grid;grid-template-columns:250px 1fr;gap:24px;align-items:start;}
   .sidebar{position:sticky;top:20px;}
-  @media(max-width:840px){.layout{grid-template-columns:1fr;} .sidebar{position:static;}}
+  .menu-toggle{display:none;}
+  @media(max-width:840px){.layout{grid-template-columns:1fr;} .sidebar{position:static;} .menu-toggle{display:block;width:100%;text-align:left;margin-bottom:4px;} .sidebar.collapsed{display:none;}}
   .level-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
   .level-tab{flex:1;text-align:center;padding:8px 6px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);font-size:12px;font-weight:600;color:var(--ink-soft);}
   .level-tab.active{border-color:var(--ink);color:var(--ink);background:var(--paper-dim);}
@@ -785,7 +786,14 @@ async function render(){
     app.appendChild(await renderDMPanel());
   } else {
     const grid = el('<div class="layout"></div>');
-    grid.appendChild(await renderSidebar());
+    const sideEl = await renderSidebar();
+    // Sur téléphone : la barre latérale se replie derrière un bouton « Menu » pour laisser la place au contenu
+    const menuBtn = el(`<button type="button" class="btn ghost menu-toggle">${state.menuOpen?'✕ Fermer le menu':'☰ Menu — leçons et outils'}</button>`);
+    menuBtn.onclick = ()=>{ state.menuOpen = !state.menuOpen; render(); };
+    if(!state.menuOpen) sideEl.classList.add('collapsed');
+    sideEl.addEventListener('click', (e)=>{ if(e.target.closest('.lesson-node') && !e.target.closest('.level-tabs')) state.menuOpen = false; }, true);
+    grid.appendChild(menuBtn);
+    grid.appendChild(sideEl);
     grid.appendChild(await renderMain());
     app.appendChild(grid);
     if(state.space==='groupe'){ app.appendChild(await renderChatPanel()); }
@@ -836,6 +844,13 @@ function renderHeader(){
       const reminderBtn = el(`<button style="${itemStyle}border-top:1px solid var(--line);">🔔 Rappels par email</button>`);
       reminderBtn.onclick = ()=>{ state.headerMenuOpen=false; openReminderModal(); render(); };
       menu.appendChild(reminderBtn);
+    }
+    if(PROFILE.role==='teacher'){
+      const ex1 = el(`<button style="${itemStyle}border-top:1px solid var(--line);">💾 Sauvegarder mes leçons</button>`);
+      ex1.onclick = ()=>{ state.headerMenuOpen=false; exportLessons('json'); render(); };
+      const ex2 = el(`<button style="${itemStyle}border-top:1px solid var(--line);">📄 Mes leçons en texte</button>`);
+      ex2.onclick = ()=>{ state.headerMenuOpen=false; exportLessons('txt'); render(); };
+      menu.appendChild(ex1); menu.appendChild(ex2);
     }
     const logout = el(`<button style="${itemStyle}border-top:1px solid var(--line);color:var(--seal-dark);">Se déconnecter</button>`);
     logout.onclick = doLogout;
@@ -3677,6 +3692,46 @@ async function renderDMPanel(){
   box.appendChild(container);
   renderDMMessages(container);
   return box;
+}
+
+/* ---- Sauvegarde des leçons de la professeure ---- */
+function lessonsToText(rows){
+  const LV = Object.assign({ hyeseon:'Hyeseon' }, LEVEL_LABELS);
+  const out = [];
+  let lastSpace = null;
+  rows.forEach(l=>{
+    if(l.space!==lastSpace){ lastSpace = l.space; out.push('##########  ' + (LV[l.space]||l.space).toUpperCase() + '  ##########', ''); }
+    out.push('=== ' + l.title + ' ===');
+    const segTxt = sg=> (sg.kr||'') + (sg.fr ? ' = ' + sg.fr : '');
+    const dlg = Array.isArray(l.dialogue) ? l.dialogue : [];
+    if(dlg.length){
+      out.push('Dialogue :');
+      dlg.forEach(ex=>{
+        const who = ex.speaker ? ex.speaker + (ex.role?' ('+ex.role+')':'') + ' : ' : '';
+        out.push('  ' + who + (ex.segments||[]).map(segTxt).join(' | '));
+      });
+    }
+    const vo = Array.isArray(l.vowels) ? l.vowels : [];
+    if(vo.length){ out.push('Voyelles :'); vo.forEach(v=>out.push('  ' + (v.kr||'') + (v.rom?' ['+v.rom+']':'') + (v.fr?' = '+v.fr:''))); }
+    const vc = Array.isArray(l.vocab) ? l.vocab : [];
+    if(vc.length){ out.push('Vocabulaire :'); vc.forEach(v=>out.push('  ' + (v.kr||'') + (v.rom?' ['+v.rom+']':'') + (v.fr?' = '+v.fr:''))); }
+    const gr = Array.isArray(l.grammar) ? l.grammar : [];
+    if(gr.length){ out.push('Grammaire :'); gr.forEach(g=>out.push('  ' + (typeof g==='string' ? g : JSON.stringify(g)))); }
+    out.push('');
+  });
+  return out.join('\n');
+}
+async function exportLessons(fmt){
+  const { data, error } = await sb.from('lessons').select('*').order('space').order('position');
+  if(error || !data){ alert("Sauvegarde impossible pour le moment. Réessaie dans un instant."); return; }
+  const d = new Date(); const stamp = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const isJson = fmt==='json';
+  const content = isJson ? JSON.stringify({ exporte_le: d.toISOString(), nombre_de_lecons: data.length, lecons: data }, null, 2) : lessonsToText(data);
+  const blob = new Blob([content], { type: isJson ? 'application/json' : 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'lecons-' + stamp + (isJson ? '.json' : '.txt');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
 
 /* ---- Suggestions : idées et problèmes des élèves, lus par la professeure ---- */
