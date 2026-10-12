@@ -716,7 +716,7 @@ async function loadOwnProfile(){
       await sbLoadGrammarSeen();
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
     }
-    else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); }
+    else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); SUGGESTIONS = await sbSuggestions(); }
     await loadDMState();
     subscribeDM();
     updateTitleBadge();
@@ -779,6 +779,8 @@ async function render(){
     app.appendChild(await renderDashboard());
   } else if(state.space==='inbox' && PROFILE.role==='teacher'){
     app.appendChild(await renderInbox());
+  } else if(state.space==='suggest'){
+    app.appendChild(renderSuggestions());
   } else if(state.space==='dm'){
     app.appendChild(await renderDMPanel());
   } else {
@@ -942,17 +944,19 @@ async function renderAssignmentBanner(){
 function renderSpaceTabs(){
   const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
   const spaces = PROFILE.role==='teacher'
-    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves']]
-    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')]]);
+    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves'], ['suggest', suggestTabLabel()]]
+    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')], ['suggest','💡 Suggestions']]);
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
     b.onclick = async ()=>{
       if(state.space===key) return;
+      if(key==='suggest') SUGGEST_CTX = suggestContextLabel();
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
       state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
       if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
+      else if(key==='suggest'){ SUGGESTIONS = await sbSuggestions(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
       if(key==='groupe'){
         if(PROFILE.role==='teacher'){ GROUPS = await sbAllGroups(); if(!ACTIVE_GROUP_ID && GROUPS[0]) ACTIVE_GROUP_ID = GROUPS[0].id; }
@@ -1617,6 +1621,7 @@ const PUZZLE_COLS = 3, PUZZLE_ROWS = 2;
 const PUZZLE_ORDER = [4,1,3,0,5,2];      // ordre dans lequel les cases se dévoilent
 let GIFTS = [];                           // cadeaux déjà remis (élève : les siens ; professeure : tous)
 let ALL_GIFTS = [];
+let SUGGESTIONS = [], SUGGEST_OK = true, SUGGEST_CTX = '';
 let GIFTS_TABLE_OK = true;
 function puzzleCountFromRows(rows){ return (rows||[]).filter(r=>r && r.control && r.control.passed).length; }
 function puzzleCount(){ return puzzleCountFromRows(Object.values(PROGRESS||{})); }
@@ -3671,6 +3676,121 @@ async function renderDMPanel(){
   const container = el('<div></div>');
   box.appendChild(container);
   renderDMMessages(container);
+  return box;
+}
+
+/* ---- Suggestions : idées et problèmes des élèves, lus par la professeure ---- */
+async function sbSuggestions(){
+  try{
+    const { data, error } = await sb.from('suggestions').select('*, author:profiles(name)').order('created_at', { ascending:false }).limit(300);
+    if(error){ SUGGEST_OK = false; return []; }
+    SUGGEST_OK = true; return data || [];
+  }catch(e){ SUGGEST_OK = false; return []; }
+}
+function suggestTabLabel(){
+  const n = (SUGGESTIONS||[]).filter(x=>x.status==='nouveau').length;
+  return '💡 Suggestions' + (n>0 ? ` <span style="background:var(--seal);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px;">${n}</span>` : '');
+}
+// Où l'élève se trouvait avant d'ouvrir l'onglet : aide la professeure à comprendre le message
+function suggestContextLabel(){
+  if(!PROFILE || PROFILE.role!=='student') return '';
+  if(state.space==='groupe') return 'Cours en groupe';
+  if(state.space==='dm') return 'Messagerie';
+  if(state.reviewMode) return 'Mots à revoir';
+  if(state.grammarMode) return 'Aide-mémoire grammaire';
+  if(state.listenMode) return 'Mot entendu';
+  if(state.puzzleMode) return 'Puzzle';
+  if(state.globalQuizMode) return 'Quiz global';
+  const lvl = LEVEL_LABELS[state.level] || state.level || '';
+  if(state.lessonId){
+    const l = (LESSONS_CACHE[state.level]||[]).find(x=>x.id===state.lessonId);
+    const tabs = { cours:'Cours', memoriser:'À mémoriser', exercices:'Exercices', traduction:'Traduction', pratique:"Texte d'entraînement", quiz:'Quiz', controle:'Contrôle', revision:'Révision' };
+    return (lvl + ' · ' + (l ? l.title : 'leçon') + ' · ' + (tabs[state.tab] || state.tab)).slice(0,300);
+  }
+  return lvl;
+}
+const SUGGEST_KIND = { idee:'💡 Idée', probleme:'⚠️ Problème' };
+function suggestDate(t){ try{ return new Date(t).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }catch(e){ return ''; } }
+function copyText(txt){
+  if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(()=>true).catch(()=>false);
+  try{ const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return Promise.resolve(ok); }catch(e){ return Promise.resolve(false); }
+}
+function renderSuggestions(){
+  const teacher = PROFILE.role==='teacher';
+  const box = el('<div class="main-card"></div>');
+  box.appendChild(el('<h2 style="margin:0 0 4px;">💡 Suggestions</h2>'));
+  if(!SUGGEST_OK){
+    box.appendChild(el('<div class="note">Cette fonction n\'est pas encore activée : il faut lancer <b>migration-suggestions.sql</b> dans Supabase.</div>'));
+    return box;
+  }
+  if(!teacher){
+    box.appendChild(el('<div class="note" style="margin-bottom:16px;">Une idée pour améliorer l\'outil, ou un problème rencontré ? Écris-le ici : ta professeure le lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.</div>'));
+    const form = el('<div class="field"></div>');
+    let kind = 'idee';
+    const kinds = el('<div style="display:flex;gap:8px;margin-bottom:10px;"></div>');
+    const kb = {};
+    Object.keys(SUGGEST_KIND).forEach(k=>{
+      const b = el(`<button type="button" class="level-tab ${k===kind?'active':''}">${SUGGEST_KIND[k]}</button>`);
+      b.onclick = ()=>{ kind = k; Object.keys(kb).forEach(x=>kb[x].classList.toggle('active', x===kind)); };
+      kb[k] = b; kinds.appendChild(b);
+    });
+    form.appendChild(kinds);
+    const ta = el('<textarea maxlength="2000" style="min-height:110px;" placeholder="Décris ton idée ou le problème (que s\'est-il passé ? sur quelle page ?)"></textarea>');
+    form.appendChild(ta);
+    if(SUGGEST_CTX) form.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">📍 Page jointe automatiquement : ${escapeHtml(SUGGEST_CTX)}</div>`));
+    const msg = el('<div style="margin-top:8px;font-size:13px;"></div>');
+    const send = el('<button class="btn celadon" style="margin-top:10px;">Envoyer</button>');
+    send.onclick = async ()=>{
+      const body = ta.value.trim();
+      if(!body){ msg.innerHTML = '<span class="error-text">Écris d\'abord ton message.</span>'; return; }
+      send.disabled = true;
+      const { error } = await sb.from('suggestions').insert({ author_id:SESSION.user.id, kind, body, context:SUGGEST_CTX || null });
+      if(error){ send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
+      SUGGESTIONS = await sbSuggestions(); state.suggestSent = true; render();
+    };
+    form.appendChild(send); form.appendChild(msg);
+    if(state.suggestSent){ state.suggestSent = false; box.appendChild(el('<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">Merci, ton message a bien été envoyé à ta professeure ! 🙏</div>')); }
+    box.appendChild(form);
+    if(SUGGESTIONS.length){
+      box.appendChild(el('<h3 style="margin:26px 0 8px;font-size:15px;">Mes messages envoyés</h3>'));
+      SUGGESTIONS.forEach(x=>{
+        box.appendChild(el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:8px;"><div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · ${suggestDate(x.created_at)}${x.status==='traite'?' · ✔ vu par la professeure':''}</div><div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(x.body)}</div></div>`));
+      });
+    }
+    return box;
+  }
+  // --- côté professeure
+  const all = !!state.suggestAll;
+  const list = SUGGESTIONS.filter(x=> all || x.status==='nouveau');
+  const nNew = SUGGESTIONS.filter(x=>x.status==='nouveau').length;
+  box.appendChild(el('<div class="note" style="margin-bottom:14px;">Idées et problèmes envoyés par les élèves. Marque-les « traité » une fois lus. Le bouton « Copier » rassemble les messages non traités en un seul texte, pratique pour les transmettre à la personne qui s\'occupe de l\'outil.</div>'));
+  const bar = el('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>');
+  const fb = el(`<button class="btn ghost small">${all?'Voir seulement les non traités':'Voir aussi les traités'}</button>`);
+  fb.onclick = ()=>{ state.suggestAll = !all; render(); };
+  const cp = el(`<button class="btn celadon small">📋 Copier les non traités (${nNew})</button>`);
+  cp.onclick = async ()=>{
+    const rows = SUGGESTIONS.filter(x=>x.status==='nouveau');
+    if(!rows.length){ cp.textContent = 'Rien à copier'; return; }
+    const txt = rows.map(x=> `[${(SUGGEST_KIND[x.kind]||'').replace(/^\S+\s/,'')}] ${(x.author&&x.author.name)||'?'} — ${suggestDate(x.created_at)}${x.context?`\nPage : ${x.context}`:''}\n${x.body}`).join('\n\n---\n\n');
+    const ok = await copyText(txt);
+    cp.textContent = ok ? '✔ Copié !' : 'Copie impossible';
+  };
+  bar.appendChild(fb); bar.appendChild(cp); box.appendChild(bar);
+  if(!list.length) box.appendChild(el('<div class="empty-state">Aucune suggestion pour le moment.</div>'));
+  list.forEach(x=>{
+    const done = x.status==='traite';
+    const card = el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:10px;${done?'opacity:.65;':''}"></div>`);
+    card.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · <b>${escapeHtml((x.author&&x.author.name)||'?')}</b> · ${suggestDate(x.created_at)}${x.context?` · 📍 ${escapeHtml(x.context)}`:''}</div>`));
+    card.appendChild(el(`<div style="margin:6px 0 10px;white-space:pre-wrap;">${escapeHtml(x.body)}</div>`));
+    const row = el('<div style="display:flex;gap:8px;flex-wrap:wrap;"></div>');
+    const tg = el(`<button class="btn ghost small">${done?'↩ Rouvrir':'✔ Traité'}</button>`);
+    tg.onclick = async ()=>{ const { error } = await sb.from('suggestions').update({ status: done?'nouveau':'traite' }).eq('id', x.id); if(!error){ x.status = done?'nouveau':'traite'; render(); } };
+    const rp = el('<button class="btn ghost small">💬 Répondre</button>');
+    rp.onclick = ()=> enterInbox(x.author_id);
+    const rm = el('<button class="btn ghost small">🗑 Supprimer</button>');
+    rm.onclick = async ()=>{ if(!confirm('Supprimer cette suggestion ?')) return; const { error } = await sb.from('suggestions').delete().eq('id', x.id); if(!error){ SUGGESTIONS = SUGGESTIONS.filter(y=>y.id!==x.id); render(); } };
+    row.appendChild(tg); row.appendChild(rp); row.appendChild(rm); card.appendChild(row); box.appendChild(card);
+  });
   return box;
 }
 
