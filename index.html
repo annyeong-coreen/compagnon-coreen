@@ -143,7 +143,7 @@ let state = { space:'perso', level:'debutant', lastPersoLevel:'debutant', lesson
   controlAnswers:{}, controlResult:null, quizAnswers:{}, quizResult:null,
   exerciseIndex:0, exerciseCorrectCount:0, dashboardExpanded:{}, loginError:null, headerMenuOpen:false,
   reviewMode:false, grammarMode:false, listenMode:false, reviewTab:'memoriser', reviewExerciseIndex:0, reviewCorrectCount:0,
-  globalQuizMode:false, globalQuizAnswers:{}, globalQuizResult:null,
+  globalQuizMode:false, puzzleMode:false, globalQuizAnswers:{}, globalQuizResult:null,
   reviewSelected:{},
   translationDraft:'', translationValidated:false };
 
@@ -712,6 +712,7 @@ async function loadOwnProfile(){
     if(PROFILE.role==='student'){
       ACTIVE_GROUP_ID = PROFILE.group_id || null;
       WEAK_WORDS = await sbWeakWords();
+      GIFTS = await sbMyGifts();
       await sbLoadGrammarSeen();
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
     }
@@ -751,6 +752,7 @@ async function lessonsForLevel(level){
   return LESSONS_CACHE[level];
 }
 function isUnlockedSync(list, idx){
+  return true;   // plus de verrouillage : l'élève révise librement, le contrôle sert à voir ce qui est acquis
   if(idx===0) return true;
   const l = list[idx];
   if(ASSIGNMENT && l && ASSIGNMENT.lesson_id===l.id) return true;
@@ -761,6 +763,7 @@ function isUnlockedSync(list, idx){
 
 /* ---------------- RENDER ---------------- */
 async function render(){
+  if(controlGuardCheckView()) return;
   const app = document.getElementById('app');
   app.innerHTML = '';
   if(!SESSION){ app.appendChild(renderLogin()); return; }
@@ -811,8 +814,10 @@ function renderHeader(){
   const right = h.querySelector('.top-right');
   right.appendChild(el(`<div class="stat-pill">👤 <b>${escapeHtml(PROFILE.name)}</b>${PROFILE.role==='teacher'?' · professeur':''}</div>`));
   if(PROFILE.role==='student'){
-    right.appendChild(el(`<div class="stat-pill">🔥 <span class="mono">${PROFILE.streak||0}</span></div>`));
-    right.appendChild(el(`<div class="stat-pill">✦ XP <span class="mono">${PROFILE.xp||0}</span></div>`));
+    const psh = puzzleShown();
+    const pill = el(`<div class="stat-pill" style="cursor:pointer;" title="Mon puzzle">🧩 <span class="mono">${psh.pieces}/${PUZZLE_PIECES}</span></div>`);
+    pill.onclick = openPuzzle;
+    right.appendChild(pill);
   }
   const optionsWrap = el('<div style="position:relative;"></div>');
   const optionsBtn = el('<button class="btn ghost small">⚙️ Options ▾</button>');
@@ -945,8 +950,8 @@ function renderSpaceTabs(){
       if(state.space===key) return;
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
-      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
-      if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); GROUPS = await sbAllGroups(); }
+      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
+      if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
       if(key==='groupe'){
@@ -981,7 +986,7 @@ async function renderSidebar(){
     PERSO_LEVELS.forEach(lv=>{
       const b = el(`<button class="level-tab ${state.level===lv?'active':''}">${LEVEL_LABELS[lv]}</button>`);
       b.onclick = async ()=>{
-        state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode = false;
+        state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode = false;
         state.level = lv; state.lastPersoLevel = lv; state.lessonId=null; state.controlResult=null; state.quizResult=null;
         if(PROFILE.role==='student' && PROFILE.level!==lv){ PROFILE.level=lv; await sb.from('profiles').update({level:lv}).eq('id',SESSION.user.id); }
         render();
@@ -994,25 +999,31 @@ async function renderSidebar(){
         <span>🔁 Mots à revoir (${WEAK_WORDS.length})</span>
       </div>`);
       reviewBtn.style.cursor='pointer';
-      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
+      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
       box.appendChild(reviewBtn);
+      const puzzleBtn = el(`<div class="lesson-node ${state.puzzleMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);">
+        <span>🧩 Mon puzzle (${puzzleShown().pieces}/${PUZZLE_PIECES})</span>
+      </div>`);
+      puzzleBtn.style.cursor='pointer';
+      puzzleBtn.onclick = openPuzzle;
+      box.appendChild(puzzleBtn);
       const listenBtn = el(`<div class="lesson-node ${state.listenMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--celadon-dark);">
         <span>🎧 Mot entendu</span>
       </div>`);
       listenBtn.style.cursor='pointer';
-      listenBtn.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=null; state.listenMode=true; render(); };
+      listenBtn.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.globalQuizMode=false; state.lessonId=null; state.puzzleMode=false; state.listenMode=true; render(); };
       box.appendChild(listenBtn);
       const grammarBtn = el(`<div class="lesson-node ${state.grammarMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--seal);">
         <span>📒 Aide-mémoire grammaire (${GRAMMAR_SEEN.length})</span>
       </div>`);
       grammarBtn.style.cursor='pointer';
-      grammarBtn.onclick = ()=>{ state.listenMode=false; state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
+      grammarBtn.onclick = ()=>{ state.listenMode=false; state.puzzleMode=false; state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
       box.appendChild(grammarBtn);
       const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
         <span>🌐 Quiz global</span>
       </div>`);
       globalQuizBtn.style.cursor='pointer';
-      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
+      globalQuizBtn.onclick = ()=>{ state.globalQuizMode = true; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.lessonId=null; state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
       box.appendChild(globalQuizBtn);
     }
   } else {
@@ -1029,14 +1040,14 @@ async function renderSidebar(){
     const unlocked = isUnlockedSync(list, idx);
     const pr = PROGRESS[l.id];
     const done = pr && pr.control && pr.control.passed;
-    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && !state.listenMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
+    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && !state.listenMode && !state.puzzleMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
     const node = el(`<div class="lesson-node ${active?'active':''} ${unlocked?'':'locked'} ${done?'done':''}">
       <span style="display:flex;align-items:center;gap:10px;">
       ${done?'<span class="seal-badge">印</span>':unlocked?'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">'+(idx+1)+'</span>':'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">🔒</span>'}
       <span>${escapeHtml(l.title)}</span></span>
     </div>`);
     if(unlocked){
-      node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
+      node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
       node.style.cursor='pointer';
     }
     path.appendChild(node);
@@ -1049,6 +1060,10 @@ async function renderMain(){
   const card = el('<div class="main-card"></div>');
   if(state.space==='manage'){
     card.appendChild(await renderManage());
+    return card;
+  }
+  if(state.puzzleMode){
+    card.appendChild(renderPuzzle());
     return card;
   }
   if(state.listenMode){
@@ -1387,7 +1402,7 @@ async function askTeacherAbout(word, meanings, context){
   if(context) t += " (entendu : "+context+")";
   t += ". Est-ce que c'est bien ça ?";
   DM_DRAFTS[SESSION.user.id] = t;
-  state.space='dm'; state.lessonId=null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
+  state.space='dm'; state.lessonId=null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
   unsubscribeChat();
   ACTIVE_DM_STUDENT_ID = SESSION.user.id;
   DM = await sbDMMessages(ACTIVE_DM_STUDENT_ID);
@@ -1458,6 +1473,131 @@ function renderListen(){
     ask.onclick = ()=> askTeacherAbout(r.word, r.variants, LISTEN.note.trim());
     card.appendChild(ask);
     wrap.appendChild(card);
+  }
+  return wrap;
+}
+
+/* ===== Puzzle : une pièce par contrôle réussi, un cadeau par image terminée ===== */
+const PUZZLE_PIECES = 6;                 // 3 colonnes × 2 lignes
+const PUZZLE_COLS = 3, PUZZLE_ROWS = 2;
+const PUZZLE_ORDER = [4,1,3,0,5,2];      // ordre dans lequel les cases se dévoilent
+let GIFTS = [];                           // cadeaux déjà remis (élève : les siens ; professeure : tous)
+let ALL_GIFTS = [];
+let GIFTS_TABLE_OK = true;
+function puzzleCountFromRows(rows){ return (rows||[]).filter(r=>r && r.control && r.control.passed).length; }
+function puzzleCount(){ return puzzleCountFromRows(Object.values(PROGRESS||{})); }
+async function sbMyGifts(){
+  try{ const {data,error} = await sb.from('puzzle_gifts').select('*').eq('student_id', SESSION.user.id); if(error){ GIFTS_TABLE_OK=false; return []; } GIFTS_TABLE_OK=true; return data||[]; }catch(e){ GIFTS_TABLE_OK=false; return []; }
+}
+async function sbAllGifts(){
+  try{ const {data,error} = await sb.from('puzzle_gifts').select('*'); if(error){ GIFTS_TABLE_OK=false; return []; } GIFTS_TABLE_OK=true; return data||[]; }catch(e){ GIFTS_TABLE_OK=false; return []; }
+}
+async function sbMarkGiftSent(studentId, puzzleNo){
+  const r = await sb.from('puzzle_gifts').upsert({ student_id:studentId, puzzle_no:puzzleNo, sent_at:new Date().toISOString() }, { onConflict:'student_id,puzzle_no' });
+  return r && r.error ? r.error : null;
+}
+function giftsPending(studentId, rows){
+  const done = Math.floor(puzzleCountFromRows(rows) / PUZZLE_PIECES);
+  const sent = new Set((ALL_GIFTS||[]).filter(g=>g.student_id===studentId).map(g=>g.puzzle_no));
+  const out = []; for(let k=1;k<=done;k++){ if(!sent.has(k)) out.push(k); } return out;
+}
+// Dessins originaux (formes simples), générés ici : aucun fichier externe, aucun droit d'auteur
+function puzzleArt(i){
+  const svg = (inner, defs)=> `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" preserveAspectRatio="none"><defs>${defs||''}</defs>${inner}</svg>`;
+  if(i%4===0){   // Hanok au printemps
+    return svg(`
+      <rect width="600" height="400" fill="url(#sky)"/><circle cx="480" cy="92" r="40" fill="#ffd27a"/>
+      <polygon points="0,270 90,175 180,255 285,150 395,258 485,195 600,265 600,400 0,400" fill="#9db8c9"/>
+      <polygon points="0,305 150,245 320,295 470,240 600,295 600,400 0,400" fill="#7fae7a"/>
+      <rect y="332" width="600" height="68" fill="#cfe3a8"/>
+      <rect x="175" y="262" width="170" height="72" fill="#f3e6c8"/>
+      <rect x="175" y="262" width="170" height="8" fill="#8a5a3c"/>
+      <rect x="196" y="274" width="10" height="60" fill="#8a5a3c"/><rect x="258" y="274" width="10" height="60" fill="#8a5a3c"/><rect x="314" y="274" width="10" height="60" fill="#8a5a3c"/>
+      <rect x="208" y="280" width="48" height="54" fill="#e2c999"/><rect x="270" y="280" width="42" height="54" fill="#e2c999"/>
+      <path d="M118 266 Q260 206 402 266 Q380 276 358 268 L162 268 Q140 276 118 266Z" fill="#4d4a52"/>
+      <path d="M140 262 Q260 218 380 262" stroke="#6d6a74" stroke-width="3" fill="none"/>
+      <rect x="440" y="250" width="14" height="84" fill="#7a5238"/>
+      <circle cx="447" cy="232" r="46" fill="#f6b5c8"/><circle cx="415" cy="256" r="30" fill="#f2a2bb"/><circle cx="482" cy="258" r="30" fill="#f7c4d3"/>
+      <circle cx="120" cy="352" r="6" fill="#f6b5c8"/><circle cx="360" cy="360" r="5" fill="#f6b5c8"/><circle cx="520" cy="355" r="6" fill="#f2a2bb"/><circle cx="60" cy="372" r="5" fill="#f7c4d3"/>`,
+      `<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe3f2"/><stop offset="1" stop-color="#fdf1dc"/></linearGradient>`);
+  }
+  if(i%4===1){   // Nuit sur la ville
+    let stars=''; [[40,40],[120,70],[200,30],[260,90],[340,45],[400,110],[530,40],[570,120],[90,130],[310,20]].forEach(([x,y],k)=>{ stars+=`<circle cx="${x}" cy="${y}" r="${k%3?1.6:2.4}" fill="#fff6d6"/>`; });
+    let bl=''; [[20,290,60,110],[85,260,50,140],[140,300,70,100],[360,285,60,115],[425,250,55,150],[485,300,60,100],[550,270,50,130]].forEach(([x,y,w,h])=>{ bl+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#141c3a"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#win)"/>`; });
+    return svg(`
+      <rect width="600" height="400" fill="url(#night)"/>${stars}
+      <circle cx="470" cy="88" r="34" fill="#fff3c4"/><circle cx="486" cy="80" r="30" fill="#2a3470"/>
+      <path d="M0 330 Q150 255 300 315 T600 290 L600 400 L0 400Z" fill="#1b2a2c"/>
+      ${bl}
+      <rect x="296" y="150" width="8" height="150" fill="#cfd6e8"/><ellipse cx="300" cy="200" rx="22" ry="9" fill="#cfd6e8"/><rect x="292" y="140" width="16" height="14" fill="#e8ecf6"/><rect x="299" y="110" width="2" height="34" fill="#e8ecf6"/>
+      <circle cx="300" cy="106" r="4" fill="#ff7a7a"/>
+      <path d="M0 360 Q150 330 300 355 T600 345 L600 400 L0 400Z" fill="#101a1c"/>`,
+      `<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f1b3d"/><stop offset="1" stop-color="#4a4a8a"/></linearGradient>
+       <pattern id="win" width="14" height="16" patternUnits="userSpaceOnUse"><rect x="4" y="4" width="6" height="8" fill="#ffd97a"/></pattern>`);
+  }
+  if(i%4===2){   // Lanternes
+    let g=''; const cols=['#e4572e','#f3a712','#e84a7f','#2ab7a9','#f26b38','#ffd23f'];
+    [[0,70,600,110],[0,150,600,200]].forEach(([x1,y1,x2,y2],k)=>{ g+=`<path d="M${x1} ${y1} Q300 ${y1+70} ${x2} ${y2}" stroke="#3a2548" stroke-width="3" fill="none"/>`; });
+    for(let k=0;k<9;k++){ const x=30+k*68, y=82+Math.round(46*Math.sin(Math.PI*k/8))+ (k%2?6:0), c=cols[k%cols.length]; g+=`<line x1="${x}" y1="${y-14}" x2="${x}" y2="${y}" stroke="#3a2548" stroke-width="2"/><ellipse cx="${x}" cy="${y+30}" rx="22" ry="30" fill="${c}"/><ellipse cx="${x-7}" cy="${y+22}" rx="6" ry="12" fill="#ffffff" opacity=".28"/><rect x="${x-9}" y="${y-2}" width="18" height="6" fill="#5b3a29"/><rect x="${x-9}" y="${y+58}" width="18" height="6" fill="#5b3a29"/><line x1="${x}" y1="${y+64}" x2="${x}" y2="${y+84}" stroke="${c}" stroke-width="2"/>`; }
+    for(let k=0;k<7;k++){ const x=62+k*78, y=250+Math.round(30*Math.sin(Math.PI*k/6)), c=cols[(k+2)%cols.length]; g+=`<line x1="${x}" y1="${y-20}" x2="${x}" y2="${y}" stroke="#3a2548" stroke-width="2"/><ellipse cx="${x}" cy="${y+30}" rx="26" ry="34" fill="${c}"/><ellipse cx="${x-9}" cy="${y+20}" rx="7" ry="14" fill="#ffffff" opacity=".28"/><rect x="${x-10}" y="${y-2}" width="20" height="7" fill="#5b3a29"/><rect x="${x-10}" y="${y+62}" width="20" height="7" fill="#5b3a29"/>`; }
+    return svg(`<rect width="600" height="400" fill="url(#dusk)"/>${g}<path d="M0 372 Q300 340 600 372 L600 400 L0 400Z" fill="#1f1230"/>`,
+      `<linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1747"/><stop offset=".6" stop-color="#6b2c5b"/><stop offset="1" stop-color="#e48a5a"/></linearGradient>`);
+  }
+  // Patchwork (bojagi)
+  const pal=['#d94f5c','#f2a541','#3a8fb7','#7bb661','#8e5ea2','#f5d76e','#2a9d8f','#e76f51'];
+  const xs=[0,110,260,350,470,600], ys=[0,95,200,300,400]; let q=''; let c=0;
+  for(let r=0;r<ys.length-1;r++){ for(let k=0;k<xs.length-1;k++){ const col=pal[(k*3 + r*5 + k*r*2) % pal.length]; c++; const x=xs[k],y=ys[r],w=xs[k+1]-x,h=ys[r+1]-y;
+    q+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${col}"/><rect x="${x+9}" y="${y+9}" width="${w-18}" height="${h-18}" fill="#ffffff" opacity=".16"/><rect x="${x+1.5}" y="${y+1.5}" width="${w-3}" height="${h-3}" fill="none" stroke="#fff6e8" stroke-width="3" stroke-dasharray="9 6"/>`; } }
+  return svg(q);
+}
+function puzzleArtUrl(i){ return 'data:image/svg+xml;utf8,' + encodeURIComponent(puzzleArt(i)); }
+const PUZZLE_ART_COUNT = 4;
+function puzzleShown(){
+  const n = puzzleCount(), done = Math.floor(n/PUZZLE_PIECES), cur = n % PUZZLE_PIECES;
+  const complete = (cur===0 && n>0);
+  return { n, done, pieces: complete ? PUZZLE_PIECES : cur, art: (complete ? done-1 : done) % PUZZLE_ART_COUNT, number: complete ? done : done+1, complete };
+}
+function openPuzzle(){
+  state.space='perso'; state.level = state.lastPersoLevel||'debutant'; state.lessonId=null;
+  state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.puzzleMode=true;
+  unsubscribeChat(); render();
+}
+function puzzleGrid(artIndex, pieces, small){
+  const url = puzzleArtUrl(artIndex);
+  const grid = el(`<div class="puzzle-grid" style="display:grid;grid-template-columns:repeat(${PUZZLE_COLS},1fr);gap:${small?2:4}px;max-width:${small?150:420}px;"></div>`);
+  const shown = new Set(PUZZLE_ORDER.slice(0, pieces));
+  for(let i=0;i<PUZZLE_PIECES;i++){
+    const col=i%PUZZLE_COLS, row=Math.floor(i/PUZZLE_COLS);
+    const x = PUZZLE_COLS>1 ? col*100/(PUZZLE_COLS-1) : 0, y = PUZZLE_ROWS>1 ? row*100/(PUZZLE_ROWS-1) : 0;
+    const on = shown.has(i);
+    const t = el(on
+      ? `<div class="puzzle-tile on" style="aspect-ratio:1/1;border-radius:6px;background-image:url('${url}');background-size:${PUZZLE_COLS*100}% ${PUZZLE_ROWS*100}%;background-position:${x}% ${y}%;border:1.5px solid var(--line);"></div>`
+      : `<div class="puzzle-tile off" style="aspect-ratio:1/1;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:${small?10:22}px;">${small?'':'🧩'}</div>`);
+    grid.appendChild(t);
+  }
+  return grid;
+}
+function renderPuzzle(){
+  const wrap = el('<div></div>');
+  wrap.appendChild(el('<h2 style="margin:0 0 6px;">🧩 Mon puzzle</h2>'));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Chaque contrôle réussi te donne une pièce. Quand l\'image est complète, ta professeur t\'envoie un petit cadeau 🎁.</div>'));
+  if(!GIFTS_TABLE_OK) wrap.appendChild(el('<div class="note" style="border-color:var(--seal);font-size:12px;margin-bottom:10px;">Le suivi des cadeaux n\'est pas encore activé (migration-puzzle.sql). Ton puzzle fonctionne quand même.</div>'));
+  const sh = puzzleShown();
+  wrap.appendChild(el(`<div style="font-size:13px;margin-bottom:8px;"><b>Image ${sh.number}</b> · ${sh.pieces}/${PUZZLE_PIECES} pièces${sh.complete?' — terminée !':sh.n===0?' — réussis un contrôle pour gagner ta première pièce.':` — encore ${PUZZLE_PIECES-sh.pieces} contrôle${PUZZLE_PIECES-sh.pieces>1?'s':''} réussi${PUZZLE_PIECES-sh.pieces>1?'s':''}.`}</div>`));
+  wrap.appendChild(puzzleGrid(sh.art, sh.pieces, false));
+  const sent = (GIFTS||[]).some(g=>g.puzzle_no===sh.number);
+  if(sh.complete) wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-top:12px;">${sent?'🎁 Ta professeur t\'a remis le cadeau de cette image. Profites-en !':'🎉 Bravo, image terminée ! Ta professeur est prévenue : elle t\'enverra un petit cadeau.'}</div>`));
+  if(sh.done > (sh.complete?1:0)){
+    const hist = el('<div class="section-block" style="margin-top:22px;"><h3>Images terminées</h3></div>');
+    const row = el('<div style="display:flex;gap:14px;flex-wrap:wrap;"></div>');
+    const last = sh.complete ? sh.done-1 : sh.done;
+    for(let k=1;k<=last;k++){
+      const cell = el(`<div style="font-size:11px;color:var(--ink-soft);text-align:center;"></div>`);
+      cell.appendChild(puzzleGrid((k-1)%PUZZLE_ART_COUNT, PUZZLE_PIECES, true));
+      cell.appendChild(el(`<div style="margin-top:4px;">Image ${k}${(GIFTS||[]).some(g=>g.puzzle_no===k)?' · 🎁 remis':' · 🎁 à venir'}</div>`));
+      row.appendChild(cell);
+    }
+    hist.appendChild(row); wrap.appendChild(hist);
   }
   return wrap;
 }
@@ -1999,16 +2139,117 @@ function renderQuiz(lesson){
   return wrap;
 }
 
+/* ---------- Contrôle : on ne quitte pas la page ---------- */
+const CONTROL_MAX_LEAVES = 3;            // à la 3e sortie, le contrôle est annulé
+const CONTROL_MIN_AWAY_MS = 1500;        // une sortie plus courte n'est pas comptée
+const CONTROL_GUARD = { phase:'idle', leaves:0, awayAt:null, awaySecs:0, view:null, banner:'', reasons:[] };
+let TAB_CHANNEL = null; const TAB_ID = Math.random().toString(36).slice(2);
+try{
+  if(typeof BroadcastChannel!=='undefined'){
+    TAB_CHANNEL = new BroadcastChannel('compagnon-coreen-tabs');
+    TAB_CHANNEL.onmessage = (e)=>{
+      const m = e.data||{}; if(m.from===TAB_ID) return;
+      if(m.type==='ping') TAB_CHANNEL.postMessage({type:'pong', from:TAB_ID});
+      if(m.type==='hello' && CONTROL_GUARD.phase==='active'){ controlGuardAway('autre onglet ouvert'); controlGuardBack(true); }
+    };
+    TAB_CHANNEL.postMessage({type:'hello', from:TAB_ID});
+  }
+}catch(e){ TAB_CHANNEL = null; }
+function controlOtherTabOpen(){
+  return new Promise(resolve=>{
+    if(!TAB_CHANNEL){ resolve(false); return; }
+    let found = false;
+    const h = (e)=>{ const m=e.data||{}; if(m.type==='pong' && m.from!==TAB_ID) found = true; };
+    TAB_CHANNEL.addEventListener('message', h);
+    try{ TAB_CHANNEL.postMessage({type:'ping', from:TAB_ID}); }catch(e){}
+    setTimeout(()=>{ TAB_CHANNEL.removeEventListener('message', h); resolve(found); }, 400);
+  });
+}
+function controlGuardReset(){ Object.assign(CONTROL_GUARD, { phase:'idle', leaves:0, awayAt:null, awaySecs:0, view:null, banner:'', reasons:[] }); }
+function controlGuardAway(reason){
+  if(CONTROL_GUARD.phase!=='active' || CONTROL_GUARD.awayAt!==null) return;
+  CONTROL_GUARD.awayAt = Date.now(); CONTROL_GUARD.pendingReason = reason;
+}
+function controlGuardBack(force){
+  const g = CONTROL_GUARD;
+  if(g.phase!=='active' || g.awayAt===null) return false;
+  const dur = Date.now() - g.awayAt; g.awayAt = null;
+  if(!force && dur < CONTROL_MIN_AWAY_MS) return false;
+  g.leaves++; g.awaySecs += Math.round(dur/1000); g.reasons.push(g.pendingReason||'page quittée');
+  if(g.leaves >= CONTROL_MAX_LEAVES){ controlGuardCancel(); }
+  else { g.banner = `⚠️ Tu as quitté la page du contrôle (${g.leaves}/${CONTROL_MAX_LEAVES}). À la ${CONTROL_MAX_LEAVES}ᵉ sortie, le contrôle est annulé.`; if(typeof render==='function') render(); }
+  return true;
+}
+async function controlGuardCancel(){
+  const g = CONTROL_GUARD, v = g.view || {};
+  const lessonId = v.lessonId; const leaves = g.leaves, secs = g.awaySecs;
+  g.phase = 'cancelled'; g.banner = '';
+  state.controlResult = { cancelled:true, leaves, secs };
+  if(lessonId) await sbRecordControl(lessonId, { cancelled:true, leaves, secs });
+  render();
+}
+async function sbRecordControl(lessonId, info){
+  // Cumule les sorties de page dans la progression : la professeure les voit dans son tableau de bord
+  const prev = (PROGRESS[lessonId] && PROGRESS[lessonId].control) || {};
+  const flags = Object.assign({ exits:0, cancelled:0, secs:0 }, prev.flags||{});
+  flags.exits += info.leaves||0; flags.secs += info.secs||0; if(info.cancelled) flags.cancelled += 1; flags.last = new Date().toISOString().slice(0,10);
+  const ctl = Object.assign({}, prev, { attempts:(prev.attempts||0)+(info.cancelled?1:0), flags });
+  if(info.cancelled){ ctl.date = new Date().toISOString().slice(0,10); }
+  if(prev.passed===undefined) ctl.passed = false;
+  if(prev.score===undefined) ctl.score = 0;
+  await sbUpsertProgress(lessonId, { control: ctl });
+}
+function controlViewMatches(){
+  const v = CONTROL_GUARD.view; if(!v) return false;
+  return state.tab==='controle' && state.space===v.space && state.level===v.level && (state.lessonId||null)===(v.lessonIdState||null)
+    && !state.reviewMode && !state.grammarMode && !state.listenMode && !state.globalQuizMode && !state.puzzleMode;
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) controlGuardAway('autre onglet ou application'); else controlGuardBack(); });
+window.addEventListener('blur', ()=>{ controlGuardAway('autre fenêtre'); });
+window.addEventListener('focus', ()=>{ controlGuardBack(); });
+// Appelé à chaque affichage : si l'élève quitte l'écran du contrôle (autre onglet de l'outil, autre leçon…) en plein contrôle, ça compte comme une sortie
+function controlGuardCheckView(){
+  const g = CONTROL_GUARD;
+  if(g.phase==='active' && !controlViewMatches()){
+    g.leaves++; g.reasons.push("autre écran de l'outil");
+    if(g.leaves>=CONTROL_MAX_LEAVES){ controlGuardCancel(); return true; }
+    // le contrôle repart de zéro : on ne laisse pas voir le cours puis revenir sur les mêmes questions
+    const lessonId = g.view && g.view.lessonId; const lv = g.leaves;
+    controlGuardReset(); g.leaves = lv; g.phase='idle'; g.banner = `⚠️ Tu as quitté l'écran du contrôle (${lv}/${CONTROL_MAX_LEAVES}). Les questions ont changé.`;
+    state.controlAnswers = {};
+    for(const k of Object.keys(LESSONS_CACHE)){ (LESSONS_CACHE[k]||[]).forEach(l=>{ delete l._control; }); }
+    g.carry = lv;
+  }
+  return false;
+}
+
 function renderControle(lesson, list, idx){
-  const wrap = el('<div></div>');
+  const wrap = el('<div style="user-select:none;-webkit-user-select:none;"></div>');
+  ['copy','cut','paste','contextmenu','dragstart'].forEach(ev=> wrap.addEventListener(ev, e=>e.preventDefault()));
+  const g = CONTROL_GUARD;
   if(state.controlResult){
     const r = state.controlResult;
+    if(g.phase==='active') controlGuardReset();
     const box = el('<div class="result-box"></div>');
+    if(r.cancelled){
+      box.appendChild(el(`<div class="score mono" style="font-size:22px;">⛔</div>`));
+      box.appendChild(el(`<div style="margin:8px 0 16px;"><b>Contrôle annulé.</b> Tu as quitté la page ${r.leaves} fois pendant le contrôle. Ta professeur le voit, pour t'aider à voir où ça coince. Il faut le refaire en restant sur la page.</div>`));
+      const retry = el('<button class="btn celadon">Recommencer le contrôle</button>');
+      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; delete lesson._control; controlGuardReset(); render(); };
+      box.appendChild(retry); wrap.appendChild(box);
+      return wrap;
+    }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
     box.appendChild(el(`<div class="score mono">${r.correct}/${r.total}</div>`));
-    box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi — la leçon suivante est débloquée.":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
+    box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi, bravo !":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
+    if(r.newPiece){
+      box.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">🧩 <b>Nouvelle pièce de puzzle !</b>${r.puzzleDone?' 🎉 L\'image est complète : ta professeur va t\'envoyer un petit cadeau.':''}</div>`));
+      const see = el('<button class="btn ghost small" style="margin-bottom:12px;">Voir mon puzzle</button>');
+      see.onclick = ()=>{ openPuzzle(); };
+      box.appendChild(see);
+    }
     const retry = el('<button class="btn celadon">Retenter le contrôle</button>');
-    retry.onclick = ()=>{ state.controlResult=null; delete lesson._control; render(); };
+    retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; delete lesson._control; controlGuardReset(); render(); };
     box.appendChild(retry); wrap.appendChild(box);
     if(r.wrong.length){
       const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
@@ -2017,7 +2258,29 @@ function renderControle(lesson, list, idx){
     }
     return wrap;
   }
+
+  // Avant de commencer : règle du jeu + vérification qu'il n'y a pas un autre onglet ouvert
+  if(g.phase!=='active'){
+    const intro = el('<div></div>');
+    if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
+    intro.appendChild(el(`<div class="note" style="margin-bottom:14px;">Ce contrôle sert à voir ce que tu as <b>vraiment</b> retenu, pour que ta professeur puisse revenir sur ce qui coince. Pour ça :<br>• reste sur cette page pendant tout le contrôle (pas d'autre onglet ni d'autre application) ;<br>• n'ouvre l'outil que dans <b>un seul</b> onglet ;<br>• après ${CONTROL_MAX_LEAVES} sorties, le contrôle est annulé et ta professeur le voit.<br>Réussi, il te donne une pièce de puzzle 🧩.</div>`));
+    if(g.phase==='blocked') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">L'outil est déjà ouvert dans un autre onglet. Ferme-le, puis reviens ici.</div>`));
+    const start = el(`<button class="btn seal" ${g.phase==='checking'?'disabled':''}>${g.phase==='checking'?'Vérification…':'Commencer le contrôle'}</button>`);
+    start.onclick = async ()=>{
+      g.phase = 'checking'; render();
+      const other = await controlOtherTabOpen();
+      if(other){ g.phase = 'blocked'; render(); return; }
+      const carry = g.carry||0;
+      g.phase = 'active'; g.leaves = carry; g.carry = 0; g.awayAt = null; g.awaySecs = g.awaySecs||0; g.banner = g.banner||'';
+      g.view = { space:state.space, level:state.level, lessonIdState:state.lessonId||null, lessonId:lesson.id };
+      render();
+    };
+    intro.appendChild(start);
+    return intro;
+  }
+
   const qs = lesson._control || (lesson._control = buildMCQ(lesson, 10));
+  if(g.banner){ wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
   qs.forEach(q=>{
     const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
     const opts = el('<div class="opt-list"></div>');
@@ -2031,14 +2294,22 @@ function renderControle(lesson, list, idx){
   const submit = el('<button class="btn seal">Valider le contrôle</button>');
   submit.onclick = async ()=>{
     let correct=0; const wrong=[];
-    qs.forEach(q=>{ const g=state.controlAnswers[q.id]; if(g===q.answer) correct++; else wrong.push({kr:q.kr, given:g, answer:q.answer}); });
-    const total=qs.length, ratio=correct/total, passed = ratio >= (lesson.pass_score||0.8);
-    state.controlResult = {correct, total, passed, wrong};
-    const prevAttempts = (PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.attempts) || 0;
-    await sbUpsertProgress(lesson.id, {control:{passed, score:ratio, date:new Date().toISOString().slice(0,10), attempts:prevAttempts+1}});
-    if(passed && PROFILE.role==='student'){
-      PROFILE.xp = (PROFILE.xp||0)+20; PROFILE.streak=(PROFILE.streak||0)+1;
-      await sb.from('profiles').update({xp:PROFILE.xp, streak:PROFILE.streak}).eq('id', SESSION.user.id);
+    qs.forEach(q=>{ const gv=state.controlAnswers[q.id]; if(gv===q.answer) correct++; else wrong.push({kr:q.kr, given:gv, answer:q.answer}); });
+    const total=qs.length, ratio=correct/total, passedNow = ratio >= (lesson.pass_score||0.8);
+    const prevCtl = (PROGRESS[lesson.id] && PROGRESS[lesson.id].control) || {};
+    const wasPassed = !!prevCtl.passed;
+    const piecesBefore = (PROFILE.role==='student') ? puzzleCount() : 0;
+    // « réussi » reste acquis : rater un nouvel essai n'enlève ni la réussite ni la pièce
+    const passed = passedNow || wasPassed;
+    const flags = Object.assign({ exits:0, cancelled:0, secs:0 }, prevCtl.flags||{});
+    flags.exits += g.leaves; flags.secs += g.awaySecs; if(g.leaves) flags.last = new Date().toISOString().slice(0,10);
+    const ctl = { passed, score: Math.max(prevCtl.score||0, ratio), last_score: ratio, date:new Date().toISOString().slice(0,10), attempts:(prevCtl.attempts||0)+1, flags };
+    controlGuardReset();
+    state.controlResult = {correct, total, passed:passedNow, wrong};
+    await sbUpsertProgress(lesson.id, {control: ctl});
+    if(passedNow && PROFILE.role==='student'){
+      const after = puzzleCount();
+      if(after>piecesBefore){ state.controlResult.newPiece = true; state.controlResult.puzzleDone = (after % PUZZLE_PIECES === 0); }
     }
     render();
   };
@@ -2788,7 +3059,7 @@ async function renderDashboard(){
       createBox.querySelector('#cs-email').value='';
       createBox.querySelector('#cs-pass').value='';
       ALL_PROFILES = await sbAllProfiles();
-      ALL_PROGRESS = await sbAllProgress();
+      ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts();
       render();
     }catch(e){
       status.textContent = 'Erreur de connexion à la fonction.';
@@ -2846,7 +3117,7 @@ async function renderDashboard(){
     const expanded = !!state.dashboardExpanded[p.id];
     const card = el(`<div class="item-card" style="text-align:left;margin-bottom:12px;padding:16px 18px;">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
-        <div><b style="font-size:15px;">${escapeHtml(p.name)}</b> <span style="font-size:12px;color:var(--ink-soft);">— ${LEVEL_LABELS[p.level]||'niveau non défini'} · 🔥${p.streak||0} · ✦${p.xp||0} XP</span></div>
+        <div><b style="font-size:15px;">${escapeHtml(p.name)}</b> <span style="font-size:12px;color:var(--ink-soft);">— ${LEVEL_LABELS[p.level]||'niveau non défini'} · 🧩 ${puzzleCountFromRows(rows)} pièce${puzzleCountFromRows(rows)>1?'s':''}${(()=>{ const ex=rows.reduce((a,r)=>a+((r.control&&r.control.flags&&r.control.flags.exits)||0),0), ca=rows.reduce((a,r)=>a+((r.control&&r.control.flags&&r.control.flags.cancelled)||0),0); return (ex||ca)?` · <span style="color:var(--seal);">⚠️ ${ex} sortie${ex>1?'s':''} de page pendant les contrôles${ca?` (${ca} annulé${ca>1?'s':''})`:''}</span>`:''; })()}</span></div>
         <span class="mono" style="font-size:12px;">${expanded?'▲':'▼'} ${rows.length} leçon(s)</span>
       </div>
     </div>`);
@@ -2858,6 +3129,19 @@ async function renderDashboard(){
     const dmBtn = el(`<button class="btn ghost small" style="margin-left:6px;">💬 Message${isThreadUnread(p.id)?' <span style="color:var(--seal);">●</span>':''}</button>`);
     dmBtn.onclick = (e)=>{ e.stopPropagation(); enterInbox(p.id); };
     header.appendChild(dmBtn);
+    const pend = giftsPending(p.id, rows);
+    if(pend.length){
+      const giftBtn = el(`<button class="btn small" style="margin-left:6px;background:var(--gold);color:#fff;">🎁 Cadeau à envoyer${pend.length>1?' ('+pend.length+')':''}</button>`);
+      giftBtn.onclick = async (e)=>{
+        e.stopPropagation();
+        if(!confirm(`${p.name} a terminé ${pend.length>1?pend.length+' images':'une image'} du puzzle. Marquer le cadeau n°${pend[0]} comme remis (tu l'envoies ou le lui donnes toi-même) ?`)) return;
+        giftBtn.disabled = true;
+        const err = await sbMarkGiftSent(p.id, pend[0]);
+        if(err){ alert("Impossible d'enregistrer : " + err.message + " (as-tu lancé migration-puzzle.sql ?)"); giftBtn.disabled=false; return; }
+        ALL_GIFTS = await sbAllGifts(); render();
+      };
+      header.appendChild(giftBtn);
+    }
     const deleteStudentBtn = el('<button class="btn ghost small" style="margin-left:6px;color:var(--danger);">🗑️ Supprimer</button>');
     deleteStudentBtn.onclick = async (e)=>{
       e.stopPropagation();
@@ -2870,7 +3154,7 @@ async function renderDashboard(){
         return;
       }
       ALL_PROFILES = await sbAllProfiles();
-      ALL_PROGRESS = await sbAllProgress();
+      ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts();
       render();
     };
     header.appendChild(deleteStudentBtn);
@@ -2897,7 +3181,7 @@ async function renderDashboard(){
           const meta = allLessonsFlat[r.lesson_id] || {title:r.lesson_id, level:''};
           const ex = r.exercises ? `${r.exercises.correct}/${r.exercises.total}` : '—';
           const qz = r.quiz ? `Quiz ${r.quiz.correct}/${r.quiz.total}` : '';
-          const ct = r.control ? `Contrôle ${Math.round(r.control.score*100)}% ${r.control.passed?'✅':'❌'} (${r.control.attempts} essai${r.control.attempts>1?'s':''})` : '';
+          const cf = r.control && r.control.flags; const ct = r.control ? `Contrôle ${Math.round((r.control.score||0)*100)}% ${r.control.passed?'✅':'❌'} (${r.control.attempts||0} essai${(r.control.attempts||0)>1?'s':''})${cf&&(cf.exits||cf.cancelled)?` ⚠️ ${cf.exits} sortie${cf.exits>1?'s':''} de page${cf.cancelled?`, ${cf.cancelled} annulé${cf.cancelled>1?'s':''}`:''}${cf.secs?` (${cf.secs} s hors page)`:''}`:''}` : '';
           table.appendChild(el(`<div class="vocab-row"><span>${escapeHtml(meta.title)} <span style="color:var(--ink-soft);font-size:11px;">(${LEVEL_LABELS[meta.level]||''})</span></span><span>${ex}</span><span>${[qz,ct].filter(Boolean).join(' · ')||'—'}</span></div>`));
         });
         card.appendChild(table);
@@ -3258,7 +3542,7 @@ async function renderDMPanel(){
 
 /* ---- Boîte de réception de la prof : une conversation par élève ---- */
 async function enterInbox(preferredStudentId){
-  state.space = 'inbox'; state.lessonId = null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode = false;
+  state.space = 'inbox'; state.lessonId = null; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode = false;
   unsubscribeChat();
   ALL_PROFILES = await sbAllProfiles();
   await loadDMState();
