@@ -1171,22 +1171,102 @@ function renderCours(lesson){
   return wrap;
 }
 
+/* ---- À mémoriser : on trie ce que la professeure a mis dans le cours ---- */
+// Renvoie { kind:'word'|'grammar'|'phrase'|'note', kr, fr, rom }
+function classifyStudyItem(v){
+  let kr = String(v.kr||'').trim(), fr = String(v.fr||'').trim(); const rom = v.rom||'';
+  const hasKo = t => /[가-힣]/.test(t);
+  const hasLatin = t => /[A-Za-zÀ-ÿ]{3,}/.test(t);
+  // « (exception) 춥다 » : l'annotation entre parenthèses passe du côté du sens
+  const ann = [];
+  kr = kr.replace(/\(([^()]*)\)/g, (m, inner)=>{ if(hasLatin(inner) && !hasKo(inner)){ ann.push(inner.trim()); return ' '; } return m; }).replace(/\s+/g,' ').trim();
+  if(ann.length) fr = (fr ? fr + ' ' : '') + '(' + ann.join(', ') + ')';
+  if(kr && !hasKo(kr) && fr && hasKo(fr) && !hasLatin(fr)){ const t = kr; kr = fr; fr = t; }   // entrée écrite à l'envers (« nominalisation = 것 ») : on la remet dans le bon sens
+  if(!kr || !hasKo(kr) || hasLatin(kr)) return { kind:'note', kr, fr, rom };       // explication en français : sa place est dans le Cours
+  if(/[ㄱ-ㅎ]|[가-힣]\/[가-힣ㄱ-ㅎ]|~|…|\.\.\.|\+/.test(kr)) return { kind:'grammar', kr, fr, rom };   // ㄹ/을, 은/ㄴ, ~…
+  const tokens = kr.split(/\s+/).length;
+  if(/[.?!]$/.test(kr) || tokens>=3 || kr.length>14) return { kind:'phrase', kr, fr, rom };
+  return { kind:'word', kr, fr, rom };
+}
+// Répare ce que l'analyse du cours a pu abîmer, et sort les petites gloses « mot(sens) » en cartes à part.
+function expandStudyItem(v){
+  const out = [];
+  let kr = String(v.kr||'').trim(), fr = String(v.fr||'').trim(); const rom = v.rom||'';
+  const KO = '[\\uAC00-\\uD7A3]', LAT = "[A-Za-zÀ-ÿ' ]";
+  const hasKo = t => /[가-힣]/.test(t);
+  kr = kr.replace(/^\s*(\d+[.)]|[*•\-–])\s*/, '').trim();                       // « 1. », « * » en début de ligne
+  // « 볼 것이 많아요. (=구경할 곳이 많아요.) … » coupé en « 볼 것이 많아요. ( » / « 구경할 곳이 많아요.) … »
+  if(/\(\s*$/.test(kr) && fr.indexOf(')')>-1){
+    const close = fr.indexOf(')');
+    const alt = fr.slice(0, close).replace(/^\s*=\s*/, '').trim();
+    let rest = fr.slice(close+1).trim();
+    kr = kr.replace(/\(\s*$/, '').trim();
+    let tail = rest.match(new RegExp('(?:^|\\s)(' + KO + '+)\\s+(' + LAT + '{3,})$'));
+    if(tail){ rest = rest.slice(0, tail.index).trim(); out.push({ kind:'word', kr:tail[1], fr:tail[2].trim(), rom:'' }); }
+    if(rest && hasKo(rest)) kr = (kr + ' ' + rest).trim();
+    fr = '';
+    if(alt && hasKo(alt)) out.push({ kind:'phrase', kr:alt, fr:'', rom:'' });
+  }
+  // « 킹크랩, 게 crab, 새우 » + « crevette » : une liste de mots avec leurs sens
+  if(kr.indexOf(',')>-1 && /[A-Za-zÀ-ÿ]{3,}/.test(kr) && hasKo(kr) && !/[().?!]/.test(kr)){
+    const parts = kr.split(',').map(x=>x.trim()).filter(Boolean);
+    parts.forEach((part, i)=>{
+      const m = part.match(new RegExp('^(' + KO + '[\\uAC00-\\uD7A3 ]*?)\\s+(' + LAT + '+)$'));
+      if(m) out.push({ kind:'word', kr:m[1].trim(), fr:m[2].trim(), rom:'' });
+      else if(new RegExp('^' + KO + '[\\uAC00-\\uD7A3 ]*$').test(part)) out.push({ kind:'word', kr:part, fr:(i===parts.length-1 && fr && !hasKo(fr)) ? fr : '', rom:'' });
+    });
+    return out;
+  }
+  // « 순대국, 감(kaki), 배(poire) 먹어 봤어요. » : les gloses deviennent des cartes, la phrase reste propre
+  const gl = [];
+  kr = kr.replace(new RegExp('(' + KO + '+)\\(\\s*(' + LAT + '{2,})\\s*\\)', 'g'), (m, w, g2)=>{ gl.push({ kind:'word', kr:w, fr:g2.trim(), rom:'' }); return w; });
+  gl.forEach(x=>out.push(x));
+  const c = classifyStudyItem({ kr, fr, rom });
+  if(c.kind!=='note') out.push(c);
+  return out;
+}
+function lessonStudyGroups(lesson){
+  const out = { word:[], grammar:[], phrase:[], note:[] };
+  const seen = new Set();
+  const add = (c)=>{ const k = c.kind + '|' + c.kr; if(seen.has(k)) return; seen.add(k); out[c.kind].push(c); };
+  (lesson.vowels||[]).forEach(v=> add({kind:'word', kr:v.kr, fr:v.fr, rom:v.rom||''}));
+  (lesson.vocab||[]).forEach(v=> expandStudyItem(v).forEach(add));
+  // un mot sans sens donné par la professeure mais déjà présent avec un sens : on garde celui qui a un sens
+  out.word = out.word.filter(w=> w.fr || !out.word.some(o=> o!==w && o.kr===w.kr && o.fr));
+  return out;
+}
 function renderMemorize(lesson){
   const wrap = el('<div></div>');
-  const pool = (lesson.vowels||[]).concat(lesson.vocab||[]);
-  if(pool.length===0){ wrap.appendChild(el(`<div class="empty-state">Rien à mémoriser ici.</div>`)); return wrap; }
-  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Clique sur une carte pour révéler le sens.</div>'));
-  const grid = el('<div class="card-grid"></div>');
-  pool.forEach(v=>{
-    const c = el(`<div class="flip-card"><div><span class="kr">${v.kr}</span></div></div>`);
+  const g = lessonStudyGroups(lesson);
+  if(g.word.length+g.grammar.length+g.phrase.length===0){ wrap.appendChild(el(`<div class="empty-state">Rien à mémoriser ici.</div>`)); return wrap; }
+  const makeCard = (v)=>{
+    const c = el(`<div class="flip-card"><div><span class="kr">${escapeHtml(v.kr)}</span></div></div>`);
     let revealed=false;
     c.onclick = ()=>{
       revealed = !revealed; c.classList.toggle('revealed', revealed);
-      c.querySelector('div').innerHTML = revealed ? `<span class="kr">${v.kr}</span>${v.rom?`<div class="meaning mono">${v.rom}</div>`:''}<div class="meaning">${v.fr}</div>` : `<span class="kr">${v.kr}</span>`;
+      c.querySelector('div').innerHTML = revealed ? `<span class="kr">${escapeHtml(v.kr)}</span>${v.rom?`<div class="meaning mono">${escapeHtml(v.rom)}</div>`:''}<div class="meaning">${v.fr?escapeHtml(v.fr):'<span style="color:var(--ink-soft);font-size:12px;">pas de traduction dans le cours</span>'}</div>` : `<span class="kr">${escapeHtml(v.kr)}</span>`;
     };
-    grid.appendChild(c);
-  });
-  wrap.appendChild(grid);
+    return c;
+  };
+  if(g.word.length){
+    wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Clique sur une carte pour révéler le sens.</div>'));
+    const grid = el('<div class="card-grid"></div>'); g.word.forEach(v=>grid.appendChild(makeCard(v))); wrap.appendChild(grid);
+  }
+  const fold = (key, title, hint, items)=>{
+    if(!items.length) return;
+    const open = !!(state.memoOpen && state.memoOpen[key]);
+    const box = el('<div class="section-block" style="margin-top:22px;"></div>');
+    const head = el(`<button type="button" class="btn ghost small" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;"><span>${title} <span style="color:var(--ink-soft);font-weight:400;">(${items.length})</span></span><span>${open?'▴':'▾'}</span></button>`);
+    head.onclick = ()=>{ state.memoOpen = Object.assign({}, state.memoOpen||{}, {[key]:!open}); render(); };
+    box.appendChild(head);
+    if(open){
+      box.appendChild(el(`<div class="note" style="margin:10px 0;font-size:12.5px;">${hint}</div>`));
+      const grid = el('<div class="card-grid"></div>'); items.forEach(v=>grid.appendChild(makeCard(v))); box.appendChild(grid);
+    }
+    wrap.appendChild(box);
+  };
+  fold('grammar', '🧩 Grammaire du cours', 'Les structures vues en cours. Retrouve aussi celles que tu croises dans ton 📒 Aide-mémoire grammaire.', g.grammar);
+  fold('phrase', '💬 Phrases du cours', 'Les phrases entières du cours, pour t\'entraîner à les comprendre.', g.phrase);
   return wrap;
 }
 
