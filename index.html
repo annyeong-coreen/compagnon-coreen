@@ -1453,19 +1453,57 @@ function normFr(s){
 // Réponse acceptée si elle correspond à la traduction entière OU à l'une de ses
 // variantes ("être changé / être modifié" -> l'une ou l'autre), sans tenir
 // compte des accents, majuscules ni de la ponctuation.
-function frAnswerOk(input, expected){
+function frAnswerLevel(input, expected){
   const exp = (expected||'').trim();
   if(/^[\d\s.,']+$/.test(exp)){            // réponse numérique : seuls les chiffres comptent
     const digits = x=>(x||'').replace(/\D/g,'');
-    return digits(input)!=='' && digits(input)===digits(exp);
+    return (digits(input)!=='' && digits(input)===digits(exp)) ? 'exact' : 'no';
   }
   const given = normFr(input);
-  if(!given) return false;
+  if(!given) return 'no';
   const alts = [expected].concat((expected||'').split(/[,;\/]/)).map(normFr).filter(Boolean);
   const noParen = normFr((expected||'').replace(/\([^)]*\)/g,''));
   if(noParen) alts.push(noParen);
-  return alts.includes(given);
+  // notes entre crochets de la professeure : "3 [trois] fois" -> "3 fois" ou "trois fois"
+  if(/\[[^\]]*\]/.test(expected||'')){
+    alts.push(normFr((expected||'').replace(/\s*\[[^\]]*\]/g,'')));
+    alts.push(normFr((expected||'').replace(/[\[\]]/g,'')));
+    alts.push(normFr((expected||'').replace(/\S+\s*\[([^\]]*)\]/g,'$1')));   // « 3 [trois] » -> « trois »
+  }
+  if(alts.includes(given)) return 'exact';
+  // Tolérance pour l'orthographe (dyslexie comprise) : petites fautes, lettres inversées,
+  // petits mots oubliés. Jamais sur un chiffre ni sur une négation (le sens changerait).
+  const SMALL = new Set(['le','la','les','l','un','une','des','de','du','d','a','au','aux','et','en']);
+  const NEG = ['ne','pas','jamais','plus','non','sans','rien'];
+  const core = x=> x.replace(/'/g,' ').split(' ').filter(w=>w && !SMALL.has(w)).join(' ');
+  const nums = x=>(x.match(/\d+/g)||[]).join(',');
+  const negs = x=> NEG.filter(n=> (' '+x+' ').includes(' '+n+' ')).join(',');
+  const g = core(given);
+  const near = alts.some(a=>{
+    if(nums(a)!==nums(given) || negs(a)!==negs(given)) return false;
+    const c = core(a);
+    if(c.length<4 || !g) return false;
+    if(c===g) return true;
+    const allowed = c.length<=5 ? 0 : c.length<=9 ? 1 : c.length<=20 ? 2 : 3;
+    if(editDistance(c,g) <= allowed) return true;
+    // mêmes lettres, juste mélangées (ex. « frnace ») : faute de frappe ou de lecture
+    return c.length>=5 && c.split('').sort().join('')===g.split('').sort().join('') && editDistance(c,g)<=2;
+  });
+  return near ? 'near' : 'no';
 }
+function frAnswerOk(input, expected){ return frAnswerLevel(input, expected)!=='no'; }
+function editDistance(a,b){
+  const m=a.length,n=b.length; const d=[];
+  for(let i=0;i<=m;i++){ d[i]=[i]; }
+  for(let j=0;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++){
+    d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+    if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1);
+  }
+  return d[m][n];
+}
+// traduction attendue affichée sans les notes entre crochets
+function frDisplay(s){ return (s||'').replace(/\s*\[[^\]]*\]/g,'').replace(/\s+([.,!?])/g,'$1').trim(); }
 function renderExercices(lesson){
   const wrap = el('<div></div>');
   const allItems = (lesson.vowels||[]).concat(lesson.vocab||[]);
@@ -1500,10 +1538,11 @@ function renderExercices(lesson){
   const doCheck = ()=>{
     if(input.disabled) return;
     const expected = askRom ? item.rom : item.fr;
-    const ok = askRom ? (input.value.trim().toLowerCase() === (expected||'').toLowerCase()) : frAnswerOk(input.value, expected);
+    const level = askRom ? ((input.value.trim().toLowerCase() === (expected||'').toLowerCase()) ? 'exact' : 'no') : frAnswerLevel(input.value, expected);
+    const ok = level!=='no';
     sbRecordAnswers(lesson.id, [{ kr:item.kr, ok }]);
-    if(ok){ state.exerciseCorrectCount=(state.exerciseCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍${(!askRom||!item.fr)?'':(' — '+item.fr)}</div>`; }
-    else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${expected}"${(askRom&&item.fr)?(' ('+item.fr+')'):''}.</div>`; }
+    if(ok){ state.exerciseCorrectCount=(state.exerciseCorrectCount||0)+1; fb.innerHTML = level==='near' ? `<div class="feedback ok">Presque, c'est bon 👍 — on écrit : « ${escapeHtml(frDisplay(expected))} »</div>` : `<div class="feedback ok">Exact 👍${(!askRom||!item.fr)?'':(' — '+item.fr)}</div>`; }
+    else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${escapeHtml(askRom?expected:frDisplay(expected))}"${(askRom&&item.fr)?(' ('+item.fr+')'):''}.</div>`; }
     checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
   };
   checkBtn.onclick = doCheck;
@@ -2059,8 +2098,9 @@ function renderWeakWordsPractice(){
   const nextBtn = el('<button class="btn ghost" style="margin-top:12px;display:none;">Suivant →</button>'); wrap.appendChild(nextBtn);
   const doCheck = ()=>{
     if(input.disabled) return;
-    const ok = frAnswerOk(input.value, item.meaning);
-    if(ok){ state.reviewCorrectCount=(state.reviewCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍</div>`; }
+    const level = frAnswerLevel(input.value, item.meaning);
+    const ok = level!=='no';
+    if(ok){ state.reviewCorrectCount=(state.reviewCorrectCount||0)+1; fb.innerHTML = level==='near' ? `<div class="feedback ok">Presque, c'est bon 👍 — on écrit : « ${escapeHtml(frDisplay(item.meaning))} »</div>` : `<div class="feedback ok">Exact 👍</div>`; }
     else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${escapeHtml(item.meaning||'')}".</div>`; }
     checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
   };
@@ -3996,8 +4036,86 @@ async function sbSuggestions(){
   try{
     const { data, error } = await sb.from('suggestions').select('*, author:profiles(name)').order('created_at', { ascending:false }).limit(300);
     if(error){ SUGGEST_OK = false; return []; }
-    SUGGEST_OK = true; return data || [];
+    SUGGEST_OK = true;
+    try{ const r = await sb.from('suggestions').select('images').limit(1); SUGGEST_IMG_OK = !r.error; }catch(e){ SUGGEST_IMG_OK = false; }
+    return data || [];
   }catch(e){ SUGGEST_OK = false; return []; }
+}
+let SUGGEST_IMG_OK = false;
+const SUGGEST_BUCKET = 'suggestion-images';
+// Réduit une capture (1280 px max, JPEG) : légère, lisible, quelques centaines de Ko
+async function shrinkImage(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((ok,ko)=>{ const i = new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=url; });
+    const k = Math.min(1, 1280/Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height);
+    return await new Promise(ok=> c.toBlob(b=>ok(b), 'image/jpeg', 0.82));
+  } finally { URL.revokeObjectURL(url); }
+}
+// Sélecteur de captures : bouton, collage (Ctrl+V) dans la zone de texte, aperçus avec ✕
+function buildImagePicker(max, pasteTarget){
+  const wrap = el('<div style="margin-top:10px;"></div>');
+  const blobs = [];
+  const input = el('<input type="file" accept="image/*" multiple style="display:none;">');
+  const add = el('<button type="button" class="btn ghost small">📎 Joindre une capture d\'écran</button>');
+  const note = el('<span style="font-size:12px;color:var(--ink-soft);margin-left:8px;"></span>');
+  const thumbs = el('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>');
+  wrap.appendChild(input); wrap.appendChild(add); wrap.appendChild(note); wrap.appendChild(thumbs);
+  const draw = ()=>{
+    thumbs.innerHTML = '';
+    blobs.forEach((b,i)=>{
+      const u = URL.createObjectURL(b);
+      const t = el(`<div style="position:relative;"><img src="${u}" alt="" style="height:72px;max-width:120px;object-fit:cover;border-radius:6px;border:1px solid var(--line);"></div>`);
+      const x = el('<button type="button" title="Retirer" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--seal);color:#fff;font-size:12px;line-height:20px;padding:0;cursor:pointer;">✕</button>');
+      x.onclick = ()=>{ blobs.splice(i,1); draw(); };
+      t.appendChild(x); thumbs.appendChild(t);
+    });
+    note.textContent = blobs.length ? `${blobs.length}/${max}` : (SUGGEST_IMG_OK ? 'facultatif — sur ordinateur, tu peux aussi coller avec Ctrl+V' : '');
+    add.disabled = blobs.length>=max;
+  };
+  const addFiles = async (files)=>{
+    for(const f of files){
+      if(blobs.length>=max) break;
+      if(!/^image\//.test(f.type)) continue;
+      try{ const b = await shrinkImage(f); if(b) blobs.push(b); }catch(e){ note.textContent = 'Image illisible.'; }
+    }
+    draw();
+  };
+  add.onclick = ()=> input.click();
+  input.onchange = ()=>{ addFiles([...input.files]); input.value = ''; };
+  if(pasteTarget) pasteTarget.addEventListener('paste', e=>{
+    const fs = [...((e.clipboardData&&e.clipboardData.items)||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);
+    if(fs.length){ e.preventDefault(); addFiles(fs); }
+  });
+  draw();
+  return { element:wrap, blobs:()=>blobs.slice() };
+}
+async function uploadSuggestImages(blobs){
+  const paths = [];
+  for(let i=0;i<blobs.length;i++){
+    const path = `${SESSION.user.id}/${Date.now()}-${i}.jpg`;
+    const { error } = await sb.storage.from(SUGGEST_BUCKET).upload(path, blobs[i], { contentType:'image/jpeg' });
+    if(error){ if(paths.length) sb.storage.from(SUGGEST_BUCKET).remove(paths).catch(()=>{}); throw error; }
+    paths.push(path);
+  }
+  return paths;
+}
+// Affiche les captures d'un message (adresses temporaires : les images restent privées)
+async function fillSuggestImages(box, paths){
+  if(!paths || !paths.length) return;
+  try{
+    const { data } = await sb.storage.from(SUGGEST_BUCKET).createSignedUrls(paths, 3600);
+    (data||[]).forEach(r=>{ if(!r.signedUrl) return;
+      box.appendChild(el(`<a href="${r.signedUrl}" target="_blank" rel="noopener"><img src="${r.signedUrl}" alt="capture jointe" style="height:90px;max-width:160px;object-fit:cover;border-radius:6px;border:1px solid var(--line);"></a>`));
+    });
+  }catch(e){}
+}
+function suggestImagesBox(x){
+  const box = el('<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;"></div>');
+  fillSuggestImages(box, x.images);
+  return box;
 }
 function suggestTabLabel(){
   const n = (SUGGESTIONS||[]).filter(x=>x.status==='nouveau').length;
@@ -4180,6 +4298,8 @@ function renderSuggestions(){
     const kind = KIND;
     const ta = el(`<textarea data-ko="1" maxlength="2000" style="min-height:110px;" placeholder="${isProb ? 'Que s\'est-il passé ? Sur quelle page ? Que voulais-tu faire ?' : 'Décris ton idée…'}"></textarea>`);
     form.appendChild(ta);
+    const picker = SUGGEST_IMG_OK ? buildImagePicker(3, ta) : null;
+    if(picker) form.appendChild(picker.element);
     if(SUGGEST_CTX) form.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">📍 Page jointe automatiquement : ${escapeHtml(SUGGEST_CTX)}</div>`));
     const msg = el('<div style="margin-top:8px;font-size:13px;"></div>');
     const send = el('<button class="btn celadon" style="margin-top:10px;">Envoyer</button>');
@@ -4187,8 +4307,13 @@ function renderSuggestions(){
       const body = ta.value.trim();
       if(!body){ msg.innerHTML = '<span class="error-text">Écris d\'abord ton message.</span>'; return; }
       send.disabled = true;
-      const { error } = await sb.from('suggestions').insert({ author_id:SESSION.user.id, kind, body, context:SUGGEST_CTX || null });
-      if(error){ send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
+      let paths = [];
+      try{ if(picker && picker.blobs().length){ msg.textContent = 'Envoi des images…'; paths = await uploadSuggestImages(picker.blobs()); } }
+      catch(e){ send.disabled = false; msg.innerHTML = '<span class="error-text">Les images n\'ont pas pu être envoyées. Réessaie, ou envoie sans image.</span>'; return; }
+      const row = { author_id:SESSION.user.id, kind, body, context:SUGGEST_CTX || null };
+      if(paths.length) row.images = paths;
+      const { error } = await sb.from('suggestions').insert(row);
+      if(error){ if(paths.length) sb.storage.from(SUGGEST_BUCKET).remove(paths).catch(()=>{}); send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
       SUGGESTIONS = await sbSuggestions(); state.suggestSent = true; render();
     };
     form.appendChild(send); form.appendChild(msg);
@@ -4198,7 +4323,9 @@ function renderSuggestions(){
     if(mine.length){
       box.appendChild(el(`<h3 style="margin:26px 0 8px;font-size:15px;">${isProb?'Mes problèmes signalés':'Mes idées envoyées'}</h3>`));
       mine.forEach(x=>{
-        box.appendChild(el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:8px;"><div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · ${suggestDate(x.created_at)}${x.status==='traite'?' · ✔ vu par la professeure':''}</div><div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(x.body)}</div></div>`));
+        const mc = el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:8px;"><div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · ${suggestDate(x.created_at)}${x.status==='traite'?' · ✔ vu par la professeure':''}</div><div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(x.body)}</div></div>`);
+        if(x.images && x.images.length) mc.appendChild(suggestImagesBox(x));
+        box.appendChild(mc);
       });
     }
     return box;
@@ -4216,7 +4343,9 @@ function renderSuggestions(){
   cp.onclick = async ()=>{
     const rows = ofKind.filter(x=>x.status==='nouveau');
     if(!rows.length){ cp.textContent = 'Rien à copier'; return; }
-    const txt = rows.map(x=> `[${(SUGGEST_KIND[x.kind]||'').replace(/^\S+\s/,'')}] ${(x.author&&x.author.name)||'?'} — ${suggestDate(x.created_at)}${x.context?`\nPage : ${x.context}`:''}\n${x.body}`).join('\n\n---\n\n');
+    const links = {};
+    for(const x of rows){ if(x.images && x.images.length){ try{ const { data } = await sb.storage.from(SUGGEST_BUCKET).createSignedUrls(x.images, 7*86400); links[x.id] = (data||[]).map(r=>r.signedUrl).filter(Boolean); }catch(e){} } }
+    const txt = rows.map(x=> `[${(SUGGEST_KIND[x.kind]||'').replace(/^\S+\s/,'')}] ${(x.author&&x.author.name)||'?'} — ${suggestDate(x.created_at)}${x.context?`\nPage : ${x.context}`:''}\n${x.body}${(links[x.id]&&links[x.id].length)?`\nCaptures (liens valables 7 jours) :\n${links[x.id].join('\n')}`:''}`).join('\n\n---\n\n');
     const ok = await copyText(txt);
     cp.textContent = ok ? '✔ Copié !' : 'Copie impossible';
   };
@@ -4227,13 +4356,14 @@ function renderSuggestions(){
     const card = el(`<div class="item-card" style="text-align:left;padding:12px 14px;margin-bottom:10px;${done?'opacity:.65;':''}"></div>`);
     card.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">${SUGGEST_KIND[x.kind]||''} · <b>${escapeHtml((x.author&&x.author.name)||'?')}</b> · ${suggestDate(x.created_at)}${x.context?` · 📍 ${escapeHtml(x.context)}`:''}</div>`));
     card.appendChild(el(`<div style="margin:6px 0 10px;white-space:pre-wrap;">${escapeHtml(x.body)}</div>`));
+    if(x.images && x.images.length) card.appendChild(suggestImagesBox(x));
     const row = el('<div style="display:flex;gap:8px;flex-wrap:wrap;"></div>');
     const tg = el(`<button class="btn ghost small">${done?'↩ Rouvrir':'✔ Traité'}</button>`);
     tg.onclick = async ()=>{ const { error } = await sb.from('suggestions').update({ status: done?'nouveau':'traite' }).eq('id', x.id); if(!error){ x.status = done?'nouveau':'traite'; render(); } };
     const rp = el('<button class="btn ghost small">💬 Répondre</button>');
     rp.onclick = ()=> enterInbox(x.author_id);
     const rm = el('<button class="btn ghost small">🗑 Supprimer</button>');
-    rm.onclick = async ()=>{ if(!confirm('Supprimer cette suggestion ?')) return; const { error } = await sb.from('suggestions').delete().eq('id', x.id); if(!error){ SUGGESTIONS = SUGGESTIONS.filter(y=>y.id!==x.id); render(); } };
+    rm.onclick = async ()=>{ if(!confirm('Supprimer cette suggestion ?')) return; if(x.images && x.images.length) await sb.storage.from(SUGGEST_BUCKET).remove(x.images).catch(()=>{}); const { error } = await sb.from('suggestions').delete().eq('id', x.id); if(!error){ SUGGESTIONS = SUGGESTIONS.filter(y=>y.id!==x.id); render(); } };
     row.appendChild(tg); row.appendChild(rp); row.appendChild(rm); card.appendChild(row); box.appendChild(card);
   });
   return box;
