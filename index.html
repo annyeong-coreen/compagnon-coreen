@@ -98,6 +98,18 @@
   .login-wrap{max-width:380px;margin:80px auto;text-align:center;}
   .login-wrap .kr{font-size:36px;font-weight:700;display:block;margin-bottom:6px;}
   .error-text{color:var(--danger);font-size:13px;margin:8px 0;}
+.ko-btn{flex:none;font-family:inherit;font-size:15px;font-weight:700;line-height:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer;margin-left:6px;}
+.ko-btn.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.ko-wrap{margin-top:4px;text-align:right;}
+.ko-wrap .ko-btn{margin-left:0;}
+.ko-kb{max-width:480px;margin:8px 0 10px auto;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--paper);}
+.ko-row{display:flex;gap:4px;margin-bottom:4px;justify-content:center;}
+.ko-key{flex:1 1 0;min-width:0;height:42px;font-family:inherit;font-size:18px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);cursor:pointer;padding:0;}
+.ko-key.wide{flex:1.5 1 0;}
+.ko-key.space{flex:5 1 0;font-size:13px;}
+.ko-key.punct{flex:1 1 0;}
+.ko-key.on{background:var(--ink);color:#fff;}
+.ko-key:active{background:var(--line);}
 </style>
 </head>
 <body>
@@ -1653,7 +1665,7 @@ function renderListen(){
     const mic = el(`<button class="btn ${LISTEN.listening?'seal':''}" style="min-width:150px;">${LISTEN.listening?'⏹ Parle… (arrêter)':'🎤 Dire le mot'}</button>`);
     mic.onclick = ()=>{ if(LISTEN.listening) listenStopMic(); else listenStartMic(); }; row.appendChild(mic);
   }
-  const inp = el(`<input type="text" lang="ko" placeholder="ou écris-le ici : 한글" value="${escapeHtml(LISTEN.input)}" style="flex:1;min-width:160px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:16px;">`);
+  const inp = el(`<input type="text" lang="ko" data-ko="1" placeholder="ou écris-le ici : 한글" value="${escapeHtml(LISTEN.input)}" style="flex:1;min-width:160px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:16px;">`);
   inp.oninput = ()=>{ LISTEN.input = inp.value; };
   inp.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); listenSetInput(inp.value, true); } };
   row.appendChild(inp);
@@ -1920,11 +1932,31 @@ function renderWeakWordsPractice(){
 
   const addBox = el(`<div class="section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:14px 16px;margin-bottom:20px;">
     <h3 style="margin-top:0;font-size:15px;">+ Ajouter tes propres mots</h3>
-    <div class="note" style="margin-bottom:10px;font-size:12px;">Colle même un morceau brut de tes notes de cours — l'outil repère tout seul les lignes où il y a du coréen suivi d'une traduction en français (ex. "바람이 불다 il y a du vent"), même sans séparateur. Les lignes sans traduction sont simplement ignorées.</div>
-    <textarea id="ww-paste" style="width:100%;min-height:80px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;" placeholder="예쁘다 → joli, mignon"></textarea>
+    <div class="note" style="margin-bottom:10px;font-size:12px;">Tu as trouvé un mot en dehors des cours ? Écris-le en coréen et note sa traduction.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1;min-width:150px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Mot en coréen</div>
+        <div style="display:flex;align-items:center;"><input type="text" id="ww-kr" lang="ko" data-ko="1" placeholder="예쁘다" style="flex:1;min-width:0;font-size:16px;"></div></div>
+      <div style="flex:1;min-width:150px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Traduction en français</div>
+        <input type="text" id="ww-fr" placeholder="joli, mignon" style="width:100%;box-sizing:border-box;font-size:16px;"></div>
+    </div>
+    <button class="btn celadon small" id="ww-one-btn" style="margin-top:8px;">Ajouter ce mot</button>
+    <span id="ww-one-status" style="margin-left:8px;font-size:12px;color:var(--ink-soft);"></span>
+    <details style="margin-top:14px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ajouter plusieurs mots d'un coup (coller des notes de cours)</summary>
+    <div class="note" style="margin:8px 0;font-size:12px;">Colle même un morceau brut de tes notes de cours — l'outil repère tout seul les lignes où il y a du coréen suivi d'une traduction en français (ex. "바람이 불다 il y a du vent"), même sans séparateur. Les lignes sans traduction sont simplement ignorées.</div>
+    <textarea id="ww-paste" data-ko="1" style="width:100%;min-height:80px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;" placeholder="예쁘다 → joli, mignon"></textarea>
     <button class="btn celadon small" id="ww-paste-btn" style="margin-top:8px;">Ajouter à mes révisions</button>
-    <span id="ww-paste-status" style="margin-left:8px;font-size:12px;color:var(--ink-soft);"></span>
+    <span id="ww-paste-status" style="margin-left:8px;font-size:12px;color:var(--ink-soft);"></span></details>
   </div>`);
+  addBox.querySelector('#ww-one-btn').onclick = async ()=>{
+    const kr = addBox.querySelector('#ww-kr').value.trim();
+    const fr = addBox.querySelector('#ww-fr').value.trim();
+    const status = addBox.querySelector('#ww-one-status');
+    if(!kr || !fr){ status.textContent = 'Remplis le mot en coréen et sa traduction.'; return; }
+    if(!isHangul(kr)){ status.textContent = 'Le premier champ doit contenir du coréen (utilise le bouton 한).'; return; }
+    status.textContent = 'Ajout en cours…';
+    await sbAddWeakWord(kr, fr);
+    render();
+  };
   addBox.querySelector('#ww-paste-btn').onclick = async ()=>{
     const raw = addBox.querySelector('#ww-paste').value;
     const status = addBox.querySelector('#ww-paste-status');
@@ -2844,7 +2876,7 @@ function buildDialogueEditor(initialExchanges){
     • dialogues : <code>locuteur (rôle) : coréen | coréen = français | français</code><br>
     • <code>*</code> en début de ligne = réponse de l'élève<br>
     Les phrases sans traduction restent vides : tu les complètes à la main ou avec la suggestion automatique, et tu relis avant d'enregistrer.</div>`));
-  const textarea = el(`<textarea style="width:100%;min-height:180px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;">${escapeHtml(rawText)}</textarea>`);
+  const textarea = el(`<textarea data-ko="1" style="width:100%;min-height:180px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;font-family:'IBM Plex Mono',monospace;">${escapeHtml(rawText)}</textarea>`);
   wrap.appendChild(textarea);
   const btnRow = el('<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;"></div>');
   const analyzeBtn = el('<button type="button" class="btn ghost small">Analyser le texte</button>');
@@ -2977,12 +3009,12 @@ async function renderManage(){
   wrap.appendChild(dialogueSection);
 
   const form2 = el(`<div>
-    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne (optionnel, en plus du dialogue ci-dessus)</label><textarea id="mg-vocab" placeholder="salut → 안녕&#10;안녕 | annyeong | salut (romanisation facultative)" style="min-height:100px;"></textarea>
+    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne (optionnel, en plus du dialogue ci-dessus)</label><textarea data-ko="1" id="mg-vocab" placeholder="salut → 안녕&#10;안녕 | annyeong | salut (romanisation facultative)" style="min-height:100px;"></textarea>
       <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Colle un tableau Google Docs, ou écris "français → coréen" ou "coréen → français" — la romanisation est facultative, ajoute-la avec un | si tu veux ("coréen | romanisation | français").</div>
       <div id="mg-vocab-preview" class="note" style="margin-top:8px;font-size:12px;">Aucun mot détecté pour l'instant.</div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="mg-grammar"></textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Le cours lui-même (phrases, vocabulaire, dialogues) se colle dans « Contenu du cours » plus haut, sinon il n'alimente ni les exercices ni le quiz. <button type="button" class="btn ghost small" id="mg-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea id="mg-trans-text" placeholder="Colle ou écris le texte en coréen que l'élève devra traduire..." style="min-height:80px;"></textarea></div>
+    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea data-ko="1" id="mg-trans-text" placeholder="Colle ou écris le texte en coréen que l'élève devra traduire..." style="min-height:80px;"></textarea></div>
     <div class="field"><label>Ta traduction de référence (optionnel — fiable, révélée à la demande de l'élève, séparément du texte)</label>
       <textarea id="mg-trans-ref" placeholder="Tu peux l'écrire ici, ou juste l'enregistrer à voix haute ci-dessous — les deux sont possibles."></textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
@@ -2990,7 +3022,7 @@ async function renderManage(){
         <span id="mg-ref-rec-status" style="font-size:12px;color:var(--ink-soft);"></span>
       </div>
     </div>
-    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea id="mg-trans-help" placeholder="복잡하다 | être compliqué, embrouillé"></textarea></div>
+    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea data-ko="1" id="mg-trans-help" placeholder="복잡하다 | être compliqué, embrouillé"></textarea></div>
     <div class="field"><label>Score requis pour débloquer la suite (%)</label><input type="text" id="mg-pass" value="80"></div>
     <div class="field">
       <label>Prononciation par la professeur (optionnel)</label>
@@ -3146,11 +3178,11 @@ function openEditLessonModal(lesson){
   modal.appendChild(dialogueSection);
 
   const form2 = el(`<div>
-    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne</label><textarea id="em-vocab" style="min-height:100px;">${escapeHtml(serializeVocab(lesson.vocab))}</textarea>
+    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne</label><textarea data-ko="1" id="em-vocab" style="min-height:100px;">${escapeHtml(serializeVocab(lesson.vocab))}</textarea>
       <div id="em-vocab-preview" class="note" style="margin-top:8px;font-size:12px;"></div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="em-grammar">${escapeHtml((lesson.grammar||[]).join('\n'))}</textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Si tout ton cours se trouve ici, déplace-le vers « Contenu du cours » pour qu'il alimente les exercices et le quiz. <button type="button" class="btn ghost small" id="em-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
+    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea data-ko="1" id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
     <div class="field"><label>Ta traduction de référence (optionnel)</label>
       <textarea id="em-trans-ref">${escapeHtml(t.ref||'')}</textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
@@ -3159,7 +3191,7 @@ function openEditLessonModal(lesson){
       </div>
       ${t.refAudio?`<audio controls src="${escapeHtml(t.refAudio)}" style="width:100%;margin-top:8px;"></audio>`:''}
     </div>
-    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea id="em-trans-help">${escapeHtml((t.help||[]).map(h=>`${h.word} | ${h.meaning}`).join('\n'))}</textarea></div>
+    <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea data-ko="1" id="em-trans-help">${escapeHtml((t.help||[]).map(h=>`${h.word} | ${h.meaning}`).join('\n'))}</textarea></div>
     <div class="field"><label>Score requis pour débloquer la suite (%)</label><input type="text" id="em-pass" value="${Math.round((lesson.pass_score||0.8)*100)}"></div>
     <div class="modal-actions"></div>
   </div>`);
@@ -3576,7 +3608,7 @@ async function renderChatPanel(){
     const label = el('<div style="font-weight:700;margin-bottom:6px;">📌 Sujet du jour</div>');
     topicBox.appendChild(label);
     const row = el('<div style="display:flex;gap:8px;"></div>');
-    const input = el(`<input type="text" value="${escapeHtml((activeGroup&&activeGroup.current_topic)||'')}" placeholder="ex : Parlez de votre week-end au passé">`);
+    const input = el(`<input type="text" data-ko="1" value="${escapeHtml((activeGroup&&activeGroup.current_topic)||'')}" placeholder="ex : Parlez de votre week-end au passé">`);
     input.style.flex='1';
     const save = el('<button class="btn celadon small">Enregistrer</button>');
     save.onclick = async ()=>{
@@ -3607,7 +3639,7 @@ async function renderChatPanel(){
   box.appendChild(list);
 
   const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
-  const input = el('<input type="text" placeholder="Écrire un message...">'); input.style.flex='1';
+  const input = el('<input type="text" data-ko="1" placeholder="Écrire un message...">'); input.style.flex='1';
   const send = el('<button class="btn celadon small">Envoyer</button>');
   const doSend = async ()=>{
     const t=input.value.trim(); if(!t) return;
@@ -3785,7 +3817,7 @@ function renderDMMessages(container){
   requestAnimationFrame(()=>{ list.scrollTop = list.scrollHeight; });   // toujours sur le dernier message
 
   const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
-  const input = el('<input type="text" placeholder="Écrire un message..." data-dm-input="1">'); input.style.flex='1';
+  const input = el('<input type="text" data-ko="1" placeholder="Écrire un message..." data-dm-input="1">'); input.style.flex='1';
   input.value = DM_DRAFTS[threadId] || '';                                // le brouillon survit aux rafraîchissements
   input.oninput = (e)=>{ DM_DRAFTS[threadId] = e.target.value; };
   const send = el('<button class="btn celadon small">Envoyer</button>');
@@ -3964,6 +3996,143 @@ function suggestContextLabel(){
 }
 const SUGGEST_KIND = { idee:'💡 Idée', probleme:'⚠️ Problème' };
 function suggestDate(t){ try{ return new Date(t).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }catch(e){ return ''; } }
+/* ---------------- Clavier coréen à l'écran ----------------
+   Tout champ marqué data-ko="1" reçoit un bouton « 한 » qui ouvre un clavier
+   coréen (disposition standard 2-beolsik) : les lettres s'assemblent en syllabes. */
+const KB_INI = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const KB_MED = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+const KB_FIN = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+const KB_VOW_COMBO = {'ㅗㅏ':'ㅘ','ㅗㅐ':'ㅙ','ㅗㅣ':'ㅚ','ㅜㅓ':'ㅝ','ㅜㅔ':'ㅞ','ㅜㅣ':'ㅟ','ㅡㅣ':'ㅢ'};
+const KB_FIN_COMBO = {'ㄱㅅ':'ㄳ','ㄴㅈ':'ㄵ','ㄴㅎ':'ㄶ','ㄹㄱ':'ㄺ','ㄹㅁ':'ㄻ','ㄹㅂ':'ㄼ','ㄹㅅ':'ㄽ','ㄹㅌ':'ㄾ','ㄹㅍ':'ㄿ','ㄹㅎ':'ㅀ','ㅂㅅ':'ㅄ'};
+const kbIsSyl = c => !!c && c.charCodeAt(0)>=0xAC00 && c.charCodeAt(0)<=0xD7A3;
+const kbIsVowel = c => KB_MED.includes(c);
+const kbIsCons = c => KB_INI.includes(c) || ['ㄳ','ㄵ','ㄶ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅄ'].includes(c);
+function kbCompose(i,m,f){ return String.fromCharCode(0xAC00 + (i*21+m)*28 + f); }
+function kbSplit(c){ const n=c.charCodeAt(0)-0xAC00; return { i:Math.floor(n/588), m:Math.floor((n%588)/28), f:n%28 }; }
+function kbSplitFinal(fch){ for(const k in KB_FIN_COMBO){ if(KB_FIN_COMBO[k]===fch) return [k[0],k[1]]; } return null; }
+// Ajoute la lettre j après le texte `before` ; renvoie le nouveau texte.
+function kbAppend(before, j){
+  const last = before.slice(-1), head = before.slice(0,-1);
+  if(kbIsSyl(last)){
+    const {i,m,f} = kbSplit(last);
+    if(kbIsVowel(j)){
+      if(f===0){
+        const comb = KB_VOW_COMBO[KB_MED[m]+j];
+        if(comb) return head + kbCompose(i, KB_MED.indexOf(comb), 0);
+      } else {
+        const fch = KB_FIN[f], sp = kbSplitFinal(fch);
+        if(sp){ return head + kbCompose(i,m,KB_FIN.indexOf(sp[0])) + kbCompose(KB_INI.indexOf(sp[1]), KB_MED.indexOf(j), 0); }
+        return head + kbCompose(i,m,0) + kbCompose(KB_INI.indexOf(fch), KB_MED.indexOf(j), 0);
+      }
+    } else if(kbIsCons(j)){
+      if(f===0){ const fi = KB_FIN.indexOf(j); if(fi>0) return head + kbCompose(i,m,fi); }
+      else { const comb = KB_FIN_COMBO[KB_FIN[f]+j]; if(comb) return head + kbCompose(i,m,KB_FIN.indexOf(comb)); }
+    }
+  } else if(KB_INI.includes(last) && kbIsVowel(j)){
+    return head + kbCompose(KB_INI.indexOf(last), KB_MED.indexOf(j), 0);
+  }
+  return before + j;
+}
+// Efface la dernière lettre (pas la syllabe entière).
+function kbBackspace(before){
+  const last = before.slice(-1), head = before.slice(0,-1);
+  if(!last) return before;
+  if(kbIsSyl(last)){
+    const {i,m,f} = kbSplit(last);
+    if(f>0){ const sp = kbSplitFinal(KB_FIN[f]); return head + kbCompose(i,m, sp ? KB_FIN.indexOf(sp[0]) : 0); }
+    const mch = KB_MED[m];
+    for(const k in KB_VOW_COMBO){ if(KB_VOW_COMBO[k]===mch) return head + kbCompose(i, KB_MED.indexOf(k[0]), 0); }
+    return head + KB_INI[i];
+  }
+  return head;
+}
+const KB_ROWS = [
+  ['ㅂ','ㅈ','ㄷ','ㄱ','ㅅ','ㅛ','ㅕ','ㅑ','ㅐ','ㅔ'],
+  ['ㅁ','ㄴ','ㅇ','ㄹ','ㅎ','ㅗ','ㅓ','ㅏ','ㅣ'],
+  ['⇧','ㅋ','ㅌ','ㅊ','ㅍ','ㅠ','ㅜ','ㅡ','⌫']
+];
+const KB_SHIFT = {'ㅂ':'ㅃ','ㅈ':'ㅉ','ㄷ':'ㄸ','ㄱ':'ㄲ','ㅅ':'ㅆ','ㅐ':'ㅒ','ㅔ':'ㅖ'};
+
+function attachKoKeyboard(field){
+  if(field.dataset.koDone) return;
+  field.dataset.koDone = '1';
+  const par = field.parentNode; if(!par) return;
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'ko-btn'; btn.textContent = '한'; btn.title = 'Clavier coréen';
+  btn.setAttribute('aria-label','Ouvrir le clavier coréen');
+  let flexRow = false;
+  try{ flexRow = field.tagName==='INPUT' && /flex/.test(getComputedStyle(par).display); }catch(e){}
+  let anchor;
+  if(flexRow){ par.insertBefore(btn, field.nextSibling); anchor = par; }
+  else { const w = document.createElement('div'); w.className = 'ko-wrap'; w.appendChild(btn); field.parentNode.insertBefore(w, field.nextSibling); anchor = w; }
+
+  let panel = null, shift = false;
+  const prevMode = field.getAttribute('inputmode');
+  const press = (key)=>{
+    const start = field.selectionStart==null ? field.value.length : field.selectionStart;
+    const end = field.selectionEnd==null ? start : field.selectionEnd;
+    const sel = end>start;
+    let before = field.value.slice(0, start), after = field.value.slice(end);
+    if(key==='⌫'){ before = sel ? before : kbBackspace(before); }
+    else if(key==='␣'){ before += ' '; }
+    else { before = kbAppend(before, key); }
+    field.value = before + after;
+    try{ field.setSelectionRange(before.length, before.length); }catch(e){}
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  const build = ()=>{
+    panel.innerHTML = '';
+    const mk = (label, cls, fn)=>{
+      const b = document.createElement('button');
+      b.type='button'; b.className='ko-key '+(cls||''); b.textContent=label; b.tabIndex=-1;
+      b.onmousedown = e=>e.preventDefault();
+      b.onclick = ()=>{ fn(); };
+      return b;
+    };
+    KB_ROWS.forEach(row=>{
+      const r = document.createElement('div'); r.className='ko-row';
+      row.forEach(k=>{
+        if(k==='⇧') r.appendChild(mk('⇧', 'wide'+(shift?' on':''), ()=>{ shift=!shift; build(); }));
+        else if(k==='⌫') r.appendChild(mk('⌫','wide',()=>press('⌫')));
+        else { const shown = shift && KB_SHIFT[k] ? KB_SHIFT[k] : k; r.appendChild(mk(shown,'',()=>{ press(shown); if(shift){ shift=false; build(); } })); }
+      });
+      panel.appendChild(r);
+    });
+    const last = document.createElement('div'); last.className='ko-row';
+    last.appendChild(mk('espace','space',()=>press('␣')));
+    ['.',',','?','!'].forEach(p=> last.appendChild(mk(p,'punct',()=>press(p))));
+    panel.appendChild(last);
+  };
+  const close = ()=>{
+    if(panel){ panel.remove(); panel = null; }
+    btn.classList.remove('on');
+    if(prevMode==null) field.removeAttribute('inputmode'); else field.setAttribute('inputmode', prevMode);
+  };
+  btn.onmousedown = e=>e.preventDefault();
+  btn.onclick = ()=>{
+    if(panel){ close(); return; }
+    panel = document.createElement('div'); panel.className = 'ko-kb';
+    build();
+    anchor.parentNode.insertBefore(panel, anchor.nextSibling);
+    btn.classList.add('on');
+    field.setAttribute('inputmode','none');   // évite que le clavier du téléphone se superpose
+    try{ const wasFocused = document.activeElement===field; field.focus({preventScroll:true}); if(!wasFocused) field.setSelectionRange(field.value.length, field.value.length); }catch(e){}
+  };
+}
+function scanKoKeyboards(root){
+  (root.querySelectorAll ? root.querySelectorAll('[data-ko]') : []).forEach(attachKoKeyboard);
+  if(root.matches && root.matches('[data-ko]')) attachKoKeyboard(root);
+}
+(function(){
+  const start = ()=>{
+    scanKoKeyboards(document.body);
+    new MutationObserver(muts=>{
+      muts.forEach(m=> m.addedNodes.forEach(n=>{ if(n.nodeType===1) scanKoKeyboards(n); }));
+    }).observe(document.body, {childList:true, subtree:true});
+  };
+  if(document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+
 function copyText(txt){
   if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(()=>true).catch(()=>false);
   try{ const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return Promise.resolve(ok); }catch(e){ return Promise.resolve(false); }
@@ -3982,7 +4151,7 @@ function renderSuggestions(){
     box.appendChild(el(`<div class="note" style="margin-bottom:16px;">${isProb ? 'Quelque chose ne marche pas ? Dis-nous ce qui s\'est passé et où : ta professeure le lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.' : 'Une idée pour améliorer l\'outil ? Écris-la ici : ta professeure la lira. Pour une question sur le coréen, utilise plutôt la 💬 Messagerie.'}</div>`));
     const form = el('<div class="field"></div>');
     const kind = KIND;
-    const ta = el(`<textarea maxlength="2000" style="min-height:110px;" placeholder="${isProb ? 'Que s\'est-il passé ? Sur quelle page ? Que voulais-tu faire ?' : 'Décris ton idée…'}"></textarea>`);
+    const ta = el(`<textarea data-ko="1" maxlength="2000" style="min-height:110px;" placeholder="${isProb ? 'Que s\'est-il passé ? Sur quelle page ? Que voulais-tu faire ?' : 'Décris ton idée…'}"></textarea>`);
     form.appendChild(ta);
     if(SUGGEST_CTX) form.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">📍 Page jointe automatiquement : ${escapeHtml(SUGGEST_CTX)}</div>`));
     const msg = el('<div style="margin-top:8px;font-size:13px;"></div>');
