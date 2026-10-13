@@ -1117,7 +1117,7 @@ async function renderSidebar(){
         <span>📒 Aide-mémoire grammaire (${GRAMMAR_SEEN.length})</span>
       </div>`);
       grammarBtn.style.cursor='pointer';
-      grammarBtn.onclick = ()=>{ state.listenMode=false; state.puzzleMode=false; state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.grammarMode = true; render(); };
+      grammarBtn.onclick = ()=>{ state.listenMode=false; state.puzzleMode=false; state.reviewMode=false; state.globalQuizMode=false; state.lessonId=null; if(!state.grammarMode) openGrammarNotebookVisit(); state.grammarCategory = null; state.refCategory = null; state.refTest = null; state.grammarMode = true; render(); };
       box.appendChild(grammarBtn);
       const globalQuizBtn = el(`<div class="lesson-node ${state.globalQuizMode?'active':''}" style="margin-bottom:14px;border:1.5px dashed var(--celadon-dark);">
         <span>🌐 Quiz global</span>
@@ -1625,6 +1625,206 @@ const GRAMMAR_CATEGORIES = [
   { kind:'classificateur', icon:'🔢', title:'Classificateurs', hint:"Les mots qui accompagnent les nombres (개, 명, 번…)", items:()=>Object.entries(COUNTER_REF) },
   { kind:'expression', icon:'📘', title:'Expressions de grammaire', hint:"Les tournures sur plusieurs mots (ㄹ 수 있다, 고 싶다…)", items:()=>GRAMMAR_PATTERNS.map(pt=>[pt.label, pt]) }
 ];
+/* ===== Aide-mémoire : catégories de référence (toujours complètes) =====
+   level : à partir de quel niveau on les montre par défaut. Chaque ligne : [coréen, français, note?, exemple?]
+   seen:false = pas de « vu en cours » (les petits mots comme 이 ou 일 seraient confondus avec d'autres mots). */
+const REF_LEVEL_RANK = { debutant:0, intermediaire:1, avance:2 };
+const REF_CATEGORIES = [
+  { id:'sino', icon:'💯', title:'Nombres sino-coréens', level:'debutant', hint:'Le système d\'origine chinoise : dates, prix, minutes, numéros…',
+    intro:'À utiliser pour : les dates (월, 일), l\'argent (원), les minutes (분), les numéros de téléphone, les étages (층), les numéros (번), les adresses.',
+    groups:[{ seen:false, rows:[
+      ['영 / 공','0','공 s\'utilise surtout pour les numéros de téléphone.'],['일','1'],['이','2'],['삼','3'],['사','4'],['오','5'],['육','6'],['칠','7'],['팔','8'],['구','9'],['십','10'],
+      ['십일','11'],['십이','12'],['이십','20','2 × 10','이십오 = 25'],['삼십','30'],['사십','40'],['오십','50'],['육십','60'],['칠십','70'],['팔십','80'],['구십','90'],
+      ['백','100','On ne dit pas 일백.'],['이백','200'],['천','1 000'],['만','10 000','Le coréen compte par 10 000 (만) : 100 000 = 십만.'],['십만','100 000'],['백만','1 000 000'],['천만','10 000 000'],['억','100 000 000'],
+      ['오천 원','5 000 wons','', '이만 오천 원 = 25 000 wons'],['이천이십육 년','année 2026']
+    ]}] },
+  { id:'pur', icon:'🔢', title:'Nombres coréens purs', level:'debutant', hint:'Le système coréen : âge, heures, compter les objets (1 à 99)',
+    intro:'À utiliser pour : l\'âge (살), les heures (시), compter des objets, des personnes ou des animaux (개, 명, 마리, 병, 잔), le nombre de fois (번). Jusqu\'à 99 ; au-delà on passe aux nombres sino-coréens.',
+    groups:[{ title:'1 à 10', seen:false, rows:[
+      ['하나 (한)','1','Devant un classificateur : 한 개, 한 명.'],['둘 (두)','2','두 개, 두 명'],['셋 (세)','3','세 개, 세 시'],['넷 (네)','4','네 개, 네 시'],['다섯','5'],['여섯','6'],['일곱','7'],['여덟','8'],['아홉','9'],['열','10']
+    ]},{ title:'Les dizaines', seen:false, rows:[
+      ['열하나','11','열 + un : 열둘 = 12, 열셋 = 13…'],['스물 (스무)','20','스무 살 = 20 ans (스물 devant un classificateur).'],['서른','30'],['마흔','40'],['쉰','50'],['예순','60'],['일흔','70'],['여든','80'],['아흔','90'],['스물다섯','25','스물 + 다섯','스물다섯 살 = 25 ans']
+    ]}] },
+  { id:'quand', icon:'🧭', title:'Quel système de nombres ?', level:'debutant', hint:'Sino-coréen ou coréen pur : le bon choix selon la situation',
+    intro:'Règle simple : le temps qui passe se dit à moitié en coréen pur (les heures) et à moitié en sino-coréen (les minutes).',
+    groups:[{ seen:false, rows:[
+      ['세 시 십 분','3 h 10','시 (heures) = coréen pur ; 분 (minutes) = sino-coréen.'],
+      ['스물다섯 살','25 ans','Âge : coréen pur (살). À l\'écrit formel : 이십오 세.'],
+      ['오 월 이십 일','le 20 mai','Mois et jours : sino-coréen.'],
+      ['오천 원','5 000 wons','Argent : sino-coréen.'],
+      ['세 개','3 (objets)','Compter des objets : coréen pur.'],
+      ['두 명','2 personnes','Compter des personnes : coréen pur.'],
+      ['세 번','3 fois','번 = « fois » : coréen pur.'],
+      ['삼 번','n° 3 (le numéro 3)','번 = « numéro » : sino-coréen (bus n° 3, question n° 3…).'],
+      ['십 층','10e étage','Étages : sino-coréen.'],
+      ['공일공 일이삼사 오육칠팔','010-1234-5678','Téléphone : sino-coréen, chiffre par chiffre.']
+    ]}] },
+  { id:'jours', icon:'📅', title:'Jours de la semaine', level:'debutant', hint:'Lundi à dimanche, aujourd\'hui, demain, hier…',
+    groups:[{ title:'La semaine', rows:[
+      ['월요일','lundi','월 = lune'],['화요일','mardi','화 = feu'],['수요일','mercredi','수 = eau'],['목요일','jeudi','목 = bois'],['금요일','vendredi','금 = or, métal'],['토요일','samedi','토 = terre'],['일요일','dimanche','일 = soleil'],
+      ['주말','week-end'],['평일','jours de semaine'],['매일','tous les jours'],['무슨 요일이에요?','Quel jour sommes-nous ?']
+    ]},{ title:'Les jours autour d\'aujourd\'hui', rows:[
+      ['그저께','avant-hier'],['어제','hier'],['오늘','aujourd\'hui'],['내일','demain'],['모레','après-demain']
+    ]}] },
+  { id:'mois', icon:'🗓️', title:'Mois et dates', level:'debutant', hint:'Janvier à décembre, jour, mois, année',
+    intro:'Mois = nombre sino-coréen + 월. Attention à deux exceptions : juin = 유월 (pas 육월) et octobre = 시월 (pas 십월).',
+    groups:[{ title:'Les mois', rows:[
+      ['일월','janvier'],['이월','février'],['삼월','mars'],['사월','avril'],['오월','mai'],['유월','juin','Exception : 육월 devient 유월.'],['칠월','juillet'],['팔월','août'],['구월','septembre'],['시월','octobre','Exception : 십월 devient 시월.'],['십일월','novembre'],['십이월','décembre']
+    ]},{ title:'Dire la date', rows:[
+      ['년','année'],['월','mois'],['일','jour (du mois)'],['오늘은 몇 월 며칠이에요?','Quelle est la date aujourd\'hui ?'],['시월 오일이에요.','C\'est le 5 octobre.'],['생일','anniversaire'],['올해','cette année'],['작년','l\'année dernière'],['내년','l\'année prochaine']
+    ]}] },
+  { id:'saisons', icon:'🍂', title:'Saisons et météo', level:'debutant', hint:'Printemps, été, automne, hiver et le temps qu\'il fait',
+    groups:[{ title:'Les saisons', rows:[['봄','printemps'],['여름','été'],['가을','automne'],['겨울','hiver'],['사계절','les quatre saisons']]},
+    { title:'Le temps', rows:[
+      ['날씨','météo, temps'],['날씨가 어때요?','Quel temps fait-il ?'],['맑다','être dégagé, clair'],['흐리다','être nuageux, couvert'],['비가 오다','pleuvoir'],['눈이 오다','neiger'],['바람이 불다','il y a du vent (le vent souffle)'],
+      ['덥다','faire chaud'],['춥다','faire froid'],['따뜻하다','faire doux, tiède'],['시원하다','faire frais, agréable'],['습하다','être humide']
+    ]}] },
+  { id:'heures', icon:'🕐', title:'Heures et moments de la journée', level:'debutant', hint:'Quelle heure est-il ? matin, midi, soir…',
+    intro:'Heures en coréen pur (한 시, 두 시…), minutes en sino-coréen (십 분, 삼십 분). 반 = « et demie ».',
+    groups:[{ title:'Les moments', rows:[
+      ['아침','matin (aussi : petit-déjeuner)'],['점심','midi (aussi : déjeuner)'],['저녁','soir (aussi : dîner)'],['밤','nuit'],['새벽','l\'aube, la petite nuit'],['오전','avant midi (AM)'],['오후','après-midi (PM)'],['정오','midi pile'],['자정','minuit']
+    ]},{ title:'Dire l\'heure', rows:[
+      ['지금','maintenant'],['몇 시예요?','Quelle heure est-il ?'],['시','heure'],['분','minute'],['반','demi'],['세 시 반이에요.','Il est 3 h 30.'],['오후 두 시예요.','Il est 2 h de l\'après-midi.'],['아홉 시에 일어나요.','Je me lève à 9 h.'],['시간','durée, temps, heure (durée)']
+    ]}] },
+  { id:'pronoms', icon:'❓', title:'Pronoms et mots interrogatifs', level:'debutant', hint:'Je, tu, nous… et qui, quoi, où, quand, pourquoi',
+    groups:[{ title:'Pronoms', rows:[
+      ['저','je (poli)','Avec les personnes plus âgées ou inconnues.'],['나','je (familier)'],['너','tu (très familier)','On préfère souvent dire le prénom.'],['당신','vous, tu (à éviter)','Surtout dans les chansons ou entre époux.'],['우리','nous, notre'],['저희','nous (poli)'],['그','il'],['그녀','elle'],['이것 / 이거','ceci'],['그것 / 그거','cela'],['저것 / 저거','cela (là-bas)']
+    ]},{ title:'Questions', rows:[
+      ['누구','qui'],['뭐 / 무엇','quoi, que'],['어디','où'],['언제','quand'],['왜','pourquoi'],['어떻게','comment'],['어때요?','comment est-ce ? ça te dit ?'],['얼마','combien (prix)','얼마예요? = C\'est combien ?'],['몇','combien (nombre)','몇 명이에요? = Vous êtes combien ?'],['어느','lequel'],['무슨','quel genre de, quel','무슨 음식 = quel genre de plat']
+    ]}] },
+  { id:'connecteurs', icon:'🔗', title:'Connecteurs (et, mais, donc…)', level:'debutant', hint:'Les petits mots qui relient les phrases',
+    groups:[{ rows:[
+      ['그리고','et, puis'],['또','aussi, encore'],['그런데','mais, or, au fait'],['하지만','mais (plus net)'],['그렇지만','cependant'],['그래도','quand même, malgré tout'],['그래서','alors, donc'],['그러니까','c\'est pourquoi, donc'],['그러면','alors, dans ce cas'],['왜냐하면','parce que'],['그리고 나서','et après'],['먼저','d\'abord'],['그다음에','ensuite'],['마지막으로','pour finir']
+    ]}] },
+  { id:'couleurs', icon:'🎨', title:'Couleurs', level:'debutant', hint:'Rouge, bleu, vert…',
+    intro:'Beaucoup se terminent par 색 (couleur) : 빨간색 = rouge.',
+    groups:[{ rows:[
+      ['빨간색','rouge'],['파란색','bleu'],['노란색','jaune'],['초록색','vert'],['하얀색 / 흰색','blanc'],['검은색 / 까만색','noir'],['주황색','orange'],['보라색','violet'],['분홍색','rose'],['갈색','marron'],['회색','gris'],['하늘색','bleu ciel'],['색깔','couleur'],['무슨 색이에요?','De quelle couleur est-ce ?']
+    ]}] },
+  { id:'famille', icon:'👨‍👩‍👧', title:'Famille', level:'debutant', hint:'Parents, frères et sœurs, grands-parents',
+    intro:'Frères et sœurs : le mot change selon QUI parle. Un garçon dit 형 (grand frère) et 누나 (grande sœur) ; une fille dit 오빠 (grand frère) et 언니 (grande sœur).',
+    groups:[{ title:'Les parents et les enfants', rows:[
+      ['가족','famille'],['부모님','parents'],['아버지 / 아빠','père / papa'],['어머니 / 엄마','mère / maman'],['아들','fils'],['딸','fille'],['아이 / 애','enfant']
+    ]},{ title:'Frères et sœurs', rows:[
+      ['형','grand frère (dit par un garçon)'],['오빠','grand frère (dit par une fille)'],['누나','grande sœur (dit par un garçon)'],['언니','grande sœur (dit par une fille)'],['동생','petit frère / petite sœur'],['남동생','petit frère'],['여동생','petite sœur'],['형제','frères'],['자매','sœurs']
+    ]},{ title:'Et les autres', rows:[
+      ['할아버지','grand-père'],['할머니','grand-mère'],['남편','mari'],['아내 / 부인','épouse'],['친구','ami(e)'],['삼촌','oncle'],['이모','tante (côté maternel)'],['고모','tante (côté paternel)'],['사촌','cousin(e)']
+    ]}] },
+  { id:'politesse', icon:'🙇', title:'Niveaux de politesse', level:'intermediaire', hint:'Trois façons de dire la même chose',
+    intro:'En pratique : 해요체 (-아/어요) pour presque tout le monde ; 합쇼체 (-ㅂ/습니다) en situation formelle (présentation, travail, annonce) ; 해체 (-아/어) entre amis proches.',
+    groups:[{ title:'Le verbe 가다 (aller)', rows:[['갑니다','formel (합쇼체)'],['가요','poli courant (해요체)'],['가','familier (해체)']]},
+    { title:'Le verbe 먹다 (manger)', rows:[['먹습니다','formel (합쇼체)'],['먹어요','poli courant (해요체)'],['먹어','familier (해체)']]},
+    { title:'Être (이다)', rows:[['입니다','formel'],['이에요 / 예요','poli courant','예요 après une voyelle : 의사예요.'],['이야 / 야','familier']]},
+    { title:'Quelques mots de politesse', rows:[['감사합니다','merci (formel)'],['고마워요','merci (courant)'],['고마워','merci (familier)'],['안녕하세요','bonjour (poli)'],['안녕','salut'],['죄송합니다','je suis désolé (formel)'],['미안해요 / 미안해','pardon (courant / familier)']]}] },
+  { id:'conj', icon:'⏳', title:'Conjugaison de base', level:'intermediaire', hint:'Présent, passé et futur des verbes',
+    intro:'Présent poli : radical + 아요 (si la dernière voyelle est ㅏ ou ㅗ) ou 어요 (sinon). 하다 donne 해요. Passé : 았어요 / 었어요 / 했어요. Futur : radical + ㄹ/을 거예요.',
+    groups:[{ title:'Présent (해요체)', rows:[['가다 → 가요','aller'],['오다 → 와요','venir'],['보다 → 봐요','voir, regarder'],['먹다 → 먹어요','manger'],['마시다 → 마셔요','boire'],['읽다 → 읽어요','lire'],['하다 → 해요','faire']]},
+    { title:'Passé', rows:[['갔어요','je suis allé(e)','가다'],['왔어요','je suis venu(e)','오다'],['봤어요','j\'ai vu','보다'],['먹었어요','j\'ai mangé','먹다'],['마셨어요','j\'ai bu','마시다'],['했어요','j\'ai fait','하다']]},
+    { title:'Futur', rows:[['갈 거예요','j\'irai','Après une voyelle : ㄹ 거예요.'],['먹을 거예요','je mangerai','Après une consonne : 을 거예요.'],['할 거예요','je ferai'],['볼 거예요','je verrai']]}] },
+  { id:'negation', icon:'🚫', title:'Négation et impossibilité', level:'intermediaire', hint:'안, 못, 없다, 아니다',
+    groups:[{ rows:[
+      ['안 가요','je ne vais pas','안 + verbe : refus, choix, simple négation.'],['가지 않아요','je ne vais pas','-지 않다 : même sens, plus soutenu.'],
+      ['못 가요','je ne peux pas y aller','못 + verbe : impossibilité (manque de temps, de capacité…).'],['가지 못해요','je ne peux pas y aller','-지 못하다 : même sens, plus soutenu.'],
+      ['없어요','il n\'y a pas, je n\'ai pas','없다 : contraire de 있다.'],['아니에요','ce n\'est pas, non','이/가 아니에요 : « ne pas être ».','학생이 아니에요. = Je ne suis pas étudiant(e).'],
+      ['공부 안 해요','je n\'étudie pas','Avec 하다, 안 se place avant 하다.'],['못 먹었어요','je n\'ai pas pu manger','Passé : 못 + verbe au passé.']
+    ]}] }
+];
+
+// ---- rendu des catégories de référence ----
+function refCourseWords(){
+  const set = new Set();
+  Object.values(LESSONS_CACHE||{}).forEach(list=> (list||[]).forEach(l=>{
+    (l.vocab||[]).forEach(v=> String(v.kr||'').split(/[\s,.?!~()]+/).forEach(t=>{ if(t) set.add(t); }));
+    (l.dialogue||[]).forEach(ex=> (ex.segments||[]).forEach(sg=> String(sg.kr||'').split(/[\s,.?!~()]+/).forEach(t=>{ if(t) set.add(t); })));
+  }));
+  return set;
+}
+function refRowSeen(row, words){
+  const toks = String(row[0]).split(/[\s,.?!~()\/→]+/).filter(Boolean);
+  if(toks.some(t=>words.has(t))) return true;                      // mot identique
+  const list = [...words];                                          // mot + particule (날씨 -> 날씨가), seulement dès 2 lettres
+  return toks.some(t=> t.length>=2 && list.some(w=>w.length<=t.length+2 && w.startsWith(t)));
+}
+function refLevelOk(cat){
+  if(!PROFILE || PROFILE.role==='teacher' || state.refAll) return true;
+  return (REF_LEVEL_RANK[cat.level]||0) <= (REF_LEVEL_RANK[PROFILE.level||state.level]||0);
+}
+function renderRefHome(wrap){
+  const shown = REF_CATEGORIES.filter(refLevelOk);
+  wrap.appendChild(el('<h3 style="margin:28px 0 4px;font-size:16px;">📚 Pour réviser</h3>'));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Des fiches toujours complètes, pour revoir les bases quand tu veux. Les mots que tu as déjà rencontrés dans tes leçons portent un ✓.</div>'));
+  const grid = el('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;"></div>');
+  shown.forEach(c=>{
+    const n = c.groups.reduce((t,g)=>t+g.rows.length,0);
+    const tile = el(`<button type="button" class="ref-cat" data-ref="${c.id}" style="text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;">
+      <div style="font-size:26px;line-height:1;">${c.icon}</div>
+      <div style="font-size:16px;font-weight:600;margin:8px 0 2px;">${escapeHtml(c.title)}</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.45;">${escapeHtml(c.hint)}</div>
+      <div class="mono" style="margin-top:10px;font-size:12.5px;">${n} entrées</div></button>`);
+    tile.onclick = ()=>{ state.refCategory = c.id; state.refTest = null; render(); };
+    grid.appendChild(tile);
+  });
+  wrap.appendChild(grid);
+  if(PROFILE && PROFILE.role!=='teacher' && REF_CATEGORIES.some(c=>!refLevelOk(c)) || state.refAll){
+    const more = el(`<button class="btn ghost small" style="margin-top:14px;">${state.refAll?'Voir seulement mon niveau':'Voir toutes les fiches'}</button>`);
+    more.onclick = ()=>{ state.refAll = !state.refAll; render(); };
+    wrap.appendChild(more);
+  }
+}
+function renderRefCategory(wrap, cat){
+  const back = el('<button class="btn ghost small gm-back" style="margin-bottom:14px;">← Aide-mémoire</button>');
+  back.onclick = ()=>{ state.refCategory = null; state.refTest = null; render(); };
+  wrap.appendChild(back);
+  wrap.appendChild(el(`<h2 style="margin:0 0 4px;">${cat.icon} ${escapeHtml(cat.title)}</h2>`));
+  if(cat.intro) wrap.appendChild(el(`<div class="note" style="margin-bottom:14px;font-size:12.5px;">${escapeHtml(cat.intro)}</div>`));
+  const allRows = []; cat.groups.forEach(g=> g.rows.forEach(r=> allRows.push(r)));
+  // ----- mode « Me tester » : cartes à retourner
+  const T = state.refTest;
+  if(T){
+    const total = T.order.length;
+    if(T.i >= total){
+      const miss = T.miss.map(i=>allRows[i]);
+      const box = el(`<div class="result-box"><div class="score mono">${total-miss.length}/${total}</div><div style="margin:8px 0 12px;">${miss.length?'À revoir :':'Tout est bon, bravo !'}</div></div>`);
+      miss.forEach(r=> box.appendChild(el(`<div style="text-align:left;margin:4px 0;"><span class="kr" style="font-size:18px;">${escapeHtml(r[0])}</span> <span style="color:var(--ink-soft);font-size:13px;">${escapeHtml(r[1])}</span></div>`)));
+      if(miss.length && PROFILE && PROFILE.role==='student'){
+        const keep = el('<button class="btn ghost small" style="margin-top:10px;">Garder dans « Mots à revoir »</button>');
+        keep.onclick = async ()=>{ keep.disabled = true; for(const r of miss){ await sbAddWeakWord(String(r[0]).split(' / ')[0], r[1]); } keep.textContent = '✓ Gardés dans Mots à revoir'; };
+        box.appendChild(keep);
+      }
+      const again = el('<button class="btn celadon" style="margin-top:12px;margin-left:8px;">Recommencer</button>');
+      again.onclick = ()=>{ state.refTest = { order:allRows.map((_,i)=>i).sort(()=>Math.random()-0.5), i:0, flipped:false, miss:[] }; render(); };
+      const stop = el('<button class="btn ghost" style="margin-top:12px;margin-left:8px;">Retour à la fiche</button>');
+      stop.onclick = ()=>{ state.refTest = null; render(); };
+      box.appendChild(again); box.appendChild(stop); wrap.appendChild(box); return;
+    }
+    const r = allRows[T.order[T.i]];
+    wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${T.i+1} / ${total}</div>`));
+    const card = el(`<div class="item-card ref-card" style="max-width:320px;padding:26px 16px;margin-bottom:14px;cursor:pointer;text-align:center;"><div class="kr" style="font-size:30px;">${escapeHtml(r[0])}</div>${T.flipped?`<div style="margin-top:12px;font-size:16px;">${escapeHtml(r[1])}</div>${r[2]?`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">${escapeHtml(r[2])}</div>`:''}`:'<div style="margin-top:12px;font-size:12px;color:var(--ink-soft);">touche pour voir la réponse</div>'}</div>`);
+    card.onclick = ()=>{ T.flipped = true; render(); };
+    wrap.appendChild(card);
+    if(T.flipped){
+      const row = el('<div style="display:flex;gap:8px;flex-wrap:wrap;"></div>');
+      const yes = el('<button class="btn celadon">Je savais ✓</button>'); yes.onclick = ()=>{ T.i++; T.flipped=false; render(); };
+      const no = el('<button class="btn ghost">Pas encore</button>'); no.onclick = ()=>{ T.miss.push(T.order[T.i]); T.i++; T.flipped=false; render(); };
+      row.appendChild(yes); row.appendChild(no); wrap.appendChild(row);
+    }
+    const quit = el('<button class="btn ghost small" style="margin-top:16px;">Arrêter le test</button>');
+    quit.onclick = ()=>{ state.refTest = null; render(); };
+    wrap.appendChild(quit);
+    return;
+  }
+  const test = el('<button class="btn celadon small" style="margin-bottom:16px;">🎯 Me tester</button>');
+  test.onclick = ()=>{ state.refTest = { order:allRows.map((_,i)=>i).sort(()=>Math.random()-0.5), i:0, flipped:false, miss:[] }; render(); };
+  wrap.appendChild(test);
+  const words = refCourseWords();
+  cat.groups.forEach(g=>{
+    if(g.title) wrap.appendChild(el(`<h3 style="margin:18px 0 8px;font-size:15px;">${escapeHtml(g.title)}</h3>`));
+    g.rows.forEach(r=>{
+      const seen = g.seen!==false && refRowSeen(r, words);
+      wrap.appendChild(el(`<div class="item-card ref-row" style="text-align:left;padding:10px 14px;margin-bottom:6px;"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span class="kr" style="font-size:20px;">${escapeHtml(r[0])}</span><span style="font-size:13.5px;flex:1;min-width:120px;">${escapeHtml(r[1])}</span>${seen?'<span title="Déjà rencontré dans tes leçons" style="color:var(--celadon-dark);font-size:12px;">✓ vu en cours</span>':''}</div>${r[2]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px;">${escapeHtml(r[2])}</div>`:''}${r[3]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">ex. ${escapeHtml(r[3])}</div>`:''}</div>`));
+    });
+  });
+}
 /* ===== Mot entendu (voix ou saisie) ===== */
 const LISTEN = { input:'', note:'', cands:[], tokens:[], result:null, msg:'', busy:false, listening:false, added:null };
 function speechRecognitionCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
@@ -1897,11 +2097,13 @@ function renderGrammarNotebook(){
   const seenItems = (cat)=> cat.items().filter(([key])=>entryOf(cat.kind,key))
     .sort((x,y)=> String((entryOf(cat.kind,y[0])||{}).created_at||'').localeCompare(String((entryOf(cat.kind,x[0])||{}).created_at||'')));
   const cat = GRAMMAR_CATEGORIES.find(c=>c.kind===state.grammarCategory);
+  const refCat = REF_CATEGORIES.find(c=>c.id===state.refCategory);
+  if(refCat){ renderRefCategory(wrap, refCat); return wrap; }
 
   if(!cat){
     // ----- accueil : les catégories -----
     wrap.appendChild(el('<h2 style="margin:0 0 4px;">📒 Aide-mémoire grammaire</h2>'));
-    wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure. Choisis une catégorie.</div>`));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure. Plus bas, des fiches pour réviser les bases (nombres, jours, saisons…) sont toujours disponibles.</div>`));
     if(!GRAMMAR_TABLE_OK){
       wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ La sauvegarde de cette liste n'est pas encore activée : elle ne dure que le temps de cette session. Demande à celui qui gère l'outil de lancer <b>migration-grammaire.sql</b> dans Supabase.</div>`));
     }
@@ -1922,6 +2124,7 @@ function renderGrammarNotebook(){
       grid.appendChild(tile);
     });
     wrap.appendChild(grid);
+    renderRefHome(wrap);
     return wrap;
   }
 
