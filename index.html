@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>반가워요 — Compagnon de coréen</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#B8433A">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="반가워요">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -167,8 +175,22 @@ async function sbUpsertProgress(lessonId, patch){
   const existing = PROGRESS[lessonId] || {};
   const merged = Object.assign({student_id:SESSION.user.id, lesson_id:lessonId}, existing, patch);
   delete merged.updated_at;
-  await sb.from('progress').upsert(merged, {onConflict:'student_id,lesson_id'});
+  const payload = Object.assign({}, merged); delete payload.misses;     // les mots ratés ont leur propre enregistrement (sbRecordAnswers)
+  await sb.from('progress').upsert(payload, {onConflict:'student_id,lesson_id'});
   PROGRESS[lessonId] = merged;
+}
+// « Où ça pèche » : pour chaque mot, nombre de fois raté (m) et réussi (c), par leçon. Sans la migration, on ignore sans rien casser.
+async function sbRecordAnswers(lessonId, results){
+  try{
+    if(!lessonId || !results || !results.length || !SESSION || !PROFILE || PROFILE.role!=='student') return;
+    const cur = Object.assign({}, (PROGRESS[lessonId] && PROGRESS[lessonId].misses) || {});
+    results.forEach(r=>{
+      const k = String(r.kr||'').trim().slice(0,60); if(!k) return;
+      const e = Object.assign({ m:0, c:0 }, cur[k]||{}); if(r.ok) e.c++; else e.m++; cur[k] = e;
+    });
+    const { error } = await sb.from('progress').upsert({ student_id:SESSION.user.id, lesson_id:lessonId, misses:cur }, { onConflict:'student_id,lesson_id' });
+    if(!error) PROGRESS[lessonId] = Object.assign({ student_id:SESSION.user.id, lesson_id:lessonId }, PROGRESS[lessonId]||{}, { misses:cur });
+  }catch(e){ /* colonne absente ou réseau : on laisse tomber, l'élève n'est pas gêné */ }
 }
 async function sbMyAssignment(){
   const {data} = await sb.from('assignments').select('*').eq('student_id', SESSION.user.id).maybeSingle();
@@ -719,6 +741,7 @@ async function loadOwnProfile(){
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
     }
     else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); SUGGESTIONS = await sbSuggestions(); }
+    NEXT_CLASS = await sbNextClassRows();
     await loadDMState();
     subscribeDM();
     updateTitleBadge();
@@ -774,6 +797,7 @@ async function render(){
 
   app.appendChild(renderHeader());
   app.appendChild(await renderAssignmentBanner());
+  app.appendChild(renderNextClassBanner());
 
   app.appendChild(renderSpaceTabs());
 
@@ -850,6 +874,11 @@ function renderHeader(){
     const changePass = el(`<button style="${itemStyle}">🔑 Changer le mot de passe</button>`);
     changePass.onclick = ()=>{ state.headerMenuOpen=false; openChangePasswordModal(); render(); };
     menu.appendChild(changePass);
+    if(!isStandaloneApp()){
+      const inst = el(`<button style="${itemStyle}border-top:1px solid var(--line);">📲 Installer sur mon téléphone</button>`);
+      inst.onclick = ()=>{ state.headerMenuOpen=false; openInstallHelp(); render(); };
+      menu.appendChild(inst);
+    }
     // le réglage n'est proposé que si la migration des rappels est en place (colonne présente)
     if(PROFILE.role==='student' && 'reminder_opt_in' in PROFILE){
       const reminderBtn = el(`<button style="${itemStyle}border-top:1px solid var(--line);">🔔 Rappels par email</button>`);
@@ -910,6 +939,28 @@ function openReminderModal(){
   document.body.appendChild(bg);
 }
 
+/* ---- Installer l'outil sur l'écran d'accueil du téléphone ---- */
+let DEFERRED_INSTALL = null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); DEFERRED_INSTALL = e; });
+window.addEventListener('appinstalled', ()=>{ DEFERRED_INSTALL = null; });
+try{ window.addEventListener('load', ()=>{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }catch(e){}
+function isStandaloneApp(){ try{ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }catch(e){ return false; } }
+async function openInstallHelp(){
+  if(DEFERRED_INSTALL){
+    try{ DEFERRED_INSTALL.prompt(); await DEFERRED_INSTALL.userChoice; }catch(e){}
+    DEFERRED_INSTALL = null; return;
+  }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const bg = el('<div class="modal-bg"></div>');
+  const steps = ios
+    ? '<ol style="padding-left:20px;line-height:1.7;"><li>Ouvre cette page dans <b>Safari</b>.</li><li>Touche le bouton <b>Partager</b> (le carré avec une flèche vers le haut).</li><li>Choisis <b>« Sur l\'écran d\'accueil »</b>, puis <b>Ajouter</b>.</li></ol>'
+    : '<ol style="padding-left:20px;line-height:1.7;"><li>Ouvre le <b>menu ⋮</b> de ton navigateur (en haut à droite).</li><li>Touche <b>« Installer l\'application »</b> ou <b>« Ajouter à l\'écran d\'accueil »</b>.</li><li>Confirme : l\'icône 반 apparaît sur ton téléphone.</li></ol>';
+  const modal = el(`<div class="modal"><h3>📲 Installer sur mon téléphone</h3><div style="font-size:14px;">L'outil s'ouvrira en plein écran, comme une application, sans barre d'adresse.</div>${steps}<div class="modal-actions"></div></div>`);
+  const close = el('<button class="btn seal">Compris</button>'); close.onclick = ()=> bg.remove();
+  modal.querySelector('.modal-actions').appendChild(close);
+  bg.appendChild(modal); bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
 function openChangePasswordModal(){
   const bg = el('<div class="modal-bg"></div>');
   const modal = el(`<div class="modal">
@@ -1360,9 +1411,21 @@ function renderMemorize(lesson){
   return wrap;
 }
 
-function buildMCQ(lesson, count){
+/* ---- Révision intelligente : les mots que l'élève rate le plus reviennent en premier ---- */
+// Score d'un mot : erreurs moins la moitié des réussites (jamais négatif), toutes leçons confondues
+function missScore(kr){
+  let m = 0, c = 0;
+  Object.keys(PROGRESS||{}).forEach(id=>{ const e = PROGRESS[id] && PROGRESS[id].misses && PROGRESS[id].misses[kr]; if(e){ m += e.m||0; c += e.c||0; } });
+  return { score: Math.max(0, m - 0.5*c), known: c };
+}
+// Mélange aléatoire qui fait remonter les mots difficiles et laisse en fin de liste ceux déjà bien connus
+function smartOrder(arr, krOf){
+  return arr.map(x=>{ const s = missScore(krOf(x)); return { x, k: Math.random() - Math.min(3, s.score)*0.4 + Math.min(s.known, 6)*0.04 }; })
+    .sort((a,b)=>a.k-b.k).map(o=>o.x);
+}
+function buildMCQ(lesson, count, smart){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr})));
-  const shuffled = [...items].sort(()=>Math.random()-0.5).slice(0,count||items.length);
+  const shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
   return shuffled.map((it,i)=>{
     const correct = it.fr || it.rom;
     const distractors = items.filter(x=>x!==it).sort(()=>Math.random()-0.5).slice(0,3).map(x=>x.fr||x.rom);
@@ -1402,12 +1465,12 @@ function renderExercices(lesson){
       : '<div class="empty-state">Rien à travailler ici.</div>'));
     return wrap;
   }
-  if(!lesson._exOrder || lesson._exOrder.length!==items.length) lesson._exOrder = items.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  if(!lesson._exOrder || lesson._exOrder.length!==items.length) lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
   const total = items.length;
   if(state.exerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.exerciseCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Entraînement terminé — refais un tour, ou passe au Quiz.</div></div>`);
     const restart = el('<button class="btn celadon">Recommencer</button>');
-    restart.onclick = ()=>{ state.exerciseIndex=0; state.exerciseCorrectCount=0; lesson._exOrder = items.map((_,i)=>i).sort(()=>Math.random()-0.5); render(); };
+    restart.onclick = ()=>{ state.exerciseIndex=0; state.exerciseCorrectCount=0; lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr); render(); };
     done.appendChild(restart); wrap.appendChild(done); return wrap;
   }
   const item = items[lesson._exOrder[state.exerciseIndex]];
@@ -1425,6 +1488,7 @@ function renderExercices(lesson){
     if(input.disabled) return;
     const expected = askRom ? item.rom : item.fr;
     const ok = askRom ? (input.value.trim().toLowerCase() === (expected||'').toLowerCase()) : frAnswerOk(input.value, expected);
+    sbRecordAnswers(lesson.id, [{ kr:item.kr, ok }]);
     if(ok){ state.exerciseCorrectCount=(state.exerciseCorrectCount||0)+1; fb.innerHTML = `<div class="feedback ok">Exact 👍${(!askRom||!item.fr)?'':(' — '+item.fr)}</div>`; }
     else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${expected}"${(askRom&&item.fr)?(' ('+item.fr+')'):''}.</div>`; }
     checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
@@ -1654,6 +1718,7 @@ const PUZZLE_ORDER = [4,1,3,0,5,2];      // ordre dans lequel les cases se dévo
 let GIFTS = [];                           // cadeaux déjà remis (élève : les siens ; professeure : tous)
 let ALL_GIFTS = [];
 let SUGGESTIONS = [], SUGGEST_OK = true, SUGGEST_CTX = '';
+let NEXT_CLASS = [];
 let GIFTS_TABLE_OK = true;
 function puzzleCountFromRows(rows){ return (rows||[]).filter(r=>r && r.control && r.control.passed).length; }
 function puzzleCount(){ return puzzleCountFromRows(Object.values(PROGRESS||{})); }
@@ -1943,13 +2008,14 @@ function renderWeakWordsPractice(){
 
   // Exercices : drill de saisie, sans sauvegarde (pratique libre, pas liée à une leçon)
   const total = WEAK_WORDS.length;
+  if(!state.reviewOrder || state.reviewOrder.length!==total || state.reviewExerciseIndex===0 && !state.reviewOrderFresh){ state.reviewOrder = smartOrder(WEAK_WORDS.map((_,i)=>i), i=>WEAK_WORDS[i].word); state.reviewOrderFresh = true; }
   if(state.reviewExerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.reviewCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Tour terminé — refais-en un autre pour renforcer la mémoire.</div></div>`);
     const restart = el('<button class="btn celadon">Recommencer</button>');
-    restart.onclick = ()=>{ state.reviewExerciseIndex=0; state.reviewCorrectCount=0; render(); };
+    restart.onclick = ()=>{ state.reviewExerciseIndex=0; state.reviewCorrectCount=0; state.reviewOrderFresh=false; render(); };
     done.appendChild(restart); wrap.appendChild(done); return wrap;
   }
-  const item = WEAK_WORDS[state.reviewExerciseIndex];
+  const item = WEAK_WORDS[state.reviewOrder[state.reviewExerciseIndex]];
   wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${state.reviewExerciseIndex+1} / ${total}</div>`));
   wrap.appendChild(el(`<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${escapeHtml(item.word)}</span></div>`));
   const row = el('<div style="display:flex;gap:8px;max-width:340px;"></div>');
@@ -2285,7 +2351,7 @@ function renderQuiz(lesson){
     }
     return wrap;
   }
-  const qs = lesson._quiz || (lesson._quiz = buildMCQ(lesson, 10));
+  const qs = lesson._quiz || (lesson._quiz = buildMCQ(lesson, 10, true));
   if(qs.length===0){ wrap.appendChild(el('<div class="empty-state">Pas de contenu pour un quiz ici.</div>')); return wrap; }
   wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Petit contrôle rapide, sans enjeu.</div>'));
   qs.forEach(q=>{
@@ -2303,6 +2369,7 @@ function renderQuiz(lesson){
     let correct=0; const wrong=[];
     qs.forEach(q=>{ const g=state.quizAnswers[q.id]; if(g===q.answer) correct++; else wrong.push({kr:q.kr, given:g, answer:q.answer}); });
     state.quizResult = {correct, total:qs.length, wrong};
+    await sbRecordAnswers(lesson.id, qs.map(q=>({ kr:q.kr, ok: state.quizAnswers[q.id]===q.answer })));
     await sbUpsertProgress(lesson.id, {quiz:{correct, total:qs.length, date:new Date().toISOString().slice(0,10)}});
     render();
   };
@@ -2477,6 +2544,7 @@ function renderControle(lesson, list, idx){
     const ctl = { passed, score: Math.max(prevCtl.score||0, ratio), last_score: ratio, date:new Date().toISOString().slice(0,10), attempts:(prevCtl.attempts||0)+1, flags };
     controlGuardReset();
     state.controlResult = {correct, total, passed:passedNow, wrong};
+    await sbRecordAnswers(lesson.id, qs.map(q=>({ kr:q.kr, ok: state.controlAnswers[q.id]===q.answer })));
     await sbUpsertProgress(lesson.id, {control: ctl});
     if(passedNow && PROFILE.role==='student'){
       const after = puzzleCount();
@@ -2497,10 +2565,12 @@ async function renderRevision(){
     if(pr && pr.control && pr.control.passed){ (l.vowels||[]).forEach(v=>pool.push(v)); (l.vocab||[]).forEach(v=>pool.push(v)); }
   });
   if(pool.length===0){ wrap.appendChild(el('<div class="empty-state">Rien à réviser pour l\'instant.</div>')); return wrap; }
-  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Clique pour révéler le sens.</div>'));
+  const ordered = smartOrder(pool, v=>v.kr);
+  const hard = ordered.filter(v=>missScore(v.kr).score>0).length;
+  wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Clique pour révéler le sens.${hard?` Les mots que tu rates le plus sont en premier (marqués 🎯).`:''}</div>`));
   const grid = el('<div class="card-grid"></div>');
-  pool.forEach(v=>{
-    const c = el(`<div class="flip-card"><div><span class="kr">${v.kr}</span></div></div>`);
+  ordered.forEach(v=>{
+    const c = el(`<div class="flip-card"><div><span class="kr">${v.kr}</span>${missScore(v.kr).score>0?' <span title="à retravailler">🎯</span>':''}</div></div>`);
     c.onclick = ()=>{ if(c.classList.contains('revealed')) return; c.classList.add('revealed'); c.querySelector('div').innerHTML = `<span class="kr">${v.kr}</span>${v.rom?`<div class="meaning mono">${v.rom}</div>`:''}<div class="meaning">${v.fr}</div>`; };
     grid.appendChild(c);
   });
@@ -3264,6 +3334,9 @@ async function renderDashboard(){
         ALL_PROFILES = await sbAllProfiles();
         render();
       };
+      const mid = el('<span style="margin-left:auto;margin-right:10px;font-size:12px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">📅 Prochain cours</span>');
+      mid.appendChild(nextClassPicker('group', g.id));
+      row.appendChild(mid);
       row.appendChild(delBtn);
       grListEl.appendChild(row);
     });
@@ -3281,7 +3354,9 @@ async function renderDashboard(){
   if(students.length===0){ box.appendChild(el('<div class="empty-state">Aucun élève pour l\'instant — crée le premier compte ci-dessus.</div>')); return box; }
 
   const allLessonsFlat = {};
-  for(const lvl of Object.keys(LEVEL_LABELS)){ (await lessonsForLevel(lvl)).forEach(l=>allLessonsFlat[l.id]={title:l.title, level:lvl}); }
+  for(const lvl of Object.keys(LEVEL_LABELS)){ (await lessonsForLevel(lvl)).forEach(l=>{ const words = {}; (l.vowels||[]).concat(l.vocab||[]).forEach(w=>{ if(w && w.kr && w.fr) words[String(w.kr).trim()] = w.fr; }); allLessonsFlat[l.id]={title:l.title, level:lvl, words}; }); }
+
+  box.appendChild(renderWeakSpots(students, allLessonsFlat));
 
   students.forEach(p=>{
     const rows = ALL_PROGRESS.filter(r=>r.student_id===p.id);
@@ -3342,6 +3417,8 @@ async function renderDashboard(){
     groupSel.onclick = (e)=> e.stopPropagation();
     groupSel.onchange = async (e)=>{ e.stopPropagation(); await sbSetStudentGroup(p.id, e.target.value || null); ALL_PROFILES = await sbAllProfiles(); render(); };
     groupRow.appendChild(groupSel);
+    groupRow.appendChild(el('<span style="margin-left:12px;">📅 Prochain cours (perso) :</span>'));
+    groupRow.appendChild(nextClassPicker('student', p.id));
     card.appendChild(groupRow);
 
     if(expanded){
@@ -3353,7 +3430,9 @@ async function renderDashboard(){
           const ex = r.exercises ? `${r.exercises.correct}/${r.exercises.total}` : '—';
           const qz = r.quiz ? `Quiz ${r.quiz.correct}/${r.quiz.total}` : '';
           const cf = r.control && r.control.flags; const ct = r.control ? `Contrôle ${Math.round((r.control.score||0)*100)}% ${r.control.passed?'✅':'❌'} (${r.control.attempts||0} essai${(r.control.attempts||0)>1?'s':''})${cf&&(cf.exits||cf.cancelled)?` ⚠️ ${cf.exits} sortie${cf.exits>1?'s':''} de page${cf.cancelled?`, ${cf.cancelled} annulé${cf.cancelled>1?'s':''}`:''}${cf.secs?` (${cf.secs} s hors page)`:''}`:''}` : '';
+          const weakTop = r.misses ? Object.keys(r.misses).filter(k=>r.misses[k] && r.misses[k].m>0).sort((a,b)=>r.misses[b].m-r.misses[a].m).slice(0,6) : [];
           table.appendChild(el(`<div class="vocab-row"><span>${escapeHtml(meta.title)} <span style="color:var(--ink-soft);font-size:11px;">(${LEVEL_LABELS[meta.level]||''})</span></span><span>${ex}</span><span>${[qz,ct].filter(Boolean).join(' · ')||'—'}</span></div>`));
+          if(weakTop.length) table.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin:-2px 0 10px;">🎯 À reprendre : ${weakTop.map(k=>`<span class="kr">${escapeHtml(k)}</span> ×${r.misses[k].m}`).join(' · ')}</div>`));
         });
         card.appendChild(table);
       }
@@ -3760,6 +3839,67 @@ async function openSuggest(kind){
   SUGGESTIONS = await sbSuggestions();
   render();
 }
+/* ---- Prochain cours : date saisie par la professeure, compte à rebours côté élève ---- */
+async function sbNextClassRows(){
+  try{ const { data, error } = await sb.from('next_class').select('*'); return error ? [] : (data||[]); }catch(e){ return []; }
+}
+async function sbSetNextClass(type, id, iso){
+  const r = iso
+    ? await sb.from('next_class').upsert({ target_type:type, target_id:id, class_at:iso }, { onConflict:'target_type,target_id' })
+    : await sb.from('next_class').delete().eq('target_type', type).eq('target_id', id);
+  return r && r.error ? r.error : null;
+}
+function nextClassFor(type, id){ return (NEXT_CLASS||[]).find(x=>x.target_type===type && x.target_id===id) || null; }
+// Prochain cours à venir pour l'élève : la date la plus proche entre la sienne et celle de son groupe (encore affichée 1 h après le début)
+function myNextClass(now){
+  if(!PROFILE || PROFILE.role!=='student') return null;
+  const t = (now||Date.now()) - 3600*1000;
+  return (NEXT_CLASS||[]).filter(x=> new Date(x.class_at).getTime() >= t).sort((a,b)=> new Date(a.class_at)-new Date(b.class_at))[0] || null;
+}
+function nextClassText(iso, now){
+  const d = new Date(iso), n = new Date(now||Date.now());
+  const startOf = x=> new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(d) - startOf(n)) / 86400000);
+  const when = d.toLocaleString('fr-FR', { weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' });
+  let rel;
+  if(d.getTime() < n.getTime()) rel = 'c\'est maintenant !';
+  else if(days<=0) rel = 'aujourd\'hui';
+  else if(days===1) rel = 'demain';
+  else rel = 'dans ' + days + ' jours';
+  return { when, rel, days };
+}
+function renderNextClassBanner(){
+  const nc = myNextClass(); if(!nc) return el('<div></div>');
+  const t = nextClassText(nc.class_at);
+  const hint = (t.days>=0 && t.days<=7) ? 'Un peu de révision chaque jour, et tu seras prêt(e) 📚' : '';
+  return el(`<div class="note" style="margin-bottom:12px;border-color:var(--celadon-dark);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span>📅 <b>Prochain cours : ${escapeHtml(t.when)}</b> — ${escapeHtml(t.rel)}</span>${hint?`<span style="color:var(--ink-soft);font-size:12.5px;">${hint}</span>`:''}</div>`);
+}
+// Sélecteur de date pour la professeure (groupe ou élève)
+function nextClassPicker(type, id){
+  const cur = nextClassFor(type, id);
+  const pad = n=>String(n).padStart(2,'0');
+  const toLocal = iso=>{ const d = new Date(iso); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); };
+  const wrap = el('<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"></span>');
+  const input = el('<input type="datetime-local" style="font-size:12px;padding:3px 6px;">');
+  if(cur) input.value = toLocal(cur.class_at);
+  input.onclick = e=> e.stopPropagation();
+  input.onchange = async (e)=>{
+    e.stopPropagation();
+    const iso = input.value ? new Date(input.value).toISOString() : null;
+    const err = await sbSetNextClass(type, id, iso);
+    if(err){ alert("Impossible d'enregistrer : " + err.message + " (as-tu lancé migration-prochain-cours.sql ?)"); return; }
+    NEXT_CLASS = await sbNextClassRows(); render();
+  };
+  wrap.appendChild(input);
+  if(cur){
+    const clr = el('<button type="button" class="btn ghost small" style="padding:2px 8px;" title="Effacer la date">✕</button>');
+    clr.onclick = async (e)=>{ e.stopPropagation(); await sbSetNextClass(type, id, null); NEXT_CLASS = await sbNextClassRows(); render(); };
+    wrap.appendChild(clr);
+  }
+  return wrap;
+}
+
 /* ---- Suggestions : idées et problèmes des élèves, lus par la professeure ---- */
 async function sbSuggestions(){
   try{
@@ -3867,6 +4007,45 @@ function renderSuggestions(){
     const rm = el('<button class="btn ghost small">🗑 Supprimer</button>');
     rm.onclick = async ()=>{ if(!confirm('Supprimer cette suggestion ?')) return; const { error } = await sb.from('suggestions').delete().eq('id', x.id); if(!error){ SUGGESTIONS = SUGGESTIONS.filter(y=>y.id!==x.id); render(); } };
     row.appendChild(tg); row.appendChild(rp); row.appendChild(rm); card.appendChild(row); box.appendChild(card);
+  });
+  return box;
+}
+
+/* ---- « Où ça pèche » : les mots les plus ratés, leçon par leçon ---- */
+function weakSpotsOf(lessonId, students){
+  const names = {}; students.forEach(p=>names[p.id]=p.name);
+  const byWord = {};
+  ALL_PROGRESS.filter(r=>r.lesson_id===lessonId && r.misses && names[r.student_id]).forEach(r=>{
+    Object.keys(r.misses).forEach(kr=>{
+      const e = r.misses[kr] || {}; if(!(e.m>0)) return;
+      const w = byWord[kr] || (byWord[kr] = { kr, m:0, c:0, who:[] });
+      w.m += e.m; w.c += (e.c||0); w.who.push({ name:names[r.student_id], m:e.m });
+    });
+  });
+  return Object.values(byWord).sort((a,b)=> (b.who.length-a.who.length) || (b.m-a.m) || a.kr.localeCompare(b.kr));
+}
+function renderWeakSpots(students, flat){
+  const box = el('<div class="section-block" style="border:1.5px dashed var(--gold);border-radius:10px;padding:16px 18px;margin-bottom:26px;"></div>');
+  box.appendChild(el('<h3 style="margin-top:0;">🎯 Où ça pèche</h3>'));
+  const withData = {};
+  ALL_PROGRESS.forEach(r=>{ if(r.misses && Object.keys(r.misses).some(k=>r.misses[k] && r.misses[k].m>0)) withData[r.lesson_id] = (withData[r.lesson_id]||0) + 1; });
+  const ids = Object.keys(withData).filter(id=>flat[id]);
+  if(!ids.length){
+    box.appendChild(el('<div class="note">Les mots que les élèves ratent dans les exercices, quiz et contrôles apparaîtront ici, leçon par leçon, pour savoir quoi reprendre au prochain cours. (Si rien n\'apparaît après leurs premiers essais, lance <b>migration-erreurs.sql</b> dans Supabase.)</div>'));
+    return box;
+  }
+  if(!state.weakLesson || !withData[state.weakLesson]) state.weakLesson = ids.sort((a,b)=> (withData[b]-withData[a]))[0];
+  const sel = el('<select style="margin-bottom:12px;max-width:100%;"></select>');
+  ids.forEach(id=>{ const o = el(`<option value="${escapeHtml(id)}">${escapeHtml(flat[id].title)} (${escapeHtml(LEVEL_LABELS[flat[id].level]||'')})</option>`); if(id===state.weakLesson) o.selected = true; sel.appendChild(o); });
+  sel.onchange = ()=>{ state.weakLesson = sel.value; render(); };
+  box.appendChild(sel);
+  const list = weakSpotsOf(state.weakLesson, students).slice(0, 12);
+  if(!list.length){ box.appendChild(el('<div class="note">Aucun mot raté pour cette leçon.</div>')); return box; }
+  const words = flat[state.weakLesson].words || {};
+  box.appendChild(el('<div class="note" style="margin-bottom:10px;font-size:12.5px;">Les mots les plus ratés d\'abord (nombre d\'élèves concernés, puis nombre d\'erreurs). C\'est une bonne liste pour ouvrir le prochain cours.</div>'));
+  list.forEach(w=>{
+    const who = w.who.sort((a,b)=>b.m-a.m).slice(0,5).map(x=>`${escapeHtml(x.name)} (${x.m})`).join(', ') + (w.who.length>5 ? ' …' : '');
+    box.appendChild(el(`<div class="vocab-row" style="align-items:flex-start;gap:10px;"><span><span class="kr" style="font-size:17px;">${escapeHtml(w.kr)}</span>${words[w.kr]?` <span style="color:var(--ink-soft);font-size:12px;">${escapeHtml(words[w.kr])}</span>`:''}</span><span style="text-align:right;font-size:12px;">${w.m} erreur${w.m>1?'s':''} · ${w.who.length} élève${w.who.length>1?'s':''}<br><span style="color:var(--ink-soft);">${who}</span></span></div>`));
   });
   return box;
 }
