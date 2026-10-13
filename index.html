@@ -176,7 +176,8 @@ function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s==
 async function sbLessons(space){
   const {data,error} = await sb.from('lessons').select('*').eq('space',space).order('position');
   if(error){ console.error(error); return []; }
-  return data||[];
+  // retire du vocabulaire les entrées abîmées par d'anciennes modifications (voir isJunkVocab)
+  return (data||[]).map(l=> Array.isArray(l.vocab) ? Object.assign({}, l, { vocab:l.vocab.filter(v=>!isJunkVocab(v)) }) : l);
 }
 async function sbAddLesson(row){ return await sb.from('lessons').insert(row); }
 async function sbAllProgressForSelf(){
@@ -2631,6 +2632,17 @@ function splitEmbeddedKoFr(segment){
   return {kr, rom:'', fr};
 }
 
+// Une entrée de vocabulaire valable = un mot coréen (kr), une romanisation en alphabet latin
+// (rom, facultative) et une traduction qui n'est pas du coréen. Le reste est un déchet
+// (ex. « 버스 | 지하철 | 택시 » ou « Il y a des bus | des métros | … »), né du découpage
+// d'une phrase à virgules par une ancienne version.
+function isJunkVocab(v){
+  if(!v || !v.kr || !isHangul(v.kr)) return true;
+  if(v.rom && isHangul(v.rom)) return true;
+  if(v.fr && isHangul(v.fr) && !hasLatinLetters(v.fr)) return true;
+  return false;
+}
+
 function parseVocabText(raw){
   const results = [];
   const seen = new Set();
@@ -2643,6 +2655,14 @@ function parseVocabText(raw){
     if(!line) return;
 
     const arrowParts = line.split('→').map(s=>s.trim()).filter(Boolean);
+    // « coréen → français » (ou l'inverse) : une seule paire, même s'il y a des virgules dedans
+    if(arrowParts.length===2){
+      const [l,r] = arrowParts;
+      let pair = null;
+      if(isHangul(l) && !isHangul(r) && hasLatinLetters(r)) pair = {kr:l, rom:'', fr:r};
+      else if(isHangul(r) && !isHangul(l) && hasLatinLetters(l)) pair = {kr:r, rom:'', fr:l};
+      if(pair){ if(!seen.has(pair.kr)){ seen.add(pair.kr); results.push(pair); } return; }
+    }
     const segments = arrowParts.length>1 ? arrowParts : [line];
 
     segments.forEach(seg=>{
@@ -2669,7 +2689,7 @@ function parseVocabText(raw){
       } else {
         entry = splitEmbeddedKoFr(seg);
       }
-      if(entry && entry.kr && !seen.has(entry.kr)){
+      if(entry && entry.kr && !isJunkVocab(entry) && !seen.has(entry.kr)){
         seen.add(entry.kr);
         results.push(entry);
       }
@@ -3128,6 +3148,13 @@ async function renderManage(){
   return wrap;
 }
 
+// Vocabulaire ajouté à la main = tout ce qui ne vient PAS du contenu du cours
+// (les phrases et mots du cours sont recalculés à chaque enregistrement).
+function manualVocabOf(lesson){
+  const fromCourse = new Set(dialogueToVocab(lesson.dialogue||[]).map(v=>v.kr));
+  return (lesson.vocab||[]).filter(v=> !fromCourse.has(v.kr) && !isJunkVocab(v));
+}
+
 function serializeVocab(vocab){
   return (vocab||[]).map(v => v.rom ? `${v.kr} | ${v.rom} | ${v.fr}` : `${v.kr} → ${v.fr}`).join('\n');
 }
@@ -3178,7 +3205,7 @@ function openEditLessonModal(lesson){
   modal.appendChild(dialogueSection);
 
   const form2 = el(`<div>
-    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne</label><textarea data-ko="1" id="em-vocab" style="min-height:100px;">${escapeHtml(serializeVocab(lesson.vocab))}</textarea>
+    <div class="field"><label>Vocabulaire supplémentaire — une entrée par ligne</label><textarea data-ko="1" id="em-vocab" style="min-height:100px;">${escapeHtml(serializeVocab(manualVocabOf(lesson)))}</textarea>
       <div id="em-vocab-preview" class="note" style="margin-top:8px;font-size:12px;"></div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="em-grammar">${escapeHtml((lesson.grammar||[]).join('\n'))}</textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Si tout ton cours se trouve ici, déplace-le vers « Contenu du cours » pour qu'il alimente les exercices et le quiz. <button type="button" class="btn ghost small" id="em-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
