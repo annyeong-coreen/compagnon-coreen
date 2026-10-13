@@ -2686,8 +2686,38 @@ function parseContentSegments(content){
     if(g){ gloss = { kr:g.kr, fr:g.fr, manual:true, gloss:true }; content = content.slice(0, pm.index).trim(); }
   }
 
+  // reformulation entre parenthèses "(=구경할 곳이 많아요)" : ce n'est PAS une traduction,
+  // la phrase devient deux segments coréens (le « = » ne coupe plus la ligne en deux)
+  const extra = [];
+  content = content.replace(/\s*\(\s*=\s*([^()]*)\)/g, (all, inner)=>{ if(isHangul(inner)) extra.push(inner.trim()); return isHangul(inner) ? '' : all; });
+
+  // mots glosés à la fin de la ligne, SANS parenthèses :
+  //   "... 부산도 좋아요. 관광지 site touristique"  ou  "킹크랩 crabe royal, 게 crabe, 새우 crevette"
+  const glossList = (txt)=>{
+    if(/[=→|]/.test(txt) || !hasLatinLetters(txt) || !isHangul(txt)) return null;
+    const parts = txt.split(/\s*,\s*/).filter(Boolean);
+    const res = [];
+    for(const p of parts){
+      const e = splitEmbeddedKoFr(p);
+      if(!e || /[.?!…]/.test(e.kr) || e.kr.split(/\s+/).length>3) return null;
+      res.push({ kr:e.kr, fr:e.fr, manual:true, gloss:true });
+    }
+    return res.length ? res : null;
+  };
+  let tailGlosses = [];
+  {
+    const m = content.match(/^(.*[.?!…。？！])\s+([^.?!…。？！]+)$/);
+    if(m){
+      const g = glossList(m[2]);
+      if(g){ tailGlosses = g; content = m[1].trim(); }
+    } else if(content.includes(',')){
+      const g = glossList(content);
+      if(g && g.length>=2){ tailGlosses = g; content = ''; }
+    }
+  }
+
   if(content){
-    const eqIdx = content.indexOf('=');
+    const eqIdx = content.replace(/\([^()]*\)/g, s=>' '.repeat(s.length)).indexOf('=');
     if(eqIdx !== -1){
       // "ko1 | ko2 = fr1 | fr2" : les segments des deux côtés se correspondent un par un
       const koSegs = content.slice(0, eqIdx).split('|').map(s=>s.trim()).filter(Boolean);
@@ -2710,6 +2740,8 @@ function parseContentSegments(content){
       out.push(e ? { kr:e.kr, fr:e.fr, manual:true } : { kr:content, fr:'', manual:false });
     }
   }
+  extra.forEach(kr=> out.push({ kr, fr:'', manual:false }));
+  tailGlosses.forEach(g=> out.push(g));
   if(gloss) out.push(gloss);
   return out;
 }
