@@ -94,6 +94,11 @@
   .field input,.field textarea,.field select{width:100%;font-family:inherit;}
   .field textarea{padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;min-height:60px;}
   .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+.empty-state[class*="es-"]::before{content:"";display:block;width:90px;height:70px;margin:0 auto 8px;background:center/contain no-repeat;}
+.es-bowl::before{background-image:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2290%22 height=%2270%22 viewBox=%220 0 90 70%22%3E%3Cpath d=%22M10 30h70c0 22-14 34-35 34S10 52 10 30z%22 fill=%22%23EAE1CF%22 stroke=%22%23211D1A%22 stroke-width=%222%22/%3E%3Cellipse cx=%2245%22 cy=%2230%22 rx=%2235%22 ry=%227%22 fill=%22%23FBF8F2%22 stroke=%22%23211D1A%22 stroke-width=%222%22/%3E%3Cpath d=%22M62 8l-14 20M70 10L56 28%22 stroke=%22%23B8433A%22 stroke-width=%223%22 stroke-linecap=%22round%22/%3E%3C/svg%3E");} .es-fan::before{background-image:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2290%22 height=%2270%22 viewBox=%220 0 90 70%22%3E%3Cpath d=%22M45 62L12 40a40 40 0 0166 0z%22 fill=%22%23F3EDE1%22 stroke=%22%23211D1A%22 stroke-width=%222%22/%3E%3Cpath d=%22M45 62L28 28M45 62l17-34M45 62V22%22 stroke=%22%23C08A2E%22 stroke-width=%222%22/%3E%3Ccircle cx=%2245%22 cy=%2262%22 r=%224%22 fill=%22%23B8433A%22/%3E%3C/svg%3E");} .es-lantern::before{background-image:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2290%22 height=%2270%22 viewBox=%220 0 90 70%22%3E%3Crect x=%2230%22 y=%2214%22 width=%2230%22 height=%2242%22 rx=%2212%22 fill=%22%23B8433A%22 stroke=%22%23211D1A%22 stroke-width=%222%22/%3E%3Cpath d=%22M36 14v42M45 14v42M54 14v42%22 stroke=%22%238F2F28%22/%3E%3Cpath d=%22M38 8h14M38 62h14%22 stroke=%22%23211D1A%22 stroke-width=%223%22/%3E%3Cpath d=%22M45 62v6%22 stroke=%22%23C08A2E%22 stroke-width=%223%22/%3E%3C/svg%3E");}
+.petal{position:fixed;top:-30px;width:14px;height:18px;border-radius:70% 0 70% 0;pointer-events:none;z-index:9999;animation:petalfall linear forwards;}
+@keyframes petalfall{to{transform:translate(var(--dx),110vh) rotate(var(--r));opacity:.85;}}
+@media(prefers-reduced-motion:reduce){.petal{display:none;}}
   .empty-state{text-align:center;padding:50px 20px;color:var(--ink-soft);} .empty-state .kr{font-size:28px;display:block;margin-bottom:10px;}
   .login-wrap{max-width:380px;margin:80px auto;text-align:center;}
   .login-wrap .kr{font-size:36px;font-weight:700;display:block;margin-bottom:6px;}
@@ -1214,12 +1219,12 @@ async function renderMain(){
   const list = await lessonsForLevel(state.level);
   const lesson = list.find(l=>l.id===state.lessonId) || list[0] || null;
   if(!lesson){
-    card.appendChild(el(`<div class="empty-state"><span class="kr">시작해요</span><div>Choisis une leçon dans la colonne de gauche.</div></div>`));
+    card.appendChild(el(`<div class="empty-state es-fan"><span class="kr">시작해요</span><div>Choisis une leçon dans la colonne de gauche.</div></div>`));
     return card;
   }
   const idx = list.findIndex(l=>l.id===lesson.id);
   if(!isUnlockedSync(list, idx)){
-    card.appendChild(el(`<div class="empty-state"><span class="kr">잠겨 있어요</span><div>Cette leçon est verrouillée — réussis le contrôle précédent pour la débloquer.</div></div>`));
+    card.appendChild(el(`<div class="empty-state es-lantern"><span class="kr">잠겨 있어요</span><div>Cette leçon est verrouillée — réussis le contrôle précédent pour la débloquer.</div></div>`));
     return card;
   }
   card.appendChild(el(`<div class="lesson-title"><span class="eyebrow">${LEVEL_LABELS[state.level]} · Leçon ${idx+1}</span></div><h2 style="margin:0 0 14px;">${escapeHtml(lesson.title)}</h2>`));
@@ -1602,7 +1607,7 @@ async function renderGlobalQuiz(){
   }
 
   if(pool.length===0){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">아직이에요</span><div>Rien à mélanger pour l'instant — valide au moins une leçon (contrôle réussi) pour débloquer ce quiz.</div></div>`));
+    wrap.appendChild(el(`<div class="empty-state es-lantern"><span class="kr">아직이에요</span><div>Rien à mélanger pour l'instant — valide au moins une leçon (contrôle réussi) pour débloquer ce quiz.</div></div>`));
     return wrap;
   }
 
@@ -1756,7 +1761,24 @@ const REF_CATEGORIES = [
       ['못 가요','je ne peux pas y aller','못 + verbe : impossibilité (manque de temps, de capacité…).'],['가지 못해요','je ne peux pas y aller','-지 못하다 : même sens, plus soutenu.'],
       ['없어요','il n\'y a pas, je n\'ai pas','없다 : contraire de 있다.'],['아니에요','ce n\'est pas, non','이/가 아니에요 : « ne pas être ».','학생이 아니에요. = Je ne suis pas étudiant(e).'],
       ['공부 안 해요','je n\'étudie pas','Avec 하다, 안 se place avant 하다.'],['못 먹었어요','je n\'ai pas pu manger','Passé : 못 + verbe au passé.']
-    ]}] }
+    ]}] },
+  { id:'corps', icon:'🧍', title:'Le corps', level:'debutant', hint:'Tête, mains, yeux…',
+    groups:[{ rows:[['몸','corps'],['머리','tête / cheveux'],['얼굴','visage'],['눈','œil / yeux'],['코','nez'],['입','bouche'],['귀','oreille'],['목','cou, gorge'],['어깨','épaule'],['팔','bras'],['손','main'],['배','ventre'],['등','dos'],['다리','jambe'],['발','pied'],['무릎','genou']]}] },
+  { id:'nourriture', icon:'🍚', title:'Nourriture et boissons', level:'debutant', hint:'Riz, viande, fruits, boissons',
+    groups:[{ title:'Repas', rows:[['밥','riz, repas'],['김치','kimchi'],['국','soupe'],['고기','viande'],['생선','poisson'],['계란 / 달걀','œuf'],['빵','pain'],['면','nouilles'],['김밥','kimbap'],['비빔밥','bibimbap']]},
+    { title:'Fruits et légumes', rows:[['과일','fruit'],['사과','pomme'],['바나나','banane'],['딸기','fraise'],['채소','légume'],['양파','oignon'],['감자','pomme de terre']]},
+    { title:'Boissons', rows:[['물','eau'],['차','thé'],['커피','café'],['우유','lait'],['주스','jus'],['맥주','bière'],['술','alcool']]}] },
+  { id:'transports', icon:'🚌', title:'Transports', level:'debutant', hint:'Bus, métro, taxi, train',
+    intro:'Pour « en bus », « en métro » : nom + 을/를 타요 (prendre) ; pour descendre : 내려요.',
+    groups:[{ rows:[['버스','bus'],['지하철','métro'],['택시','taxi'],['기차','train'],['비행기','avion'],['배','bateau'],['자전거','vélo'],['자동차 / 차','voiture'],['역','gare, station'],['공항','aéroport'],['버스 정거장','arrêt de bus'],['표','billet, ticket']]}] },
+  { id:'lieux', icon:'📍', title:'Lieux et directions', level:'debutant', hint:'Où ? À droite, à gauche, tout droit',
+    groups:[{ title:'Lieux', rows:[['집','maison'],['학교','école'],['회사','entreprise, bureau'],['병원','hôpital'],['은행','banque'],['식당','restaurant'],['가게','boutique'],['시장','marché'],['공원','parc'],['화장실','toilettes']]},
+    { title:'Directions', rows:[['오른쪽','droite'],['왼쪽','gauche'],['앞','devant'],['뒤','derrière'],['위','dessus, en haut'],['아래','dessous, en bas'],['옆','à côté'],['안','dedans'],['밖','dehors'],['똑바로 / 직진','tout droit'],['어디예요?','c\'est où ?']]}] },
+  { id:'verbes', icon:'🏃', title:'Verbes courants', level:'debutant', hint:'Les verbes du quotidien',
+    intro:'Ici à la forme du dictionnaire (-다). Pour parler, passe au présent poli (-아요 / -어요).',
+    groups:[{ rows:[['하다','faire'],['가다','aller'],['오다','venir'],['먹다','manger'],['마시다','boire'],['보다','voir, regarder'],['듣다','écouter, entendre'],['말하다','parler'],['읽다','lire'],['쓰다','écrire'],['사다','acheter'],['자다','dormir'],['일어나다','se lever'],['만나다','rencontrer'],['공부하다','étudier'],['일하다','travailler'],['좋아하다','aimer'],['알다','savoir, connaître'],['모르다','ne pas savoir'],['주다','donner'],['있다','il y a, avoir, être (présent)']]}] },
+  { id:'argent', icon:'💴', title:'Argent et courses', level:'intermediaire', hint:'Prix, payer, acheter',
+    groups:[{ rows:[['얼마예요?','c\'est combien ?'],['비싸요','c\'est cher'],['싸요','c\'est bon marché'],['돈','argent'],['원','won (monnaie coréenne)'],['카드','carte bancaire'],['현금','espèces'],['계산하다','payer, régler'],['깎아 주세요','faites-moi un prix, s\'il vous plaît'],['주세요','donnez-moi, s\'il vous plaît','Nom + 주세요 : commander ou demander.','물 주세요. = De l\'eau, s\'il vous plaît.'],['봉투','sac, enveloppe'],['영수증','reçu']]}] }
 ];
 
 // ---- fiches de référence : elles se remplissent quand l'élève croise les mots (comme les particules) ----
@@ -1872,7 +1894,7 @@ function renderRefCategory(wrap, cat){
     return;
   }
   if(shownRows.length===0){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien dans cette fiche pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
+    wrap.appendChild(el(`<div class="empty-state es-bowl"><span class="kr">텅 비었어요</span><div>Rien dans cette fiche pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
     return;
   }
   const test = el('<button class="btn celadon small" style="margin-bottom:16px;">🎯 Me tester</button>');
@@ -2206,7 +2228,7 @@ function renderGrammarNotebook(){
   wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;font-size:12.5px;">${escapeHtml(cat.hint)}. Clique sur un élément pour voir le détail.</div>`));
   const list = seenItems(cat);
   if(list.length===0){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien dans cette catégorie pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
+    wrap.appendChild(el(`<div class="empty-state es-bowl"><span class="kr">텅 비었어요</span><div>Rien dans cette catégorie pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
     return wrap;
   }
   list.forEach(([key,ref])=>{
@@ -2292,7 +2314,7 @@ function renderWeakWordsPractice(){
   wrap.appendChild(tabs);
 
   if(WEAK_WORDS.length===0){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien à revoir pour l'instant — ajoute des mots ci-dessus, ou utilise l'aide en Traduction.</div></div>`));
+    wrap.appendChild(el(`<div class="empty-state es-bowl"><span class="kr">텅 비었어요</span><div>Rien à revoir pour l'instant — ajoute des mots ci-dessus, ou utilise l'aide en Traduction.</div></div>`));
     return wrap;
   }
 
@@ -2494,7 +2516,7 @@ function renderPractice(lesson){
     return wrap;
   }
   if(cur.empty){
-    wrap.appendChild(el(`<div class="empty-state"><span class="kr">아직이에요</span><div>Il n'y a pas encore assez de phrases ou de vocabulaire dans cette leçon pour composer un texte. Reviens quand ta professeur aura complété le cours.</div></div>`));
+    wrap.appendChild(el(`<div class="empty-state es-lantern"><span class="kr">아직이에요</span><div>Il n'y a pas encore assez de phrases ou de vocabulaire dans cette leçon pour composer un texte. Reviens quand ta professeur aura complété le cours.</div></div>`));
     const b = el('<button class="btn ghost small">Réessayer</button>'); b.onclick = make; wrap.appendChild(b);
     return wrap;
   }
@@ -2826,6 +2848,7 @@ function renderControle(lesson, list, idx){
       box.appendChild(retry); wrap.appendChild(box);
       return wrap;
     }
+    if(r.passed && !r.burst){ r.burst=true; petalBurst(); }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
     box.appendChild(el(`<div class="score mono">${r.correct}/${r.total}</div>`));
     box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi, bravo !":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
@@ -4554,6 +4577,16 @@ function scanKoKeyboards(root){
   if(document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 
+function petalBurst(){
+  try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cols=['#B8433A','#C08A2E','#6E8F78','#E8B7B0','#211D1A','#F3C8D0'];
+    for(let i=0;i<45;i++){ const p=document.createElement('div'); p.className='petal';
+      p.style.left=Math.random()*100+'vw'; p.style.background=cols[i%cols.length];
+      p.style.setProperty('--dx',(Math.random()*160-80)+'px'); p.style.setProperty('--r',(Math.random()*720-360)+'deg');
+      p.style.animationDuration=(2+Math.random()*1.6)+'s'; p.style.animationDelay=(Math.random()*.6)+'s';
+      document.body.appendChild(p); setTimeout(()=>p.remove(),4500); }
+  }catch(e){}
+}
 function copyText(txt){
   if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(()=>true).catch(()=>false);
   try{ const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return Promise.resolve(ok); }catch(e){ return Promise.resolve(false); }
