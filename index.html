@@ -271,15 +271,16 @@ async function sbLoadGrammarSeen(){
     GRAMMAR_SEEN = res.data || [];
   }catch(e){ GRAMMAR_TABLE_OK = false; }
 }
+let FICHE_SAVE_OK = true;     // faux tant que migration-fiches.sql n'est pas lancée : les fiches ne durent alors que la session
 async function markGrammarSeen(kind, key){
   if(!SESSION || !PROFILE || PROFILE.role!=='student') return;
   if(GRAMMAR_SEEN.some(g=>g.kind===kind && g.key===key)) return;
   GRAMMAR_SEEN.push({ kind, key, created_at:new Date().toISOString(), _session:true });
-  if(!GRAMMAR_TABLE_OK) return;
+  if(!GRAMMAR_TABLE_OK || (kind==='fiche' && !FICHE_SAVE_OK)) return;
   try{
     const res = await sb.from('grammar_seen').upsert({ student_id:SESSION.user.id, kind, key }, { onConflict:'student_id,kind,key', ignoreDuplicates:true });
-    if(res && res.error) GRAMMAR_TABLE_OK = false;
-  }catch(e){ GRAMMAR_TABLE_OK = false; }
+    if(res && res.error){ if(kind==='fiche') FICHE_SAVE_OK = false; else GRAMMAR_TABLE_OK = false; }
+  }catch(e){ if(kind==='fiche') FICHE_SAVE_OK = false; else GRAMMAR_TABLE_OK = false; }
 }
 // Repère « dernière visite de l'aide-mémoire » : sert uniquement à afficher « nouveau » (confort propre à
 // cet appareil, jamais essentiel). null = stockage du navigateur indisponible.
@@ -1645,7 +1646,7 @@ const REF_CATEGORIES = [
     ]},{ title:'Les dizaines', seen:false, rows:[
       ['열하나','11','열 + un : 열둘 = 12, 열셋 = 13…'],['스물 (스무)','20','스무 살 = 20 ans (스물 devant un classificateur).'],['서른','30'],['마흔','40'],['쉰','50'],['예순','60'],['일흔','70'],['여든','80'],['아흔','90'],['스물다섯','25','스물 + 다섯','스물다섯 살 = 25 ans']
     ]}] },
-  { id:'quand', icon:'🧭', title:'Quel système de nombres ?', level:'debutant', hint:'Sino-coréen ou coréen pur : le bon choix selon la situation',
+  { id:'quand', icon:'🧭', title:'Quel système de nombres ?', level:'debutant', unlockWith:['sino','pur'], hint:'Sino-coréen ou coréen pur : le bon choix selon la situation',
     intro:'Règle simple : le temps qui passe se dit à moitié en coréen pur (les heures) et à moitié en sino-coréen (les minutes).',
     groups:[{ seen:false, rows:[
       ['세 시 십 분','3 h 10','시 (heures) = coréen pur ; 분 (minutes) = sino-coréen.'],
@@ -1730,46 +1731,72 @@ const REF_CATEGORIES = [
     ]}] }
 ];
 
-// ---- rendu des catégories de référence ----
-function refCourseWords(){
-  const set = new Set();
-  Object.values(LESSONS_CACHE||{}).forEach(list=> (list||[]).forEach(l=>{
-    (l.vocab||[]).forEach(v=> String(v.kr||'').split(/[\s,.?!~()]+/).forEach(t=>{ if(t) set.add(t); }));
-    (l.dialogue||[]).forEach(ex=> (ex.segments||[]).forEach(sg=> String(sg.kr||'').split(/[\s,.?!~()]+/).forEach(t=>{ if(t) set.add(t); })));
-  }));
-  return set;
+// ---- fiches de référence : elles se remplissent quand l'élève croise les mots (comme les particules) ----
+let REF_INDEX = null;
+function refIndex(){
+  if(REF_INDEX) return REF_INDEX;
+  REF_INDEX = [];
+  REF_CATEGORIES.forEach(cat=> cat.groups.forEach(g=> g.rows.forEach(r=>{
+    const forms = [];
+    String(r[0]).split(/\s+\/\s+/).forEach(part=>{
+      part.replace(/\s*\(([^)]*)\)/g,'|$1').split('|').forEach(p=>{
+        p.split(/\s*→\s*/).forEach(q=>{ q = q.replace(/[?.!]+$/,'').trim(); if(q) forms.push(q); });
+      });
+    });
+    REF_INDEX.push({ cat:cat.id, key:cat.id+'|'+r[0], forms });
+  })));
+  return REF_INDEX;
 }
-function refRowSeen(row, words){
-  const toks = String(row[0]).split(/[\s,.?!~()\/→]+/).filter(Boolean);
-  if(toks.some(t=>words.has(t))) return true;                      // mot identique
-  const list = [...words];                                          // mot + particule (날씨 -> 날씨가), seulement dès 2 lettres
-  return toks.some(t=> t.length>=2 && list.some(w=>w.length<=t.length+2 && w.startsWith(t)));
+const REF_SUFFIXES = ['','가','이','는','은','를','을','도','의','에','에서','에게','한테','께','부터','까지','로','으로','와','과','랑','하고','만','에는','에도','이에요','예요','이야','야','입니다','이고'];
+const REF_ALONE_BLOCK = new Set(['이','일','사','오','구','나','너','그']);   // trop ambigus seuls (particule, mot courant…)
+const REF_SINO_CHARS = /^[영공일이삼사오육칠팔구십백천만억]+$/;
+// Quelles lignes de fiches correspondent au mot cliqué ? (clean = mot tel que cliqué, dict = forme du dictionnaire)
+function refMatches(clean, dict, textNoSpace){
+  const hits = [];
+  const sinoParts = (REF_SINO_CHARS.test(clean) && clean.length>=2) ? new Set([...clean]) : null;
+  refIndex().forEach(row=>{
+    const ok = row.forms.some(f=>{
+      if(f.includes(' ')){                                                   // expression de plusieurs mots
+        return textNoSpace && textNoSpace.includes(f.replace(/\s+/g,'')) && f.split(' ').some(p=> p===clean || p===dict || (p.length>=2 && clean.startsWith(p)));
+      }
+      if(clean===f || (dict && dict===f)){ return f.length>1 || !REF_ALONE_BLOCK.has(f) || false; }
+      if(sinoParts && sinoParts.has(f)) return true;                         // 이십오 -> 이, 십, 오
+      if(clean.startsWith(f) && f.length>=1){ const rem = clean.slice(f.length); return rem!=='' && REF_SUFFIXES.includes(rem) && (f.length>=2 || !REF_ALONE_BLOCK.has(f)); }
+      return false;
+    });
+    if(ok) hits.push(row);
+  });
+  return hits;
 }
-function refLevelOk(cat){
-  if(!PROFILE || PROFILE.role==='teacher' || state.refAll) return true;
-  return (REF_LEVEL_RANK[cat.level]||0) <= (REF_LEVEL_RANK[PROFILE.level||state.level]||0);
+function refMark(clean, dict, textNoSpace){
+  if(!PROFILE || PROFILE.role!=='student') return;
+  refMatches(clean, dict, textNoSpace).forEach(row=> markGrammarSeen('fiche', row.key));
 }
-function renderRefHome(wrap){
-  const shown = REF_CATEGORIES.filter(refLevelOk);
-  wrap.appendChild(el('<h3 style="margin:28px 0 4px;font-size:16px;">📚 Pour réviser</h3>'));
-  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Des fiches toujours complètes, pour revoir les bases quand tu veux. Les mots que tu as déjà rencontrés dans tes leçons portent un ✓.</div>'));
-  const grid = el('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;"></div>');
-  shown.forEach(c=>{
-    const n = c.groups.reduce((t,g)=>t+g.rows.length,0);
-    const tile = el(`<button type="button" class="ref-cat" data-ref="${c.id}" style="text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;">
+// Lignes d'une fiche que l'élève a déjà rencontrées (la professeure voit tout)
+function refSeenRows(cat){
+  const rows = []; cat.groups.forEach(g=> g.rows.forEach(r=> rows.push(r)));
+  if(PROFILE && PROFILE.role==='teacher') return rows;
+  if(cat.unlockWith && GRAMMAR_SEEN.some(g=>g.kind==='fiche' && cat.unlockWith.some(id=>String(g.key).startsWith(id+'|')))) return rows;
+  return rows.filter(r=> GRAMMAR_SEEN.some(g=>g.kind==='fiche' && g.key===cat.id+'|'+r[0]));
+}
+function refEntry(cat, r){ return GRAMMAR_SEEN.find(g=>g.kind==='fiche' && g.key===cat.id+'|'+r[0]); }
+function refTiles(grid){
+  const teacher = PROFILE && PROFILE.role==='teacher';
+  REF_CATEGORIES.forEach(c=>{
+    const seen = refSeenRows(c);
+    const total = c.groups.reduce((t,g)=>t+g.rows.length,0);
+    const nNew = teacher ? 0 : seen.filter(r=>isGrammarEntryNew(refEntry(c,r))).length;
+    const tile = el(`<button type="button" class="ref-cat" data-ref="${c.id}" style="text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;background:var(--paper);border:1.5px solid ${seen.length?'var(--ink)':'var(--line)'};border-radius:12px;padding:16px 18px;${seen.length?'':'opacity:.7;'}">
       <div style="font-size:26px;line-height:1;">${c.icon}</div>
       <div style="font-size:16px;font-weight:600;margin:8px 0 2px;">${escapeHtml(c.title)}</div>
       <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.45;">${escapeHtml(c.hint)}</div>
-      <div class="mono" style="margin-top:10px;font-size:12.5px;">${n} entrées</div></button>`);
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="mono" style="font-size:12.5px;">${teacher ? (total+' entrées') : (seen.length ? (seen.length+' rencontré'+(seen.length>1?'s':'')) : 'Rien pour l\'instant')}</span>
+        ${nNew?`<span class="mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">${nNew} nouveau${nNew>1?'x':''}</span>`:''}
+      </div></button>`);
     tile.onclick = ()=>{ state.refCategory = c.id; state.refTest = null; render(); };
     grid.appendChild(tile);
   });
-  wrap.appendChild(grid);
-  if(PROFILE && PROFILE.role!=='teacher' && REF_CATEGORIES.some(c=>!refLevelOk(c)) || state.refAll){
-    const more = el(`<button class="btn ghost small" style="margin-top:14px;">${state.refAll?'Voir seulement mon niveau':'Voir toutes les fiches'}</button>`);
-    more.onclick = ()=>{ state.refAll = !state.refAll; render(); };
-    wrap.appendChild(more);
-  }
 }
 function renderRefCategory(wrap, cat){
   const back = el('<button class="btn ghost small gm-back" style="margin-bottom:14px;">← Aide-mémoire</button>');
@@ -1777,7 +1804,10 @@ function renderRefCategory(wrap, cat){
   wrap.appendChild(back);
   wrap.appendChild(el(`<h2 style="margin:0 0 4px;">${cat.icon} ${escapeHtml(cat.title)}</h2>`));
   if(cat.intro) wrap.appendChild(el(`<div class="note" style="margin-bottom:14px;font-size:12.5px;">${escapeHtml(cat.intro)}</div>`));
-  const allRows = []; cat.groups.forEach(g=> g.rows.forEach(r=> allRows.push(r)));
+  const teacher = PROFILE && PROFILE.role==='teacher';
+  const shownRows = refSeenRows(cat);
+  const allRows = shownRows;                    // le test ne porte que sur ce que l'élève a rencontré
+  if(teacher) wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;border-color:var(--gold);">Aperçu professeure : tu vois toute la fiche. Chaque élève voit seulement les lignes qu\'il a rencontrées en cliquant sur les mots d\'un texte (onglet Traduction).</div>'));
   // ----- mode « Me tester » : cartes à retourner
   const T = state.refTest;
   if(T){
@@ -1813,15 +1843,26 @@ function renderRefCategory(wrap, cat){
     wrap.appendChild(quit);
     return;
   }
+  if(shownRows.length===0){
+    wrap.appendChild(el(`<div class="empty-state"><span class="kr">텅 비었어요</span><div>Rien dans cette fiche pour l'instant — clique sur les mots d'un texte dans Traduction : ce que tu croiseras viendra ici.</div></div>`));
+    return;
+  }
   const test = el('<button class="btn celadon small" style="margin-bottom:16px;">🎯 Me tester</button>');
   test.onclick = ()=>{ state.refTest = { order:allRows.map((_,i)=>i).sort(()=>Math.random()-0.5), i:0, flipped:false, miss:[] }; render(); };
   wrap.appendChild(test);
-  const words = refCourseWords();
   cat.groups.forEach(g=>{
+    const rows = g.rows.filter(r=>shownRows.includes(r));
+    if(!rows.length) return;
     if(g.title) wrap.appendChild(el(`<h3 style="margin:18px 0 8px;font-size:15px;">${escapeHtml(g.title)}</h3>`));
-    g.rows.forEach(r=>{
-      const seen = g.seen!==false && refRowSeen(r, words);
-      wrap.appendChild(el(`<div class="item-card ref-row" style="text-align:left;padding:10px 14px;margin-bottom:6px;"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span class="kr" style="font-size:20px;">${escapeHtml(r[0])}</span><span style="font-size:13.5px;flex:1;min-width:120px;">${escapeHtml(r[1])}</span>${seen?'<span title="Déjà rencontré dans tes leçons" style="color:var(--celadon-dark);font-size:12px;">✓ vu en cours</span>':''}</div>${r[2]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px;">${escapeHtml(r[2])}</div>`:''}${r[3]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">ex. ${escapeHtml(r[3])}</div>`:''}</div>`));
+    rows.forEach(r=>{
+      const isNew = !teacher && isGrammarEntryNew(refEntry(cat, r));
+      const card = el(`<div class="item-card ref-row" style="text-align:left;padding:10px 14px;margin-bottom:6px;"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span class="kr" style="font-size:20px;">${escapeHtml(r[0])}</span><span style="font-size:13.5px;flex:1;min-width:120px;">${escapeHtml(r[1])}</span>${isNew?'<span class="mono" style="font-size:11px;background:var(--seal);color:#fff;border-radius:999px;padding:1px 9px;">nouveau</span>':''}</div>${r[2]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px;">${escapeHtml(r[2])}</div>`:''}${r[3]?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">ex. ${escapeHtml(r[3])}</div>`:''}</div>`);
+      if(!teacher && refEntry(cat, r)){
+        const rm = el('<button type="button" class="ref-rm" title="Retirer de ma liste" style="float:right;margin:-26px 0 0 8px;border:none;background:none;color:var(--ink-soft);cursor:pointer;font-size:13px;">✕</button>');
+        rm.onclick = async ()=>{ await unmarkGrammarSeen('fiche', cat.id+'|'+r[0]); render(); };
+        card.firstElementChild.appendChild(rm);
+      }
+      wrap.appendChild(card);
     });
   });
 }
@@ -2103,7 +2144,7 @@ function renderGrammarNotebook(){
   if(!cat){
     // ----- accueil : les catégories -----
     wrap.appendChild(el('<h2 style="margin:0 0 4px;">📒 Aide-mémoire grammaire</h2>'));
-    wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure. Plus bas, des fiches pour réviser les bases (nombres, jours, saisons…) sont toujours disponibles.</div>`));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">Les <b>particules</b>, les <b>classificateurs</b> et les <b>expressions de grammaire</b> que tu croises en cliquant sur les mots d'un texte (onglet Traduction) viennent s'ajouter ici automatiquement, au fur et à mesure. Il en va de même pour les <b>nombres</b>, les <b>jours</b>, les <b>saisons</b>, la <b>famille</b>, les <b>couleurs</b>… : chaque fiche se remplit quand tu croises ces mots. Choisis une catégorie.</div>`));
     if(!GRAMMAR_TABLE_OK){
       wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ La sauvegarde de cette liste n'est pas encore activée : elle ne dure que le temps de cette session. Demande à celui qui gère l'outil de lancer <b>migration-grammaire.sql</b> dans Supabase.</div>`));
     }
@@ -2123,8 +2164,9 @@ function renderGrammarNotebook(){
       tile.onclick = ()=>{ state.grammarCategory = c.kind; render(); };
       grid.appendChild(tile);
     });
+    refTiles(grid);
     wrap.appendChild(grid);
-    renderRefHome(wrap);
+    if(!FICHE_SAVE_OK) wrap.appendChild(el('<div class="note" style="border-color:var(--seal);margin-top:16px;font-size:12.5px;">⚠️ Les nouvelles fiches ne sont pas encore sauvegardées : elles ne durent que le temps de cette session. Demande à celui qui gère l\'outil de lancer <b>migration-fiches.sql</b> dans Supabase.</div>'));
     return wrap;
   }
 
@@ -2458,6 +2500,7 @@ function renderTraduction(lesson, opts){
   const grammarPerWord = findGrammarPatterns(wordsClean);
   const counterPerWord = findCounters(wordsClean);
   const hasGrammar = grammarPerWord.some(g=>g.length>0) || counterPerWord.some(Boolean);
+  const textNoSpace = (item.text||'').replace(/\s+/g,'');
   let wordIdx = -1;
   let gramOwner = null;
   let openClose = null;                    // une seule bulle de traduction ouverte à la fois
@@ -2497,6 +2540,7 @@ function renderTraduction(lesson, opts){
       variantsWrap.innerHTML = '';
       variantsWrap.appendChild(document.createTextNode(' '));
       gramPanel.innerHTML = ''; gramOwner = span;   // l'explication de grammaire s'affiche sous le texte
+      refMark(clean, null, textNoSpace);              // fiches de l'aide-mémoire (nombres, jours, saisons…)
       gram.forEach(g=>{ gramPanel.appendChild(buildGrammarChip(g.pat, g.text)); markGrammarSeen('expression', g.pat.label); });
       if(cinfo){ gramPanel.appendChild(buildCounterChip(cinfo.key)); markGrammarSeen('classificateur', cinfo.key); }
       const finish = ()=>{ revealed = true; span.dataset.busy = '0'; };
@@ -2529,6 +2573,7 @@ function renderTraduction(lesson, opts){
         }
         found.variants.forEach(v=> variantsWrap.appendChild(makeVariantChip(v, ()=>sbAddWeakWord(found.word, v))));
         particleKeysOf(found.particles || []).forEach(key=>{ gramPanel.appendChild(buildParticleChip(key)); markGrammarSeen('particule', key); });
+        if(found.word && found.word!==clean) refMark(clean, found.word, textNoSpace);
         revealed = true;
       }catch(e){
         if(openClose!==closeMe){ span.dataset.busy='0'; return; }
