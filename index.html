@@ -99,6 +99,12 @@
 .petal{position:fixed;top:-30px;width:14px;height:18px;border-radius:70% 0 70% 0;pointer-events:none;z-index:9999;animation:petalfall linear forwards;}
 @keyframes petalfall{to{transform:translate(var(--dx),110vh) rotate(var(--r));opacity:.85;}}
 @media(prefers-reduced-motion:reduce){.petal{display:none;}}
+  @media(max-width:600px){ .tabs:has(.tab-btn:nth-child(4)){grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .streak-chip{margin:0 0 10px;padding:8px 12px;border:1.5px solid var(--seal);border-radius:4px;background:var(--card);font-size:13px;font-weight:600;color:var(--seal-dark);}
+  .pair-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;} .pair-col{display:flex;flex-direction:column;gap:8px;}
+  .pair-tile{font-family:inherit;font-size:15px;padding:12px 8px;min-height:48px;border:1.5px solid var(--ink);border-radius:4px;background:var(--card);cursor:pointer;color:var(--ink);}
+  .pair-tile.kr{font-size:20px;} .pair-tile.sel{background:var(--paper-dim);border-color:var(--seal);box-shadow:0 0 0 2px var(--seal) inset;}
+  .pair-tile.ok{background:var(--celadon);border-color:var(--celadon-dark);color:#fff;opacity:.55;cursor:default;} .pair-tile.bad{background:#f2cfc9;border-color:var(--danger);}
   .empty-state{text-align:center;padding:50px 20px;color:var(--ink-soft);} .empty-state .kr{font-size:28px;display:block;margin-bottom:10px;}
   .login-wrap{max-width:380px;margin:80px auto;text-align:center;}
   .login-wrap .kr{font-size:36px;font-weight:700;display:block;margin-bottom:6px;}
@@ -224,11 +230,13 @@ async function sbUpsertProgress(lessonId, patch){
   const payload = Object.assign({}, merged); delete payload.misses;     // les mots ratés ont leur propre enregistrement (sbRecordAnswers)
   await sb.from('progress').upsert(payload, {onConflict:'student_id,lesson_id'});
   PROGRESS[lessonId] = merged;
+  markStudyDay();
 }
 // « Où ça pèche » : pour chaque mot, nombre de fois raté (m) et réussi (c), par leçon. Sans la migration, on ignore sans rien casser.
 async function sbRecordAnswers(lessonId, results){
   try{
     if(!lessonId || !results || !results.length || !SESSION || !PROFILE || PROFILE.role!=='student') return;
+    markStudyDay();
     const cur = Object.assign({}, (PROGRESS[lessonId] && PROGRESS[lessonId].misses) || {});
     results.forEach(r=>{
       const k = String(r.kr||'').trim().slice(0,60); if(!k) return;
@@ -289,6 +297,49 @@ async function sbRemoveWeakWordsBulk(words){
   if(words.length===0) return;
   await sb.from('weak_words').delete().eq('student_id', SESSION.user.id).in('word', words);
   WEAK_WORDS = WEAK_WORDS.filter(w=>!words.includes(w.word));
+}
+// Révision espacée + série de jours (voir migration-revision.sql). Sans la migration, tout marche, mais rien n'est gardé entre deux sessions.
+let STUDY_DAYS = [], ALL_STUDY_DAYS = null, SRS_OK = true, STUDY_OK = true;
+const SRS_STEPS = [0,1,3,7,14,30];     // jours avant la prochaine révision, selon la « boîte » du mot
+function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function todayStr(){ return dateStr(new Date()); }
+function addDaysStr(n){ const d=new Date(); d.setDate(d.getDate()+n); return dateStr(d); }
+function wwDue(w){ return !w.due_at || String(w.due_at).slice(0,10) <= todayStr(); }
+function dueWords(){ return WEAK_WORDS.filter(wwDue); }
+async function srsRecord(word, ok){
+  const w = WEAK_WORDS.find(x=>x.word===word); if(!w) return;
+  w.box = ok ? Math.min((w.box||0)+1, SRS_STEPS.length-1) : 0;
+  w.due_at = addDaysStr(SRS_STEPS[w.box]);
+  if(!SRS_OK || !SESSION || !PROFILE || PROFILE.role!=='student') return;
+  try{
+    const r = await sb.from('weak_words').update({box:w.box, due_at:w.due_at}).eq('student_id', SESSION.user.id).eq('word', word);
+    if(r && r.error) SRS_OK = false;
+  }catch(e){ SRS_OK = false; }
+}
+async function sbLoadStudyDays(){
+  try{
+    const {data,error} = await sb.from('study_days').select('day').eq('student_id', SESSION.user.id).order('day',{ascending:false}).limit(400);
+    if(error) throw error;
+    STUDY_DAYS = (data||[]).map(r=>String(r.day).slice(0,10)); STUDY_OK = true;
+  }catch(e){ STUDY_OK = false; STUDY_DAYS = []; }
+}
+async function markStudyDay(){
+  if(!SESSION || !PROFILE || PROFILE.role!=='student') return;
+  const t = todayStr(); if(STUDY_DAYS.includes(t)) return;
+  STUDY_DAYS.unshift(t);
+  if(!STUDY_OK) return;
+  try{ const r = await sb.from('study_days').upsert({student_id:SESSION.user.id, day:t}, {onConflict:'student_id,day'}); if(r && r.error) STUDY_OK = false; }catch(e){ STUDY_OK = false; }
+}
+function studyStreak(){
+  const set = new Set(STUDY_DAYS); let n = 0, i = set.has(todayStr()) ? 0 : -1;
+  while(set.has(addDaysStr(i))){ n++; i--; }
+  return n;
+}
+async function sbAllStudyDays(){
+  try{
+    const {data,error} = await sb.from('study_days').select('student_id,day').gte('day', addDaysStr(-14));
+    if(error) return null; return data||[];
+  }catch(e){ return null; }
 }
 // Aide-mémoire de grammaire : particules, classificateurs et expressions que l'élève a croisés
 // (table grammar_seen — voir migration-grammaire.sql). Si la table n'existe pas encore,
@@ -783,6 +834,8 @@ async function loadOwnProfile(){
     if(PROFILE.role==='student'){
       ACTIVE_GROUP_ID = PROFILE.group_id || null;
       WEAK_WORDS = await sbWeakWords();
+      SRS_OK = !(WEAK_WORDS.length && !('box' in WEAK_WORDS[0]));
+      await sbLoadStudyDays();
       GIFTS = await sbMyGifts();
       await sbLoadGrammarSeen();
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
@@ -1084,7 +1137,7 @@ function renderSpaceTabs(){
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
       state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
-      if(key==='dashboard'){ ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
+      if(key==='dashboard'){ ALL_STUDY_DAYS = null; ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key==='suggest'){ SUGGESTIONS = await sbSuggestions(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
@@ -1129,12 +1182,18 @@ async function renderSidebar(){
     });
     box.appendChild(tabs);
     if(PROFILE.role==='student'){
+      if(STUDY_OK){ const st = studyStreak(); box.appendChild(el(`<div class="streak-chip">${st>0 ? '🔥 '+st+' jour'+(st>1?'s':'')+' de suite' : '🔥 Fais un exercice pour lancer ta série'}</div>`)); }
+      const dueN = dueWords().length;
       const reviewBtn = el(`<div class="lesson-node ${state.reviewMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);">
-        <span>🔁 Mots à revoir (${WEAK_WORDS.length})</span>
+        <span>🔁 Mots à revoir (${WEAK_WORDS.length})${dueN?` <b style="color:var(--seal);">· ${dueN} aujourd'hui</b>`:''}</span>
       </div>`);
       reviewBtn.style.cursor='pointer';
-      reviewBtn.onclick = ()=>{ state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
+      reviewBtn.onclick = ()=>{ if(dueWords().length) state.reviewTab='jour'; state.reviewOrderFresh=false; state.reviewExerciseIndex=0; state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
       box.appendChild(reviewBtn);
+      const gameBtn = el(`<div class="lesson-node" style="margin-bottom:10px;border:1.5px dashed var(--celadon-dark);"><span>🃏 Jeu de paires</span></div>`);
+      gameBtn.style.cursor='pointer';
+      gameBtn.onclick = ()=>{ state.reviewMode=true; state.reviewTab='jeu'; state.pairGame=null; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
+      box.appendChild(gameBtn);
       const puzzleBtn = el(`<div class="lesson-node ${state.puzzleMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);">
         <span>🧩 Mon puzzle (${puzzleShown().pieces}/${PUZZLE_PIECES})</span>
       </div>`);
@@ -2306,13 +2365,14 @@ function renderWeakWordsPractice(){
   wrap.appendChild(addBox);
 
   const tabs = el('<div class="tabs"></div>');
-  [['memoriser','À mémoriser'],['exercices','Exercices']].forEach(([key,label])=>{
+  [['jour',`Aujourd'hui (${dueWords().length})`],['memoriser','À mémoriser'],['exercices','Exercices'],['jeu','Jeu']].forEach(([key,label])=>{
     const b = el(`<button class="tab-btn ${state.reviewTab===key?'active':''}">${label}</button>`);
-    b.onclick = ()=>{ state.reviewTab=key; state.reviewExerciseIndex=0; state.reviewCorrectCount=0; render(); };
+    b.onclick = ()=>{ state.reviewTab=key; state.reviewExerciseIndex=0; state.reviewCorrectCount=0; state.reviewOrderFresh=false; state.pairGame=null; render(); };
     tabs.appendChild(b);
   });
   wrap.appendChild(tabs);
 
+  if(state.reviewTab==='jeu'){ wrap.appendChild(renderPairGame()); return wrap; }
   if(WEAK_WORDS.length===0){
     wrap.appendChild(el(`<div class="empty-state es-bowl"><span class="kr">텅 비었어요</span><div>Rien à revoir pour l'instant — ajoute des mots ci-dessus, ou utilise l'aide en Traduction.</div></div>`));
     return wrap;
@@ -2373,16 +2433,27 @@ function renderWeakWordsPractice(){
     return wrap;
   }
 
-  // Exercices : drill de saisie, sans sauvegarde (pratique libre, pas liée à une leçon)
-  const total = WEAK_WORDS.length;
-  if(!state.reviewOrder || state.reviewOrder.length!==total || state.reviewExerciseIndex===0 && !state.reviewOrderFresh){ state.reviewOrder = smartOrder(WEAK_WORDS.map((_,i)=>i), i=>WEAK_WORDS[i].word); state.reviewOrderFresh = true; }
+  // Exercices : drill de saisie. Chaque réponse règle la prochaine date de révision du mot (révision espacée).
+  if(state.reviewTab==='jour'){
+    wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Ici, seulement les mots qui sont à revoir <b>aujourd\'hui</b>. Un mot réussi revient plus tard (demain, puis 3 jours, une semaine…) ; un mot raté revient tout de suite. Tu n\'as rien à régler.</div>'));
+  }
+  const base = state.reviewTab==='jour' ? dueWords() : WEAK_WORDS;
+  if(!state.reviewPoolWords || state.reviewPoolTab!==state.reviewTab || (state.reviewExerciseIndex===0 && !state.reviewOrderFresh)){ state.reviewPoolWords = base.map(w=>w.word); state.reviewPoolTab = state.reviewTab; state.reviewOrder = null; }
+  const POOL = state.reviewPoolWords.map(wd=>WEAK_WORDS.find(w=>w.word===wd)).filter(Boolean);
+  const total = POOL.length;
+  if(total===0){
+    wrap.appendChild(el('<div class="empty-state es-fan"><span class="kr">잘했어요</span><div>Rien à revoir aujourd\'hui — reviens demain. Tu peux aussi t\'entraîner dans l\'onglet « Exercices » ou jouer aux paires.</div></div>'));
+    return wrap;
+  }
+  if(!state.reviewOrder || state.reviewOrder.length!==total || state.reviewExerciseIndex===0 && !state.reviewOrderFresh){ state.reviewOrder = smartOrder(POOL.map((_,i)=>i), i=>POOL[i].word); state.reviewOrderFresh = true; }
   if(state.reviewExerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.reviewCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Tour terminé — refais-en un autre pour renforcer la mémoire.</div></div>`);
+    if(state.reviewTab==='jour') done.lastElementChild.textContent = 'Bravo, c\'est fait pour aujourd\'hui ! Les mots ratés reviendront dans un nouveau tour.';
     const restart = el('<button class="btn celadon">Recommencer</button>');
     restart.onclick = ()=>{ state.reviewExerciseIndex=0; state.reviewCorrectCount=0; state.reviewOrderFresh=false; render(); };
     done.appendChild(restart); wrap.appendChild(done); return wrap;
   }
-  const item = WEAK_WORDS[state.reviewOrder[state.reviewExerciseIndex]];
+  const item = POOL[state.reviewOrder[state.reviewExerciseIndex]];
   wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${state.reviewExerciseIndex+1} / ${total}</div>`));
   wrap.appendChild(el(`<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${escapeHtml(item.word)}</span></div>`));
   const row = el('<div style="display:flex;gap:8px;max-width:340px;"></div>');
@@ -2395,6 +2466,7 @@ function renderWeakWordsPractice(){
     if(input.disabled) return;
     const level = frAnswerLevel(input.value, item.meaning);
     const ok = level!=='no';
+    srsRecord(item.word, ok); markStudyDay();
     if(ok){ state.reviewCorrectCount=(state.reviewCorrectCount||0)+1; fb.innerHTML = level==='near' ? `<div class="feedback ok">Presque, c'est bon 👍 — on écrit : « ${escapeHtml(frDisplay(item.meaning))} »</div>` : `<div class="feedback ok">Exact 👍</div>`; }
     else{ fb.innerHTML = `<div class="feedback ko">Pas tout à fait — "${escapeHtml(item.meaning||'')}".</div>`; }
     checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
@@ -2402,6 +2474,60 @@ function renderWeakWordsPractice(){
   checkBtn.onclick = doCheck;
   input.onkeydown = (e)=>{ if(e.key==='Enter') doCheck(); };
   nextBtn.onclick = ()=>{ state.reviewExerciseIndex++; render(); };
+  return wrap;
+}
+
+
+// Jeu de paires : on relie chaque mot coréen à sa traduction. Pratique libre, sans note.
+function pairPool(){
+  const out=[], seenK=new Set(), seenF=new Set();
+  const add=(kr,fr)=>{ kr=String(kr||'').trim(); fr=String(fr||'').trim().replace(/\s*\[.*?\]\s*/g,'').trim();
+    if(!kr||!fr||!isHangul(kr)||kr.length>12||fr.length>30||seenK.has(kr)||seenF.has(fr.toLowerCase())) return;
+    seenK.add(kr); seenF.add(fr.toLowerCase()); out.push({kr,fr}); };
+  WEAK_WORDS.forEach(w=>add(w.word,w.meaning));
+  Object.keys(LESSONS_CACHE).forEach(k=>(LESSONS_CACHE[k]||[]).forEach(l=>{ const pr=PROGRESS[l.id]; if(pr&&pr.control&&pr.control.passed) (l.vocab||[]).forEach(v=>add(v.kr,v.fr)); }));
+  return out;
+}
+function renderPairGame(){
+  const wrap = el('<div></div>');
+  const pool = pairPool();
+  if(pool.length<4){ wrap.appendChild(el('<div class="empty-state es-lantern"><span class="kr">아직이에요</span><div>Il te faut au moins 4 mots (dans « Mots à revoir » ou dans des leçons dont tu as réussi le contrôle) pour jouer aux paires.</div></div>')); return wrap; }
+  if(!state.pairGame){
+    const items = pool.sort(()=>Math.random()-0.5).slice(0,6);
+    state.pairGame = { items, left:items.map((_,i)=>i).sort(()=>Math.random()-0.5), right:items.map((_,i)=>i).sort(()=>Math.random()-0.5), solved:[], sel:null, errors:0 };
+  }
+  const g = state.pairGame;
+  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Touche un mot coréen, puis sa traduction. Quand tout est relié, la partie est finie.</div>'));
+  const area = el('<div></div>'); wrap.appendChild(area);
+  const draw = ()=>{
+    area.innerHTML='';
+    if(g.solved.length===g.items.length){
+      const box = el(`<div class="result-box"><div class="score mono">${g.errors===0?'Sans faute !':g.errors+' erreur'+(g.errors>1?'s':'')}</div><div style="margin:8px 0 16px;">Bravo, toutes les paires sont reliées.</div></div>`);
+      const again = el('<button class="btn celadon">Nouvelle partie</button>');
+      again.onclick = ()=>{ state.pairGame=null; render(); };
+      box.appendChild(again); area.appendChild(box); return;
+    }
+    const cols = el('<div class="pair-cols"></div>');
+    const L = el('<div class="pair-col"></div>'), R = el('<div class="pair-col"></div>');
+    g.left.forEach(i=>{
+      const done = g.solved.includes(i);
+      const b = el(`<button type="button" class="pair-tile kr ${done?'ok':''} ${g.sel===i?'sel':''}" ${done?'disabled':''}>${escapeHtml(g.items[i].kr)}</button>`);
+      b.onclick = ()=>{ g.sel = (g.sel===i ? null : i); draw(); };
+      L.appendChild(b);
+    });
+    g.right.forEach(i=>{
+      const done = g.solved.includes(i);
+      const b = el(`<button type="button" class="pair-tile ${done?'ok':''}" ${done?'disabled':''}>${escapeHtml(g.items[i].fr)}</button>`);
+      b.onclick = ()=>{
+        if(g.sel===null) return;
+        if(g.sel===i){ g.solved.push(i); g.sel=null; if(g.solved.length===g.items.length) markStudyDay(); draw(); }
+        else{ g.errors++; g.sel=null; b.classList.add('bad'); setTimeout(draw, 350); }
+      };
+      R.appendChild(b);
+    });
+    cols.appendChild(L); cols.appendChild(R); area.appendChild(cols);
+  };
+  draw();
   return wrap;
 }
 
@@ -3467,7 +3593,9 @@ async function renderManage(){
     assignBtn.onclick = ()=> openAssignLessonToStudentsModal(state.level, l.id, l.title);
     const audioBtn = el(`<button class="btn ghost small" style="margin-left:6px;">🎙️ ${l.audio_url?'Remplacer':'Ajouter'} audio</button>`);
     audioBtn.onclick = ()=> openLessonAudioModal(l);
-    const printBtn = el('<button class="btn ghost small" style="margin-left:6px;">🖨️ Imprimer</button>');
+    const dupBtn = el('<button class="btn ghost small" style="margin-left:6px;">📋 Dupliquer</button>');
+    dupBtn.onclick = ()=> openDuplicateLessonModal(l);
+    const printBtn = el('<button class="btn ghost small" style="margin-left:6px;">🖨️ Imprimer / PDF</button>');
     printBtn.onclick = ()=> openPrintableLesson(l);
     const deleteBtn = el('<button class="btn ghost small" style="margin-left:6px;color:var(--danger);">🗑️ Supprimer</button>');
     deleteBtn.onclick = async ()=>{
@@ -3479,11 +3607,13 @@ async function renderManage(){
     row.lastElementChild.appendChild(editBtn);
     row.lastElementChild.appendChild(assignBtn);
     row.lastElementChild.appendChild(audioBtn);
+    row.lastElementChild.appendChild(dupBtn);
     row.lastElementChild.appendChild(printBtn);
     row.lastElementChild.appendChild(deleteBtn);
     existing.appendChild(row);
   });
   wrap.appendChild(existing);
+  wrap.appendChild(buildBackupBox());
   return wrap;
 }
 
@@ -3501,6 +3631,10 @@ function serializeVocab(vocab){
 function openPrintableLesson(lesson){
   const vocabRows = (lesson.vocab||[]).map(v=>`<tr><td style="font-size:18px;">${escapeHtml(v.kr)}</td><td>${escapeHtml(v.rom||'')}</td><td>${escapeHtml(v.fr||'')}</td></tr>`).join('');
   const grammarItems = (lesson.grammar||[]).map(g=>`<li>${escapeHtml(g)}</li>`).join('');
+  const dlg = (lesson.dialogue||[]).map(ex=>{
+    const txt = (ex.segments||[]).map(sg=>escapeHtml(sg.kr||'')+(sg.fr?' — '+escapeHtml(sg.fr):'')).join('<br>');
+    return txt ? `<p style="margin:8px 0;">${ex.speaker?'<b>'+escapeHtml(ex.speaker)+'</b> : ':''}${txt}</p>` : '';
+  }).join('');
   const t = (lesson.translations && lesson.translations[0]) || {};
   const transSection = t.text ? `
     <h2>Texte à traduire</h2>
@@ -3518,6 +3652,7 @@ function openPrintableLesson(lesson){
     @media print{ body{padding:15px;} }
   </style></head><body>
   <h1>${escapeHtml(lesson.title)}</h1>
+  ${dlg ? `<h2>Cours</h2>${dlg}` : ''}
   <h2>Vocabulaire</h2>
   <table>${vocabRows || '<tr><td>Aucun</td></tr>'}</table>
   ${grammarItems ? `<h2>Grammaire</h2><ul>${grammarItems}</ul>` : ''}
@@ -3528,6 +3663,72 @@ function openPrintableLesson(lesson){
   win.document.write(html);
   win.document.close();
   setTimeout(()=>{ win.print(); }, 300);
+}
+
+
+function openDuplicateLessonModal(lesson){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal"><h3>Dupliquer « ${escapeHtml(lesson.title)} »</h3><div class="note" style="margin-bottom:12px;font-size:12.5px;">Crée une copie complète (cours, vocabulaire, notes, audio) dans l'espace choisi. L'original ne change pas et la copie est indépendante.</div></div>`);
+  const sel = el('<select style="font-size:14px;padding:6px 10px;"></select>');
+  Object.keys(LEVEL_LABELS).forEach(k=>{ const o = el(`<option value="${k}">${escapeHtml(LEVEL_LABELS[k])}</option>`); if(k===lesson.space) o.selected=true; sel.appendChild(o); });
+  modal.appendChild(sel);
+  const status = el('<div style="margin-top:10px;font-size:12.5px;"></div>');
+  const go = el('<button class="btn celadon" style="margin-top:14px;">Créer la copie</button>');
+  const cancel = el('<button class="btn ghost" style="margin:14px 0 0 8px;">Annuler</button>');
+  cancel.onclick = ()=> bg.remove();
+  go.onclick = async ()=>{
+    go.disabled = true; const target = sel.value;
+    const list = await lessonsForLevel(target);
+    const id = target[0] + (list.length+1) + '-' + Date.now().toString(36);
+    const row = { id, space:target, position:list.length+1, title: target===lesson.space ? lesson.title+' (copie)' : lesson.title,
+      vowels:lesson.vowels||[], vocab:lesson.vocab||[], dialogue:lesson.dialogue||[], grammar:lesson.grammar||[], pass_score:lesson.pass_score, translations:lesson.translations||[], audio_url:lesson.audio_url||null };
+    const { error } = await sbAddLesson(row);
+    if(error){ status.style.color='var(--danger)'; status.textContent = 'Erreur : '+error.message; go.disabled=false; return; }
+    delete LESSONS_CACHE[target]; bg.remove(); render();
+  };
+  modal.appendChild(go); modal.appendChild(cancel); modal.appendChild(status);
+  bg.appendChild(modal); bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+// Sauvegarde : toutes les leçons dans un fichier, et restauration depuis ce fichier
+async function exportAllLessons(){
+  const { data, error } = await sb.from('lessons').select('*').order('space').order('position');
+  if(error) return { error };
+  const payload = { app:'compagnon-coreen', kind:'lessons', exported_at:new Date().toISOString(), lessons:data||[] };
+  const blob = new Blob([JSON.stringify(payload,null,1)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'sauvegarde-lecons-'+todayStr()+'.json';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(a.href); }, 500);
+  return { count:(data||[]).length };
+}
+async function importLessonsFile(file){
+  const txt = await file.text(); let obj;
+  try{ obj = JSON.parse(txt); }catch(e){ return { error:{message:'Ce fichier n\'est pas une sauvegarde valable.'} }; }
+  if(!obj || obj.app!=='compagnon-coreen' || !Array.isArray(obj.lessons)) return { error:{message:'Ce fichier n\'est pas une sauvegarde de l\'outil.'} };
+  const rows = obj.lessons.filter(l=>l && l.id && l.space && l.title).map(l=>{ const r = Object.assign({}, l); delete r.created_at; return r; });
+  if(!rows.length) return { error:{message:'La sauvegarde ne contient aucune leçon.'} };
+  const { error } = await sb.from('lessons').upsert(rows, { onConflict:'id' });
+  if(error) return { error };
+  LESSONS_CACHE = {}; return { count:rows.length };
+}
+function buildBackupBox(){
+  const box = el(`<div class="section-block" style="margin-top:30px;border:1.5px dashed var(--gold);border-radius:6px;padding:16px 18px;"><h3 style="margin-top:0;">💾 Sauvegarde des leçons</h3>
+    <div class="note" style="margin-bottom:10px;font-size:12.5px;">Télécharge un fichier avec toutes tes leçons (tous niveaux) : garde-le sur ton ordinateur, par exemple une fois par mois. En cas de problème, tu peux les remettre en place avec « Restaurer ». Les progrès des élèves ne sont pas inclus.</div>
+    <button class="btn celadon small" id="bk-export">Télécharger la sauvegarde</button>
+    <label class="btn ghost small" style="margin-left:8px;cursor:pointer;">Restaurer depuis un fichier<input type="file" id="bk-file" accept=".json,application/json" style="display:none;"></label>
+    <span id="bk-status" style="margin-left:10px;font-size:12.5px;"></span></div>`);
+  const status = box.querySelector('#bk-status');
+  box.querySelector('#bk-export').onclick = async ()=>{ status.style.color='var(--ink-soft)'; status.textContent='Préparation…'; const r = await exportAllLessons(); if(r.error){ status.style.color='var(--danger)'; status.textContent='Erreur : '+r.error.message; } else { status.style.color='var(--celadon-dark)'; status.textContent = r.count+' leçon(s) sauvegardée(s) ✓'; } };
+  box.querySelector('#bk-file').onchange = async (e)=>{
+    const f = e.target.files[0]; if(!f) return;
+    if(!confirm('Restaurer les leçons de ce fichier ? Les leçons qui existent déjà avec le même identifiant seront remplacées par la version du fichier ; les autres ne sont pas touchées.')){ e.target.value=''; return; }
+    status.style.color='var(--ink-soft)'; status.textContent='Restauration…';
+    const r = await importLessonsFile(f); e.target.value='';
+    if(r.error){ status.style.color='var(--danger)'; status.textContent='Erreur : '+r.error.message; return; }
+    status.style.color='var(--celadon-dark)'; status.textContent = r.count+' leçon(s) restaurée(s) ✓'; render();
+  };
+  return box;
 }
 
 function openEditLessonModal(lesson){
@@ -3694,6 +3895,34 @@ function renderAssignAfterCreate(container, level, lessonId, title){
 }
 
 /* ---------------- TEACHER: dashboard ---------------- */
+
+// Résumé de la semaine : qui a travaillé, qui est bloqué ou silencieux (7 derniers jours)
+async function renderWeekSummary(students){
+  if(ALL_STUDY_DAYS===null) ALL_STUDY_DAYS = (await sbAllStudyDays()) || false;
+  const days = ALL_STUDY_DAYS || [];
+  const last7 = []; for(let i=6;i>=0;i--) last7.push(addDaysStr(-i));
+  const wk = new Set(last7), cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7);
+  const box = el('<div class="section-block" style="border:1.5px solid var(--line);border-radius:6px;padding:16px 18px;margin-bottom:22px;background:var(--card);"><h3 style="margin-top:0;">📅 Cette semaine</h3></div>');
+  if(ALL_STUDY_DAYS===false) box.appendChild(el('<div class="note" style="font-size:12px;margin-bottom:10px;">Les jours de travail ne sont pas encore suivis : lance <b>migration-revision.sql</b> dans Supabase. En attendant, on se base sur la dernière connexion.</div>'));
+  const rows = students.map(p=>{
+    const mine = new Set(days.filter(d=>d.student_id===p.id).map(d=>String(d.day).slice(0,10)));
+    const last = Math.max(p.last_activity_at ? new Date(p.last_activity_at).getTime() : 0, mine.size ? new Date(Array.from(mine).sort().pop()+'T12:00:00').getTime() : 0);
+    const idle = last ? Math.floor((Date.now()-last)/86400000) : null;
+    const prog = ALL_PROGRESS.filter(r=>r.student_id===p.id);
+    const recentPass = prog.filter(r=>r.control && r.control.passed && r.updated_at && new Date(r.updated_at)>=cutoff).length;
+    const active = last7.filter(d=>mine.has(d)).length;
+    return { p, mine, idle, recentPass, active };
+  }).sort((a,b)=>(b.idle??99)-(a.idle??99));
+  const worked = rows.filter(r=>r.active>0 || (r.idle!==null && r.idle<7)).length;
+  box.appendChild(el(`<div style="font-size:13px;margin-bottom:10px;"><b>${worked}</b> élève${worked>1?'s':''} sur ${rows.length} ${worked>1?'ont':'a'} travaillé ces 7 derniers jours.</div>`));
+  rows.forEach(r=>{
+    const dots = last7.map(d=>`<span title="${d}" style="display:inline-block;width:12px;height:12px;margin-right:3px;border-radius:2px;border:1px solid var(--ink);background:${r.mine.has(d)?'var(--celadon)':'transparent'};"></span>`).join('');
+    const flag = (r.idle!==null && r.idle>=5) ? ` <span style="color:var(--seal);font-size:12px;">⚠️ silencieux depuis ${r.idle} jours</span>` : (r.idle===null ? ' <span style="font-size:12px;color:var(--ink-soft);">jamais connecté</span>' : '');
+    box.appendChild(el(`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);font-size:13px;"><b style="min-width:110px;">${escapeHtml(r.p.name)}</b><span>${dots}</span><span style="color:var(--ink-soft);">${r.active} jour${r.active>1?'s':''} · ${r.recentPass} contrôle${r.recentPass>1?'s':''} réussi${r.recentPass>1?'s':''}</span>${flag}</div>`));
+  });
+  return box;
+}
+
 async function renderDashboard(){
   const box = el('<div class="main-card"></div>');
   box.appendChild(el('<h2 style="margin:0 0 6px;">Suivi des élèves</h2>'));
@@ -3786,6 +4015,7 @@ async function renderDashboard(){
   const allLessonsFlat = {};
   for(const lvl of Object.keys(LEVEL_LABELS)){ (await lessonsForLevel(lvl)).forEach(l=>{ const words = {}; (l.vowels||[]).concat(l.vocab||[]).forEach(w=>{ if(w && w.kr && w.fr) words[String(w.kr).trim()] = w.fr; }); allLessonsFlat[l.id]={title:l.title, level:lvl, words}; }); }
 
+  box.appendChild(await renderWeekSummary(students));
   box.appendChild(renderWeakSpots(students, allLessonsFlat));
 
   students.forEach(p=>{
