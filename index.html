@@ -100,6 +100,8 @@
 @keyframes petalfall{to{transform:translate(var(--dx),110vh) rotate(var(--r));opacity:.85;}}
 @media(prefers-reduced-motion:reduce){.petal{display:none;}}
   @media(max-width:600px){ .tabs:has(.tab-btn:nth-child(4)){grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media(max-width:700px){ .opt-menu{left:0!important;right:auto!important;max-width:calc(100vw - 32px);} }
+  input[type=text],input[type=email],input[type=password],input:not([type]){min-width:0;}
   .streak-chip{margin:0 0 10px;padding:8px 12px;border:1.5px solid var(--seal);border-radius:4px;background:var(--card);font-size:13px;font-weight:600;color:var(--seal-dark);}
   .pair-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;} .pair-col{display:flex;flex-direction:column;gap:8px;}
   .pair-tile{font-family:inherit;font-size:15px;padding:12px 8px;min-height:48px;border:1.5px solid var(--ink);border-radius:4px;background:var(--card);cursor:pointer;color:var(--ink);}
@@ -969,7 +971,7 @@ function renderHeader(){
   optionsBtn.onclick = (e)=>{ e.stopPropagation(); state.headerMenuOpen = !state.headerMenuOpen; render(); };
   optionsWrap.appendChild(optionsBtn);
   if(state.headerMenuOpen){
-    const menu = el(`<div style="position:absolute;top:calc(100% + 6px);right:0;background:var(--card);border:1.5px solid var(--line);border-radius:10px;box-shadow:0 6px 18px rgba(33,29,26,.12);min-width:190px;z-index:40;overflow:hidden;"></div>`);
+    const menu = el(`<div class="opt-menu" style="position:absolute;top:calc(100% + 6px);right:0;background:var(--card);border:1.5px solid var(--line);border-radius:10px;box-shadow:0 6px 18px rgba(33,29,26,.12);min-width:190px;z-index:40;overflow:hidden;"></div>`);
     const itemStyle = 'display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;font-size:13px;color:var(--ink);';
     const changePass = el(`<button style="${itemStyle}">🔑 Changer le mot de passe</button>`);
     changePass.onclick = ()=>{ state.headerMenuOpen=false; openChangePasswordModal(); render(); };
