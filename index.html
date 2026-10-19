@@ -934,6 +934,7 @@ async function render(){
     app.appendChild(grid);
     if(state.space==='groupe'){ app.appendChild(await renderChatPanel()); }
   }
+  maybeStartTour();
 }
 
 function renderLogin(){
@@ -975,6 +976,11 @@ function renderHeader(){
   const warn = el(`<div class="stat-pill" style="${iconStyle}" title="${PROFILE.role==='teacher'?'Problèmes signalés par les élèves':'Signaler un problème'}" role="button" aria-label="Problèmes">⚠️${badge(newOf('probleme'))}</div>`);
   warn.onclick = ()=> openSuggest('probleme');
   right.appendChild(warn);
+  if(PROFILE.role==='student'){
+    const gd = el(`<div class="stat-pill" style="${iconStyle}" title="Guide d'utilisation" role="button" aria-label="Guide">❓</div>`);
+    gd.onclick = openGuide;
+    right.appendChild(gd);
+  }
   const optionsWrap = el('<div style="position:relative;"></div>');
   const optionsBtn = el('<button class="btn ghost small">⚙️ Options ▾</button>');
   optionsBtn.onclick = (e)=>{ e.stopPropagation(); state.headerMenuOpen = !state.headerMenuOpen; render(); };
@@ -1196,6 +1202,73 @@ function renderTopikHome(){
   const done = Object.keys(state.topikAns).filter(k=>k.startsWith(n+'-')).length;
   if(done===qs.length) w.appendChild(el(`<div class="note" style="border-color:var(--gold);">Résultat : <b>${good} / ${qs.length}</b>. C'est un simple aperçu : l'important est de repérer ce qui reste à apprendre.</div>`));
   return w;
+}
+
+
+// ---------- Visite de bienvenue + guide élève ----------
+const TOUR_STEPS = [
+  {t:'Bienvenue 👋', b:'<p>Cet outil t\'accompagne entre les cours de ta professeure. Tu y retrouves les leçons du cours, tu t\'entraînes quand tu veux, et tu vois ce que tu retiens.</p><p>Cette visite dure 1 minute. Tu pourras la revoir depuis le bouton <b>❓</b> en haut.</p>'},
+  {t:'Une leçon, étape par étape', b:'<p>Dans chaque leçon, avance dans cet ordre :</p><p><b>Cours</b> → <b>À mémoriser</b> → <b>Exercices</b> → <b>Quiz</b> → <b>Contrôle</b>.</p><p>Apprends d\'abord, puis entraîne-toi. Le contrôle sert à voir ce qui est acquis : rien ne se bloque, tu peux réviser librement.</p>'},
+  {t:'Réviser sans effort', b:'<p>Dans <b>Mon parcours</b> (à gauche, ou dans le menu ☰ sur téléphone) :</p><p>🔁 <b>Mots à revoir</b> te ramène les mots au bon moment (révision espacée) · 🃏 <b>Jeu de paires</b> · 🎧 <b>Mot entendu</b> · 📒 <b>Aide-mémoire grammaire</b> · 🌐 <b>Quiz global</b>.</p><p>Quelques minutes par jour valent mieux qu\'une longue séance.</p>'},
+  {t:'Parler à ta professeure', b:'<p>💬 <b>Messagerie</b> : écris-lui directement.<br>💡 <b>Idée</b> et ⚠️ <b>Problème</b> : signale ce qui peut être amélioré ou ce qui ne marche pas. Précise la page concernée.</p><p>🎓 <b>TOPIK</b> : un aperçu de l\'examen officiel de coréen, ouvert à tous, même débutants.</p>'}
+];
+function tourKey(){ return 'tour_seen_'+(SESSION && SESSION.user ? SESSION.user.id : ''); }
+let TOUR_ASKED = false;
+function maybeStartTour(){
+  if(TOUR_ASKED || !PROFILE || PROFILE.role!=='student') return;
+  TOUR_ASKED = true;
+  let seen = false; try{ seen = !!localStorage.getItem(tourKey()); }catch(e){}
+  if(!seen) openTour();
+}
+function openTour(){
+  try{ localStorage.setItem(tourKey(), '1'); }catch(e){}
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el('<div class="modal" style="max-width:460px;"></div>');
+  bg.appendChild(modal);
+  let i = 0;
+  const draw = ()=>{
+    const st = TOUR_STEPS[i];
+    modal.innerHTML = `<h3 style="margin-top:0;">${st.t}</h3><div class="tour-body">${st.b}</div><div style="font-size:12px;color:var(--ink-soft);margin:10px 0;">${i+1} / ${TOUR_STEPS.length}</div><div class="modal-actions"></div>`;
+    const act = modal.querySelector('.modal-actions');
+    const skip = el('<button class="btn ghost">Passer</button>'); skip.onclick = ()=> bg.remove();
+    act.appendChild(skip);
+    if(i>0){ const pv = el('<button class="btn ghost">Précédent</button>'); pv.onclick = ()=>{ i--; draw(); }; act.appendChild(pv); }
+    const last = i===TOUR_STEPS.length-1;
+    const nx = el(`<button class="btn celadon">${last?'C\'est parti !':'Suivant'}</button>`);
+    nx.onclick = ()=>{ if(last) bg.remove(); else { i++; draw(); } };
+    act.appendChild(nx);
+  };
+  draw();
+  document.body.appendChild(bg);
+}
+const GUIDE_ITEMS = [
+  ['Comment avancer dans une leçon ?', 'Suis les onglets dans l\'ordre : Cours, À mémoriser, Exercices, Quiz, puis Contrôle. Rien n\'est verrouillé : tu peux revenir sur une étape autant que tu veux.'],
+  ['À quoi sert le Contrôle ?', 'À voir ce qui est vraiment acquis. Le résultat est vu par ta professeure. Reste sur la page pendant le contrôle : si tu quittes la page, cela est noté.'],
+  ['Que veut dire « Mots à revoir » ?', 'Les mots que tu as ratés reviennent à intervalles de plus en plus espacés (1, 3, 7, 14, 30 jours). Ceux « à revoir aujourd\'hui » sont à faire en priorité. Quand tu réussis un mot, il revient plus tard.'],
+  ['Qu\'est-ce que la série 🔥 ?', 'C\'est le nombre de jours de suite où tu as fait au moins un exercice. Ce n\'est pas une obligation, juste un repère pour garder le rythme.'],
+  ['À quoi servent le jeu de paires, « Mot entendu » et le Quiz global ?', 'Ce sont des façons variées de réviser : associer un mot coréen et son sens, reconnaître un mot entendu, ou mélanger le vocabulaire de toutes les leçons que tu as validées.'],
+  ['Où retrouver la grammaire vue en cours ?', 'Dans l\'📒 Aide-mémoire grammaire : tes notes de cours, plus des fiches de référence (particules, politesse, nombres, etc.).'],
+  ['Ma professeure a modifié une leçon', 'Une bannière 🆕 s\'affiche en haut, avec une pastille « modifiée » devant la leçon. Elle disparaît quand tu ouvres la leçon.'],
+  ['À quoi sert l\'onglet TOPIK ?', 'À découvrir l\'examen officiel de coréen : fonctionnement, six leçons (niveaux 1 à 6) et des questions d\'entraînement. C\'est un aperçu, sans pression, même si tu débutes.'],
+  ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
+  ['Installer l\'outil sur mon téléphone', 'Ouvre ⚙️ Options puis « Installer sur mon téléphone » : l\'outil s\'ouvre ensuite comme une application.'],
+  ['J\'ai oublié mon mot de passe / je veux le changer', 'Connecté : ⚙️ Options → Changer le mot de passe. Sinon, demande à ta professeure.']
+];
+function openGuide(){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el('<div class="modal" style="max-width:560px;"><h3 style="margin-top:0;">❓ Guide d\'utilisation</h3></div>');
+  GUIDE_ITEMS.forEach(([q,a])=>{
+    const d = el(`<details style="border-bottom:1px solid var(--line);padding:8px 0;"><summary style="cursor:pointer;font-weight:600;">${escapeHtml(q)}</summary><div style="margin-top:6px;color:var(--ink-soft);font-size:14px;">${escapeHtml(a)}</div></details>`);
+    modal.appendChild(d);
+  });
+  const act = el('<div class="modal-actions" style="margin-top:14px;"></div>');
+  const tour = el('<button class="btn ghost">▶ Revoir la visite</button>');
+  tour.onclick = ()=>{ bg.remove(); openTour(); };
+  const close = el('<button class="btn celadon">Fermer</button>'); close.onclick = ()=> bg.remove();
+  act.appendChild(tour); act.appendChild(close); modal.appendChild(act);
+  bg.appendChild(modal);
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
 }
 
 async function renderAssignmentBanner(){
