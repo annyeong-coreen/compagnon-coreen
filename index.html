@@ -153,6 +153,8 @@
   .sidebar [style*="dashed"]{border-radius:4px !important;background:#F6F0E2;}
   .lesson-path{border-left:3px double #C9BB98;}
   @media(max-width:600px){ .main-card{padding:24px 16px;} .main-card::before{inset:9px;} header.top::after{height:7px;} .brand::before{width:30px;height:30px;font-size:17px;} }
+.upd-pill{font-size:11px;background:var(--gold);color:#fff;border-radius:10px;padding:1px 8px;white-space:nowrap;}
+.topik-opt{min-width:0;}
 </style>
 </head>
 <body>
@@ -181,7 +183,10 @@ if(!CONFIG_OK){
 
 function runApp(sb){
 
-const LEVEL_LABELS = {debutant:'Débutant', intermediaire:'Intermédiaire', avance:'Avancé', groupe:'Cours en groupe'};
+const LEVEL_LABELS = {debutant:'Débutant', intermediaire:'Intermédiaire', avance:'Avancé', groupe:'Cours en groupe', topik:'TOPIK'};
+const TOPIK_QS = {"1": [{"q": "저는 학생(   ).", "o": ["이에요", "예요", "이", "가"], "a": 0, "e": "학생 se termine par une consonne : on utilise 이에요. (예요 s'emploie après une voyelle.)"}, {"q": "밥(   ) 먹어요.", "o": ["을", "를", "이", "가"], "a": 0, "e": "밥 se termine par une consonne et c'est l'objet du verbe : 을."}, {"q": "어제 친구를 (   ).", "o": ["만나요", "만났어요", "만날 거예요", "만나세요"], "a": 1, "e": "« Hier » demande le passé : 만났어요."}, {"q": "물 한 (   ) 주세요.", "o": ["잔", "권", "마리", "명"], "a": 0, "e": "Pour un verre ou une tasse, le classificateur est 잔."}, {"q": "학교(   ) 가요.", "o": ["에", "에서", "을", "는"], "a": 0, "e": "Pour la destination d'un verbe de mouvement (가다), on utilise 에."}, {"q": "오늘 다음 날은 (   )입니다.", "o": ["어제", "내일", "지금", "아침"], "a": 1, "e": "Le lendemain d'aujourd'hui, c'est 내일 (demain)."}], "2": [{"q": "같이 점심 먹을(   )?", "o": ["까요", "거예요", "지요", "네요"], "a": 0, "e": "-(으)ㄹ까요? propose quelque chose : « On mange ensemble ? »"}, {"q": "여기에서 사진을 찍지 (   ).", "o": ["마세요", "않아요", "못해요", "안 해요"], "a": 0, "e": "-지 마세요 exprime l'interdiction ou la demande de ne pas faire."}, {"q": "한국에 가(   ) 싶어요.", "o": ["고", "서", "면", "지만"], "a": 0, "e": "-고 싶다 = vouloir (faire) : 가고 싶어요."}, {"q": "어머니(   ) 선물을 드렸어요.", "o": ["께", "한테", "에게", "에"], "a": 0, "e": "Pour une personne à respecter, « à » se dit 께 (et le verbe 드리다)."}, {"q": "머리가 아파서 약을 (   ).", "o": ["먹었어요", "마셨어요", "입었어요", "갔어요"], "a": 0, "e": "Le médicament se « mange » : 약을 먹다."}, {"q": "지하철이 버스(   ) 빨라요.", "o": ["보다", "처럼", "마다", "까지"], "a": 0, "e": "보다 exprime la comparaison : « plus rapide que le bus »."}], "3": [{"q": "한국 음식을 먹어 본 (   )이 있어요.", "o": ["적", "때", "수", "것"], "a": 0, "e": "-(으)ㄴ 적이 있다 = avoir déjà fait."}, {"q": "시간이 (   ) 때 운동을 해요.", "o": ["있을", "있어서", "있으니까", "있지만"], "a": 0, "e": "« Quand » se construit avec -(으)ㄹ 때 : 있을 때."}, {"q": "한국어를 배우(   ) 학원에 다녀요.", "o": ["려고", "니까", "아서", "면"], "a": 0, "e": "-(으)려고 = dans le but de : 배우려고."}, {"q": "다음 달부터 일찍 일어나(   ) 했어요.", "o": ["기로", "는데", "려고", "ㄹ까"], "a": 0, "e": "-기로 하다 = décider de : 일어나기로 했어요."}, {"q": "비가 오(   ) 약속을 취소했어요.", "o": ["기 때문에", "는데", "거나", "지만"], "a": 0, "e": "-기 때문에 donne la raison : « parce qu'il pleut »."}, {"q": "한국에서 살(   ) 되었어요.", "o": ["게", "기", "도록", "지"], "a": 0, "e": "-게 되다 = en venir à, finir par : 살게 되었어요."}], "4": [{"q": "길이 막히(   ) 약속에 늦었어요.", "o": ["는 바람에", "ㄹ수록", "더라도", "거나"], "a": 0, "e": "-는 바람에 : à cause de (un événement qui entraîne un résultat négatif)."}, {"q": "이 식당은 값이 싼 (   )이에요.", "o": ["편", "바", "채", "척"], "a": 0, "e": "-(으)ㄴ 편이다 = plutôt : 싼 편이에요."}, {"q": "힘들(   ) 끝까지 해 보세요.", "o": ["더라도", "ㄹ수록", "ㄴ 채로", "도록"], "a": 0, "e": "-더라도 = même si."}, {"q": "들(   ) 한국어가 재미있어요.", "o": ["을수록", "는 바람에", "더라도", "은 채로"], "a": 0, "e": "-(으)ㄹ수록 = plus… plus : 들을수록."}, {"q": "불을 켠 (   ) 잠이 들었어요.", "o": ["채로", "뿐", "만큼", "바람"], "a": 0, "e": "-(으)ㄴ 채로 = en restant dans cet état."}, {"q": "그 영화는 재미있을 (   ) 아니라 감동적이에요.", "o": ["뿐만", "수밖에", "바람에", "채로"], "a": 0, "e": "-(으)ㄹ 뿐만 아니라 = non seulement… mais aussi."}], "5": [{"q": "사람은 누구나 실수하(   ) 마련이에요.", "o": ["기", "는", "ㄹ", "ㄴ"], "a": 0, "e": "-기 마련이다 = il est naturel que."}, {"q": "너무 긴장한 (   ) 말이 안 나왔어요.", "o": ["나머지", "동안", "만큼", "대로"], "a": 0, "e": "-(으)ㄴ 나머지 = à force de, résultat excessif."}, {"q": "날씨가 추운 (   ) 바람까지 불어요.", "o": ["데다가", "나머지", "셈이", "한"], "a": 0, "e": "-(으)ㄴ 데다가 = en plus de cela."}, {"q": "그가 거짓말을 할 (   ) 없어요.", "o": ["리가", "셈이", "만큼", "뿐이"], "a": 0, "e": "-(으)ㄹ 리가 없다 = il est impossible que."}, {"q": "작년(   ) 물가가 많이 올랐어요.", "o": ["에 비해", "에 따라서", "에 대해", "에도 불구하고"], "a": 0, "e": "에 비해 = par rapport à."}, {"q": "건강을 유지하는 (   ) 계속 일할 수 있어요.", "o": ["한", "채", "뿐", "셈"], "a": 0, "e": "-는 한 = tant que."}], "6": [{"q": "도와주셔서 그저 감사할 (   )입니다.", "o": ["따름", "지경", "법", "뿐만"], "a": 0, "e": "-(으)ㄹ 따름이다 = ne pouvoir que (soutenu)."}, {"q": "미리 준비했기에 (   ) 큰일 날 뻔했다.", "o": ["망정이지", "ㄹ지언정", "건대", "ㄹ 따름"], "a": 0, "e": "-기에 망정이지 = heureusement que…, sinon…"}, {"q": "시대가 변함(   ) 생활 방식도 달라졌다.", "o": ["에 따라", "에도 불구하고", "을 비롯해", "에 앞서"], "a": 0, "e": "-(으)ㅁ에 따라 = au fur et à mesure que."}, {"q": "배가 고파서 쓰러질 (   )이다.", "o": ["지경", "법", "뿐", "따름"], "a": 0, "e": "-(으)ㄹ 지경이다 = au point de."}, {"q": "노력했음에(   ) 결과는 좋지 않았다.", "o": ["도 불구하고", "따라", "비해", "대하여"], "a": 0, "e": "-음에도 불구하고 = malgré le fait que."}, {"q": "그는 죽을(   ) 포기하지 않겠다고 말했다.", "o": ["지언정", "수록", "더라도 ㄹ", "ㄴ 채로"], "a": 0, "e": "-(으)ㄹ지언정 = plutôt que, quitte à."}]};
+const TOPIK_META = {"1": {"title": "TOPIK niveau 1 — Survivre au quotidien", "desc": "Se présenter, saluer, parler de soi et de sa journée, acheter, demander un prix. Phrases très simples sur des sujets familiers."}, "2": {"title": "TOPIK niveau 2 — Les situations de tous les jours", "desc": "Faire des achats, prendre les transports, fixer un rendez-vous, parler de la météo et de projets simples. Des phrases plus longues, au passé et au futur."}, "3": {"title": "TOPIK niveau 3 — Parler de ses expériences et de ses projets", "desc": "Se débrouiller dans des situations sociales, donner son opinion, expliquer une raison, parler d'expériences et de décisions. Premiers textes courts sur le travail et la société."}, "4": {"title": "TOPIK niveau 4 — Comprendre la société et argumenter", "desc": "Comprendre des sujets sociaux ou abstraits, des articles simples et des conversations de travail, et exprimer des nuances (cause, concession, progression)."}, "5": {"title": "TOPIK niveau 5 — Textes spécialisés et opinions nuancées", "desc": "Comprendre des articles, des discours et des sujets spécialisés, et exprimer une opinion nuancée avec des tournures plus littéraires."}, "6": {"title": "TOPIK niveau 6 — Précision, nuances et registre soutenu", "desc": "Comprendre et produire des textes complexes, abstraits ou littéraires, avec des expressions soutenues et des connecteurs précis."}};
+
 const PERSO_LEVELS = ['debutant','intermediaire','avance'];
 
 let SESSION = null;
@@ -842,6 +847,7 @@ async function loadOwnProfile(){
       await sbLoadStudyDays();
       GIFTS = await sbMyGifts();
       await sbLoadGrammarSeen();
+      await sbLoadLessonViews();
       sb.from('profiles').update({last_activity_at:new Date().toISOString()}).eq('id', SESSION.user.id);
     }
     else { state.space = 'manage'; ALL_PROFILES = await sbAllProfiles(); SUGGESTIONS = await sbSuggestions(); }
@@ -901,6 +907,7 @@ async function render(){
 
   app.appendChild(renderHeader());
   app.appendChild(await renderAssignmentBanner());
+  app.appendChild(await renderUpdatedBanner());
   app.appendChild(renderNextClassBanner());
 
   app.appendChild(renderSpaceTabs());
@@ -1097,6 +1104,100 @@ function openChangePasswordModal(){
   document.body.appendChild(bg);
 }
 
+
+// ---------- Prévenir les élèves qu'une leçon a été modifiée ----------
+let LESSON_VIEWS = {}, VIEWS_OK = true;
+async function sbLoadLessonViews(){
+  try{
+    const {data,error} = await sb.from('lesson_views').select('lesson_id,seen_at').eq('student_id', SESSION.user.id);
+    if(error) throw error;
+    LESSON_VIEWS = {}; (data||[]).forEach(r=>{ LESSON_VIEWS[r.lesson_id] = r.seen_at; }); VIEWS_OK = true;
+  }catch(e){ VIEWS_OK = false; LESSON_VIEWS = {}; }
+}
+function lessonIsUpdated(l){
+  if(!VIEWS_OK || !l || !l.notified_at || !PROFILE || PROFILE.role!=='student') return false;
+  const concerned = !!PROGRESS[l.id] || l.space==='groupe' || (ASSIGNMENT && ASSIGNMENT.lesson_id===l.id);
+  if(!concerned) return false;
+  const seen = LESSON_VIEWS[l.id];
+  return !seen || new Date(seen) < new Date(l.notified_at);
+}
+function markLessonSeen(l){
+  if(!VIEWS_OK || !l || !PROFILE || PROFILE.role!=='student' || !l.notified_at) return;
+  if(!lessonIsUpdated(l)) return;
+  LESSON_VIEWS[l.id] = new Date().toISOString();
+  try{ sb.from('lesson_views').upsert({student_id:SESSION.user.id, lesson_id:l.id, seen_at:LESSON_VIEWS[l.id]}, {onConflict:'student_id,lesson_id'}).then(r=>{ if(r && r.error) VIEWS_OK=false; }); }catch(e){ VIEWS_OK=false; }
+}
+async function renderUpdatedBanner(){
+  if(!VIEWS_OK || !PROFILE || PROFILE.role!=='student') return el('<div></div>');
+  const found = [];
+  for(const lvl of Object.keys(LEVEL_LABELS)){
+    if(lvl==='groupe' && !PROFILE.group_id) continue;
+    (await lessonsForLevel(lvl)).forEach(l=>{ if(lessonIsUpdated(l) && !(state.level===lvl && state.lessonId===l.id)) found.push({lvl,l}); });
+  }
+  if(!found.length) return el('<div></div>');
+  const box = el('<div class="note upd-banner" style="border-color:var(--gold);margin-bottom:16px;"></div>');
+  found.slice(0,3).forEach(({lvl,l})=>{
+    const row = el(`<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:3px 0;"><span>🆕 Ta professeure a modifié <b>${escapeHtml(l.title)}</b>${l.notify_note?' — '+escapeHtml(l.notify_note):''}</span></div>`);
+    const btn = el('<button class="btn celadon small">Voir</button>');
+    btn.onclick = ()=>{
+      state.space = PERSO_LEVELS.includes(lvl) ? 'perso' : lvl; state.level = lvl; if(state.space==='perso') state.lastPersoLevel = lvl;
+      state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
+      state.lessonId = l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; render();
+    };
+    row.appendChild(btn); box.appendChild(row);
+  });
+  return box;
+}
+
+// ---------- Espace TOPIK ----------
+function renderTopikHome(){
+  const w = el('<div></div>');
+  w.appendChild(el('<h2 style="margin:0 0 6px;">🎓 TOPIK <span class="kr" style="font-size:18px;color:var(--ink-soft);">한국어능력시험</span></h2>'));
+  w.appendChild(el(`<div class="note" style="margin-bottom:16px;">Le <b>TOPIK</b> (Test of Proficiency in Korean) est l'examen officiel de coréen. Cet espace est ouvert à tous, même débutants : c'est un <b>aperçu de ce qui t'attend</b>, sans pression. Prends ce qui t'est utile, au rythme de ton cours.</div>`));
+  w.appendChild(el(`<div><h3>Comment ça marche ?</h3>
+    <div class="vocab-row"><span><b>TOPIK I</b> — niveaux 1 et 2</span><span>200 points</span><span>Écoute 30 q. (40 min) · Lecture 40 q. (60 min)</span></div>
+    <div class="vocab-row"><span><b>TOPIK II</b> — niveaux 3 à 6</span><span>300 points</span><span>Écoute 50 q. (60 min) · Écriture 4 q. (50 min) · Lecture 50 q. (70 min)</span></div>
+    <div class="note" style="margin:10px 0 16px;">Niveau 1 dès 80 pts, niveau 2 dès 140 (TOPIK I) · niveau 3 dès 120, niveau 4 dès 150, niveau 5 dès 190, niveau 6 dès 230 (TOPIK II). Le résultat est valable 2 ans. <b>Dates, lieux et tarifs changent chaque année</b> : renseigne-toi sur <b>topik.go.kr</b> ou auprès du Centre culturel coréen.</div></div>`));
+  w.appendChild(el(`<div><h3>Les leçons de chaque niveau</h3><div class="note" style="margin-bottom:14px;">À gauche, une leçon par niveau (1 à 6) : vocabulaire, notes de grammaire et phrases types, avec les exercices, le quiz et le contrôle habituels. Ta professeure peut les compléter si tu lui en fais la demande.</div></div>`));
+
+  w.appendChild(el('<h3>S\'entraîner</h3>'));
+  const lv = el('<div class="level-tabs" style="margin-bottom:14px;"></div>');
+  for(let n=1;n<=6;n++){
+    const b = el(`<button class="level-tab ${state.topikLevel===n?'active':''}">Niveau ${n}</button>`);
+    b.onclick = ()=>{ state.topikLevel = n; state.topikAns = {}; state.topikOrder = {}; render(); };
+    lv.appendChild(b);
+  }
+  w.appendChild(lv);
+  if(!state.topikLevel){
+    w.appendChild(el('<div class="note">Choisis un niveau pour t\'essayer à 6 questions de grammaire (les corrections t\'expliquent chaque réponse). Pas de note ni de pression : si c\'est trop difficile, c\'est normal.</div>'));
+    return w;
+  }
+  const n = state.topikLevel, qs = TOPIK_QS[n] || [];
+  state.topikAns = state.topikAns || {}; state.topikOrder = state.topikOrder || {};
+  w.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">${escapeHtml(TOPIK_META[n].title)} — ${escapeHtml(TOPIK_META[n].desc)}</div>`));
+  let good = 0;
+  qs.forEach((q,i)=>{
+    const key = n+'-'+i;
+    if(!state.topikOrder[key]){ const o=q.o.map((_,k)=>k); for(let k=o.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); [o[k],o[j]]=[o[j],o[k]]; } state.topikOrder[key]=o; }
+    const ans = state.topikAns[key];
+    if(ans===q.a) good++;
+    const card = el(`<div class="section-block" style="margin-bottom:12px;"><div style="font-size:18px;margin-bottom:8px;"><b>${i+1}.</b> <span class="kr">${escapeHtml(q.q)}</span></div></div>`);
+    const row = el('<div style="display:flex;flex-wrap:wrap;gap:8px;"></div>');
+    state.topikOrder[key].forEach(k=>{
+      const b = el(`<button class="btn ghost small topik-opt">${escapeHtml(q.o[k])}</button>`);
+      if(ans!==undefined){ b.disabled = true; if(k===q.a) b.style.borderColor='var(--celadon-dark)'; else if(k===ans) b.style.borderColor='var(--seal)'; }
+      b.onclick = ()=>{ state.topikAns[key] = k; render(); };
+      row.appendChild(b);
+    });
+    card.appendChild(row);
+    if(ans!==undefined) card.appendChild(el(`<div class="note" style="margin-top:8px;border-color:${ans===q.a?'var(--celadon-dark)':'var(--seal)'};">${ans===q.a?'✅ Bien joué.':'❌ Pas tout à fait.'} ${escapeHtml(q.e)}</div>`));
+    w.appendChild(card);
+  });
+  const done = Object.keys(state.topikAns).filter(k=>k.startsWith(n+'-')).length;
+  if(done===qs.length) w.appendChild(el(`<div class="note" style="border-color:var(--gold);">Résultat : <b>${good} / ${qs.length}</b>. C'est un simple aperçu : l'important est de repérer ce qui reste à apprendre.</div>`));
+  return w;
+}
+
 async function renderAssignmentBanner(){
   if(!ASSIGNMENT || PROFILE.role!=='student') return el('<div></div>');
   // find which space this lesson belongs to
@@ -1126,7 +1227,7 @@ function renderSpaceTabs(){
   const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
   const spaces = PROFILE.role==='teacher'
     ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves']]
-    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['dm', dmTabLabel('dm')]]);
+    : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['topik','🎓 TOPIK']]).concat([['dm', dmTabLabel('dm')]]);
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
     b.onclick = async ()=>{
@@ -1140,7 +1241,7 @@ function renderSpaceTabs(){
       if(key==='suggest') SUGGEST_CTX = suggestContextLabel();
       if(key==='inbox'){ await enterInbox(); return; }
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
-      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false;
+      state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.topikLevel=null;
       if(key==='dashboard'){ ALL_STUDY_DAYS = null; ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key==='suggest'){ SUGGESTIONS = await sbSuggestions(); }
@@ -1225,6 +1326,12 @@ async function renderSidebar(){
     }
   } else {
     box.appendChild(el(`<h3 style="margin:0 0 14px;font-size:15px;">${LEVEL_LABELS[state.level]}</h3>`));
+    if(state.space==='topik'){
+      const info = el(`<div class="lesson-node ${!state.lessonId?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);"><span>ℹ️ Présentation et entraînement</span></div>`);
+      info.style.cursor='pointer';
+      info.onclick = ()=>{ state.lessonId=null; state.menuOpen=false; render(); };
+      box.appendChild(info);
+    }
   }
 
   const list = await lessonsForLevel(state.level);
@@ -1237,11 +1344,12 @@ async function renderSidebar(){
     const unlocked = isUnlockedSync(list, idx);
     const pr = PROGRESS[l.id];
     const done = pr && pr.control && pr.control.passed;
-    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && !state.listenMode && !state.puzzleMode && ((!state.lessonId && idx===0) || state.lessonId===l.id);
+    const active = !state.reviewMode && !state.globalQuizMode && !state.grammarMode && !state.listenMode && !state.puzzleMode && ((!state.lessonId && idx===0 && state.space!=='topik') || state.lessonId===l.id);
     const node = el(`<div class="lesson-node ${active?'active':''} ${unlocked?'':'locked'} ${done?'done':''}">
       <span style="display:flex;align-items:center;gap:10px;">
       ${done?'<span class="seal-badge">印</span>':unlocked?'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">'+(idx+1)+'</span>':'<span class="seal-badge" style="border-color:var(--line);color:var(--ink-soft);">🔒</span>'}
       <span>${escapeHtml(l.title)}</span></span>
+      ${lessonIsUpdated(l)?'<span class="upd-pill">🆕 modifiée</span>':''}
     </div>`);
     if(unlocked){
       node.onclick = ()=>{ state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=l.id; state.tab='cours'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0; state.translationDraft=''; state.translationValidated=false; render(); };
@@ -1279,8 +1387,13 @@ async function renderMain(){
     card.appendChild(await renderGlobalQuiz());
     return card;
   }
+  if(state.space==='topik' && !state.lessonId){
+    card.appendChild(renderTopikHome());
+    return card;
+  }
   const list = await lessonsForLevel(state.level);
   const lesson = list.find(l=>l.id===state.lessonId) || list[0] || null;
+  if(lesson) markLessonSeen(lesson);
   if(!lesson){
     card.appendChild(el(`<div class="empty-state es-fan"><span class="kr">시작해요</span><div>Choisis une leçon dans la colonne de gauche.</div></div>`));
     return card;
@@ -1290,7 +1403,10 @@ async function renderMain(){
     card.appendChild(el(`<div class="empty-state es-lantern"><span class="kr">잠겨 있어요</span><div>Cette leçon est verrouillée — réussis le contrôle précédent pour la débloquer.</div></div>`));
     return card;
   }
-  card.appendChild(el(`<div class="lesson-title"><span class="eyebrow">${LEVEL_LABELS[state.level]} · Leçon ${idx+1}</span></div><h2 style="margin:0 0 14px;">${escapeHtml(lesson.title)}</h2>`));
+  card.appendChild(el(`<div><div class="lesson-title"><span class="eyebrow">${LEVEL_LABELS[state.level]} · Leçon ${idx+1}</span></div><h2 style="margin:0 0 14px;">${escapeHtml(lesson.title)}</h2></div>`));
+  if(lesson.notified_at && lesson.notify_note && PROFILE.role==='student'){
+    card.appendChild(el(`<div class="note" style="border-color:var(--gold);margin-bottom:14px;">🆕 Ta professeure a modifié cette leçon : ${escapeHtml(lesson.notify_note)}</div>`));
+  }
 
   const tabs = el('<div class="tabs"></div>');
   [['cours','Cours'],['memoriser','À mémoriser'],['exercices','Exercices'],['traduction','Traduction'],['pratique','Texte d\'entraînement'],['quiz','Quiz'],['controle','Contrôle'],['revision','Révision']].forEach(([key,label])=>{
@@ -3764,9 +3880,14 @@ function openEditLessonModal(lesson){
     </div>
     <div class="field"><label>Aide sur des mots difficiles — format : mot | explication (une par ligne)</label><textarea data-ko="1" id="em-trans-help">${escapeHtml((t.help||[]).map(h=>`${h.word} | ${h.meaning}`).join('\n'))}</textarea></div>
     <div class="field"><label>Score requis pour débloquer la suite (%)</label><input type="text" id="em-pass" value="${Math.round((lesson.pass_score||0.8)*100)}"></div>
+    <div class="field" style="border:1.5px dashed var(--gold);border-radius:10px;padding:10px 14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="em-notify" style="width:auto;"> 🔔 Prévenir les élèves qui ont cette leçon</label>
+      <div id="em-notify-box" style="display:none;margin-top:8px;"><input type="text" id="em-notify-note" maxlength="140" placeholder="Ce qui a changé (facultatif) — ex. : 3 nouveaux mots ajoutés"></div>
+    </div>
     <div class="modal-actions"></div>
   </div>`);
   modal.appendChild(form2);
+  form2.querySelector('#em-notify').onchange = (e)=>{ form2.querySelector('#em-notify-box').style.display = e.target.checked ? 'block' : 'none'; };
   form2.querySelector('#em-grammar-move').onclick = ()=>{
     const g = form2.querySelector('#em-grammar');
     if(!g.value.trim()) return;
@@ -3813,7 +3934,9 @@ function openEditLessonModal(lesson){
     }).filter(h=>h.word);
     const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
     save.disabled = true; status.style.color='var(--ink-soft)'; status.textContent = 'Enregistrement…';
-    const { error } = await sb.from('lessons').update({title, vocab, dialogue, grammar, pass_score:passScore, translations}).eq('id', lesson.id);
+    const upd = {title, vocab, dialogue, grammar, pass_score:passScore, translations};
+    if(form2.querySelector('#em-notify').checked){ upd.notified_at = new Date().toISOString(); upd.notify_note = form2.querySelector('#em-notify-note').value.trim() || null; }
+    const { error } = await sb.from('lessons').update(upd).eq('id', lesson.id);
     save.disabled = false;
     if(error){ status.style.color='var(--danger)'; status.textContent = 'Erreur : ' + error.message; return; }
     delete LESSONS_CACHE[lesson.space];
@@ -4843,7 +4966,10 @@ function renderSuggestions(){
     form.appendChild(ta);
     const picker = SUGGEST_IMG_OK ? buildImagePicker(3, ta) : null;
     if(picker) form.appendChild(picker.element);
-    if(SUGGEST_CTX) form.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">📍 Page jointe automatiquement : ${escapeHtml(SUGGEST_CTX)}</div>`));
+    const PAGES = ['Mon parcours','Cours en groupe','Messagerie','Mots à revoir','Jeu de paires','Aide-mémoire grammaire','Mot entendu','Puzzle','Quiz global','Cours','À mémoriser','Exercices','Traduction',"Texte d'entraînement",'Quiz','Contrôle','Révision','Connexion / compte','Autre'];
+    const ctxField = el(`<div style="margin-top:10px;"><label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:3px;">📍 Sur quelle page ? <span style="opacity:.8;">(rempli automatiquement, tu peux le changer ou l'effacer)</span></label><input type="text" id="sg-ctx" list="sg-pages" maxlength="120" style="width:100%;box-sizing:border-box;font-size:14px;"><datalist id="sg-pages">${PAGES.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist></div>`);
+    const ctxInput = ctxField.querySelector('#sg-ctx'); ctxInput.value = SUGGEST_CTX || '';
+    form.appendChild(ctxField);
     const msg = el('<div style="margin-top:8px;font-size:13px;"></div>');
     const send = el('<button class="btn celadon" style="margin-top:10px;">Envoyer</button>');
     send.onclick = async ()=>{
@@ -4853,7 +4979,7 @@ function renderSuggestions(){
       let paths = [];
       try{ if(picker && picker.blobs().length){ msg.textContent = 'Envoi des images…'; paths = await uploadSuggestImages(picker.blobs()); } }
       catch(e){ send.disabled = false; msg.innerHTML = '<span class="error-text">Les images n\'ont pas pu être envoyées. Réessaie, ou envoie sans image.</span>'; return; }
-      const row = { author_id:SESSION.user.id, kind, body, context:SUGGEST_CTX || null };
+      const row = { author_id:SESSION.user.id, kind, body, context:(ctxInput.value.trim().slice(0,300)) || null };
       if(paths.length) row.images = paths;
       const { error } = await sb.from('suggestions').insert(row);
       if(error){ if(paths.length) sb.storage.from(SUGGEST_BUCKET).remove(paths).catch(()=>{}); send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
