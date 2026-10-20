@@ -840,6 +840,7 @@ async function loadOwnProfile(){
     PROGRESS = await sbAllProgressForSelf();
     ASSIGNMENT = await sbMyAssignment();
     GROUPS = await sbAllGroups();
+    await sbLoadPuzzlePhotos();
     if(PROFILE.role==='student'){
       ACTIVE_GROUP_ID = PROFILE.group_id || null;
       WEAK_WORDS = await sbWeakWords();
@@ -916,6 +917,8 @@ async function render(){
     app.appendChild(await renderDashboard());
   } else if(state.space==='inbox' && PROFILE.role==='teacher'){
     app.appendChild(await renderInbox());
+  } else if(state.space==='puzzles' && PROFILE.role==='teacher'){
+    app.appendChild(await renderPuzzlesAdmin());
   } else if(state.space==='suggest'){
     app.appendChild(renderSuggestions());
   } else if(state.space==='dm'){
@@ -1299,7 +1302,7 @@ async function renderAssignmentBanner(){
 function renderSpaceTabs(){
   const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
   const spaces = PROFILE.role==='teacher'
-    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['dashboard','📊 Suivi élèves']]
+    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['puzzles', puzzleTabLabel()], ['dashboard','📊 Suivi élèves']]
     : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['topik','🎓 TOPIK']]).concat([['dm', dmTabLabel('dm')]]);
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
@@ -1318,6 +1321,7 @@ function renderSpaceTabs(){
       if(key==='dashboard'){ ALL_STUDY_DAYS = null; ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); GROUPS = await sbAllGroups(); }
       else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); }
       else if(key==='suggest'){ SUGGESTIONS = await sbSuggestions(); }
+      else if(key==='puzzles'){ await sbLoadPuzzlePhotos(); }
       else if(key!=='dm'){ state.level = key==='perso' ? (state.lastPersoLevel||'debutant') : key; }
       if(key==='groupe'){
         if(PROFILE.role==='teacher'){ GROUPS = await sbAllGroups(); if(!ACTIVE_GROUP_ID && GROUPS[0]) ACTIVE_GROUP_ID = GROUPS[0].id; }
@@ -2312,6 +2316,168 @@ const PUZZLE_COLS = 3, PUZZLE_ROWS = 2;
 const PUZZLE_ORDER = [4,1,3,0,5,2];      // ordre dans lequel les cases se dévoilent
 let GIFTS = [];                           // cadeaux déjà remis (élève : les siens ; professeure : tous)
 let ALL_GIFTS = [];
+/* ---- Puzzles avec de vraies photos ---- */
+const PUZZLE_BUCKET = 'puzzle-user';
+const PUZZLE_DEFAULTS = [
+{
+"id": "busan-citizen-park",
+"pos": 1,
+"src": "repo",
+"file": "puzzle-photos/busan-citizen-park.jpg",
+"ratio": 0.75,
+"place": "부산시민공원 · Busan",
+"sentence": "Ouvert en 2014 sur l'ancien camp militaire américain Hayaliah (Camp Hialeah).",
+"source_label": "Wikipédia — Busan Citizens Park",
+"source_url": "https://en.wikipedia.org/wiki/Busan_Citizens_Park",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "ulsan-taehwa",
+"pos": 2,
+"src": "repo",
+"file": "puzzle-photos/ulsan-taehwa.jpg",
+"ratio": 1.3333,
+"place": "태화강 국가정원 · Ulsan",
+"sentence": "Une forêt de bambous de plusieurs kilomètres, avec le soir un chemin lumineux, l'은하수길 (« chemin de la Voie lactée »).",
+"source_label": "Klook — Taehwagang Bamboo Forest",
+"source_url": "https://www.klook.com/en-CA/destination/p60280324-taehwagang-bamboo-forest/",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "seoul-starfield",
+"pos": 3,
+"src": "repo",
+"file": "puzzle-photos/seoul-starfield.jpg",
+"ratio": 1.7766,
+"place": "별마당 도서관 · Séoul",
+"sentence": "Photo prise à Noël, dans un centre commercial qui abrite environ 50 000 livres.",
+"source_label": "Wikipédia — Starfield COEX Mall",
+"source_url": "https://en.wikipedia.org/wiki/Starfield_COEX_Mall",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "busan-jagalchi",
+"pos": 4,
+"src": "repo",
+"file": "puzzle-photos/busan-jagalchi.jpg",
+"ratio": 1.3333,
+"place": "자갈치시장 · Busan",
+"sentence": "Le plus grand marché de poissons de Corée, au bord du port de Busan.",
+"source_label": "Wikipédia — Jagalchi Market",
+"source_url": "https://en.wikipedia.org/wiki/Jagalchi_Market",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "ulsan-grand-park",
+"pos": 5,
+"src": "repo",
+"file": "puzzle-photos/ulsan-grand-park.jpg",
+"ratio": 1.3333,
+"place": "울산대공원 · Ulsan",
+"sentence": "Un immense parc urbain au cœur d'Ulsan, la grande ville industrielle du sud-est.",
+"source_label": "Wikipédia — Ulsan Grand Park",
+"source_url": "https://en.wikipedia.org/wiki/Ulsan_Grand_Park",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "busan-port",
+"pos": 6,
+"src": "repo",
+"file": "puzzle-photos/busan-port.jpg",
+"ratio": 1.3333,
+"place": "부산항 · Busan",
+"sentence": "Le plus grand port de Corée du Sud (photo prise depuis le toit du Lotte Mall).",
+"source_label": "Wikipédia — Port of Busan",
+"source_url": "https://en.wikipedia.org/wiki/Port_of_Busan",
+"verified": true,
+"status": "approved"
+},
+{
+"id": "songdo-central-park",
+"pos": 7,
+"src": "repo",
+"file": "puzzle-photos/songdo.jpg",
+"ratio": 1.3333,
+"place": "송도 센트럴파크 · Incheon",
+"sentence": "Un parc bâti sur des terres gagnées sur la mer ; l'eau du canal est de l'eau de mer.",
+"source_label": null,
+"source_url": null,
+"verified": false,
+"status": "approved"
+},
+{
+"id": "ulsan-memorial",
+"pos": 8,
+"src": "repo",
+"file": "puzzle-photos/ulsan-memorial.jpg",
+"ratio": 0.75,
+"place": "울산대공원 현충탑 · Ulsan",
+"sentence": "Chaque 6 juin, la Corée célèbre le 현충일, le jour du souvenir.",
+"source_label": "Wikipédia — Memorial Day (Corée du Sud)",
+"source_url": "https://en.wikipedia.org/wiki/Memorial_Day_(South_Korea)",
+"verified": false,
+"status": "approved"
+},
+{
+"id": "incheon-chinatown",
+"pos": 9,
+"src": "repo",
+"file": "puzzle-photos/chinatown.jpg",
+"ratio": 1.3333,
+"place": "차이나타운 · Incheon",
+"sentence": "Le seul quartier chinois officiel de Corée, né près du port d'Incheon à la fin du XIXe siècle.",
+"source_label": null,
+"source_url": null,
+"verified": false,
+"status": "approved"
+},
+{
+"id": "incheon-michuhol",
+"pos": 10,
+"src": "repo",
+"file": "puzzle-photos/michuhol.jpg",
+"ratio": 0.75,
+"place": "미추홀공원 · Incheon",
+"sentence": "Michuhol est un très ancien nom d'Incheon ; c'est aujourd'hui celui d'un de ses arrondissements.",
+"source_label": null,
+"source_url": null,
+"verified": false,
+"status": "approved"
+}
+];
+let PUZZLE_PHOTOS = PUZZLE_DEFAULTS.map(x=>Object.assign({},x));
+let PUZZLE_TABLE_OK = false;
+async function sbLoadPuzzlePhotos(){
+  try{
+    const { data, error } = await sb.from('puzzle_photos').select('*').order('pos');
+    if(error){ PUZZLE_TABLE_OK = false; PUZZLE_PHOTOS = PUZZLE_DEFAULTS.map(x=>Object.assign({},x)); return; }
+    PUZZLE_TABLE_OK = true; PUZZLE_PHOTOS = data || [];
+  }catch(e){ PUZZLE_TABLE_OK = false; PUZZLE_PHOTOS = PUZZLE_DEFAULTS.map(x=>Object.assign({},x)); }
+}
+// Ordre de découverte : photos à phrase validée d'abord, puis celles « à vérifier » le plus tard possible
+function puzzleList(){
+  return (PUZZLE_PHOTOS||[]).filter(p=>p.status==='approved').slice().sort((a,b)=> (b.verified?1:0)-(a.verified?1:0) || (a.pos-b.pos) || String(a.created_at||'').localeCompare(String(b.created_at||'')));
+}
+function puzzlePhotoAt(i){ const l = puzzleList(); return l.length ? l[i % l.length] : null; }
+function puzzlePhotoUrl(p){
+  if(!p) return '';
+  if(p.src==='user'){ try{ return sb.storage.from(PUZZLE_BUCKET).getPublicUrl(p.file).data.publicUrl; }catch(e){ return ''; } }
+  return p.file;
+}
+function safeHttpUrl(u){ return /^https?:\/\//i.test(String(u||'')) ? String(u) : ''; }
+function puzzleSourceHtml(p){
+  const label = p.source_label || '';
+  const url = safeHttpUrl(p.source_url);
+  if(url) return `Source : <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(label||url)}</a>`;
+  if(label) return `Source : ${escapeHtml(label)}`;
+  return '';
+}
+
 let SUGGESTIONS = [], SUGGEST_OK = true, SUGGEST_CTX = '';
 let NEXT_CLASS = [];
 let GIFTS_TABLE_OK = true;
@@ -2386,36 +2552,67 @@ const PUZZLE_ART_COUNT = 4;
 function puzzleShown(){
   const n = puzzleCount(), done = Math.floor(n/PUZZLE_PIECES), cur = n % PUZZLE_PIECES;
   const complete = (cur===0 && n>0);
-  return { n, done, pieces: complete ? PUZZLE_PIECES : cur, art: (complete ? done-1 : done) % PUZZLE_ART_COUNT, number: complete ? done : done+1, complete };
+  const idx = complete ? done-1 : done;
+  return { n, done, pieces: complete ? PUZZLE_PIECES : cur, art: idx % PUZZLE_ART_COUNT, idx, photo: puzzlePhotoAt(idx), number: complete ? done : done+1, complete };
 }
 function openPuzzle(){
   state.space='perso'; state.level = state.lastPersoLevel||'debutant'; state.lessonId=null;
   state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false; state.puzzleMode=true;
   unsubscribeChat(); render();
 }
-function puzzleGrid(artIndex, pieces, small){
-  const url = puzzleArtUrl(artIndex);
-  const grid = el(`<div class="puzzle-grid" style="display:grid;grid-template-columns:repeat(${PUZZLE_COLS},1fr);gap:${small?2:4}px;max-width:${small?150:420}px;"></div>`);
+function puzzleGrid(idx, pieces, small){
+  const ph = puzzlePhotoAt(idx);
+  const url = ph ? puzzlePhotoUrl(ph) : puzzleArtUrl(idx % PUZZLE_ART_COUNT);
+  const ratio = ph ? (Number(ph.ratio)||1.3333) : 1.5;
+  const portrait = ratio < 1;
+  const cols = portrait ? 2 : 3, rows = portrait ? 3 : 2;      // photo en portrait : 2 colonnes × 3 lignes
+  const maxW = small ? (portrait?100:150) : (portrait?300:440);
+  const grid = el(`<div class="puzzle-grid" data-cols="${cols}" style="display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:${small?2:4}px;width:100%;max-width:${maxW}px;aspect-ratio:${ratio};"></div>`);
   const shown = new Set(PUZZLE_ORDER.slice(0, pieces));
   for(let i=0;i<PUZZLE_PIECES;i++){
-    const col=i%PUZZLE_COLS, row=Math.floor(i/PUZZLE_COLS);
-    const x = PUZZLE_COLS>1 ? col*100/(PUZZLE_COLS-1) : 0, y = PUZZLE_ROWS>1 ? row*100/(PUZZLE_ROWS-1) : 0;
+    const col=i%cols, row=Math.floor(i/cols);
+    const x = cols>1 ? col*100/(cols-1) : 0, y = rows>1 ? row*100/(rows-1) : 0;
     const on = shown.has(i);
     const t = el(on
-      ? `<div class="puzzle-tile on" style="aspect-ratio:1/1;border-radius:6px;background-image:url('${url}');background-size:${PUZZLE_COLS*100}% ${PUZZLE_ROWS*100}%;background-position:${x}% ${y}%;border:1.5px solid var(--line);"></div>`
-      : `<div class="puzzle-tile off" style="aspect-ratio:1/1;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:${small?10:22}px;">${small?'':'🧩'}</div>`);
+      ? `<div class="puzzle-tile on" style="border-radius:6px;background-image:url('${url}');background-size:${cols*100}% ${rows*100}%;background-position:${x}% ${y}%;border:1.5px solid var(--line);"></div>`
+      : `<div class="puzzle-tile off" style="border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:${small?10:22}px;">${small?'':'🧩'}</div>`);
     grid.appendChild(t);
   }
   return grid;
 }
+// Révélation : nom du lieu en haut, photo entière, phrase en dessous (si validée), source
+function puzzleRevealBlock(ph, small){
+  const box = el('<div class="puzzle-reveal"></div>');
+  if(!ph) return box;
+  const portrait = (Number(ph.ratio)||1.3333) < 1;
+  box.appendChild(el(`<div class="puzzle-place" style="font-size:${small?15:19}px;font-weight:600;margin-bottom:8px;">📍 ${escapeHtml(ph.place||'')}</div>`));
+  box.appendChild(el(`<img class="puzzle-photo" src="${escapeHtml(puzzlePhotoUrl(ph))}" alt="${escapeHtml(ph.place||'photo')}" style="display:block;width:100%;max-width:${portrait?300:440}px;border-radius:10px;border:1.5px solid var(--line);">`));
+  if(ph.verified && ph.sentence){
+    box.appendChild(el(`<div class="puzzle-sentence" style="margin-top:10px;font-size:14px;line-height:1.5;max-width:440px;">${escapeHtml(ph.sentence)}</div>`));
+    const src = puzzleSourceHtml(ph);
+    if(src) box.appendChild(el(`<div class="puzzle-source" style="margin-top:4px;font-size:12px;color:var(--ink-soft);">${src}</div>`));
+  }
+  if(ph.src==='user' && ph.author_name) box.appendChild(el(`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">📷 Photo de ${escapeHtml(ph.author_name)}</div>`));
+  return box;
+}
+function openPuzzleReveal(idx){
+  const ph = puzzlePhotoAt(idx); if(!ph) return;
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el('<div class="modal"></div>');
+  modal.appendChild(puzzleRevealBlock(ph));
+  const act = el('<div class="modal-actions"></div>'); const c = el('<button class="btn ghost">Fermer</button>'); c.onclick = ()=>bg.remove(); act.appendChild(c); modal.appendChild(act);
+  bg.appendChild(modal); bg.onclick = e=>{ if(e.target===bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
 function renderPuzzle(){
   const wrap = el('<div></div>');
   wrap.appendChild(el('<h2 style="margin:0 0 6px;">🧩 Mon puzzle</h2>'));
-  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Chaque contrôle réussi te donne une pièce. Quand l\'image est complète, ta professeur t\'envoie un petit cadeau 🎁.</div>'));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Chaque contrôle réussi te donne une pièce. Quand l\'image est complète, la photo se révèle avec le nom du lieu, et ta professeur t\'envoie un petit cadeau 🎁.</div>'));
   if(!GIFTS_TABLE_OK) wrap.appendChild(el('<div class="note" style="border-color:var(--seal);font-size:12px;margin-bottom:10px;">Le suivi des cadeaux n\'est pas encore activé (migration-puzzle.sql). Ton puzzle fonctionne quand même.</div>'));
   const sh = puzzleShown();
   wrap.appendChild(el(`<div style="font-size:13px;margin-bottom:8px;"><b>Image ${sh.number}</b> · ${sh.pieces}/${PUZZLE_PIECES} pièces${sh.complete?' — terminée !':sh.n===0?' — réussis un contrôle pour gagner ta première pièce.':` — encore ${PUZZLE_PIECES-sh.pieces} contrôle${PUZZLE_PIECES-sh.pieces>1?'s':''} réussi${PUZZLE_PIECES-sh.pieces>1?'s':''}.`}</div>`));
-  wrap.appendChild(puzzleGrid(sh.art, sh.pieces, false));
+  if(sh.complete && sh.photo) wrap.appendChild(puzzleRevealBlock(sh.photo, false));
+  else wrap.appendChild(puzzleGrid(sh.idx, sh.pieces, false));
   const sent = (GIFTS||[]).some(g=>g.puzzle_no===sh.number);
   if(sh.complete) wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-top:12px;">${sent?'🎁 Ta professeur t\'a remis le cadeau de cette image. Profites-en !':'🎉 Bravo, image terminée ! Ta professeur est prévenue : elle t\'enverra un petit cadeau.'}</div>`));
   if(sh.done > (sh.complete?1:0)){
@@ -2424,13 +2621,201 @@ function renderPuzzle(){
     const last = sh.complete ? sh.done-1 : sh.done;
     for(let k=1;k<=last;k++){
       const cell = el(`<div style="font-size:11px;color:var(--ink-soft);text-align:center;"></div>`);
-      cell.appendChild(puzzleGrid((k-1)%PUZZLE_ART_COUNT, PUZZLE_PIECES, true));
+      cell.style.cursor = 'pointer'; cell.title = 'Revoir la photo'; cell.onclick = ()=> openPuzzleReveal(k-1);
+      cell.appendChild(puzzleGrid(k-1, PUZZLE_PIECES, true));
+      const phk = puzzlePhotoAt(k-1);
+      if(phk) cell.appendChild(el(`<div style="margin-top:4px;max-width:150px;">📍 ${escapeHtml(phk.place||'')}</div>`));
       cell.appendChild(el(`<div style="margin-top:4px;">Image ${k}${(GIFTS||[]).some(g=>g.puzzle_no===k)?' · 🎁 remis':' · 🎁 à venir'}</div>`));
       row.appendChild(cell);
     }
     hist.appendChild(row); wrap.appendChild(hist);
   }
+  wrap.appendChild(renderPuzzleProposals());
   return wrap;
+}
+/* ---- Photos proposées par les élèves ---- */
+function renderPuzzleProposals(){
+  const box = el('<div class="section-block" style="margin-top:26px;"><h3>📷 Propose ta photo</h3></div>');
+  box.appendChild(el('<div class="note" style="font-size:12.5px;margin-bottom:10px;">Tu as une belle photo de Corée ? Envoie-la : elle deviendra un puzzle pour tout le monde une fois acceptée. Le lieu de la photo s\'affichera à la fin du puzzle, avec ton prénom. La position GPS de ta photo est supprimée avant l\'envoi.</div>'));
+  if(!PUZZLE_TABLE_OK){
+    box.appendChild(el('<div class="note" style="font-size:12px;border-color:var(--seal);">L\'envoi de photos n\'est pas encore activé (migration-puzzle-photos.sql).</div>'));
+    return box;
+  }
+  const b = el('<button class="btn celadon small">📷 Envoyer une photo</button>');
+  b.onclick = ()=> openPuzzleProposeModal();
+  box.appendChild(b);
+  const mine = (PUZZLE_PHOTOS||[]).filter(p=>p.author_id && SESSION && p.author_id===SESSION.user.id);
+  if(mine.length){
+    const l = el('<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;"></div>');
+    mine.forEach(p=> l.appendChild(el(`<div style="font-size:13px;">📍 ${escapeHtml(p.place||'')} — ${p.status==='approved'?'✅ acceptée':'⏳ en attente de la professeure'}</div>`)));
+    box.appendChild(l);
+  }
+  return box;
+}
+async function puzzleBlobRatio(blob){
+  const u = URL.createObjectURL(blob);
+  try{ const img = await new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=u; }); return img.naturalWidth && img.naturalHeight ? img.naturalWidth/img.naturalHeight : 1.3333; }
+  catch(e){ return 1.3333; } finally { URL.revokeObjectURL(u); }
+}
+async function puzzleUploadBlob(blob){
+  const path = `${SESSION.user.id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+  const { error } = await sb.storage.from(PUZZLE_BUCKET).upload(path, blob, { contentType:'image/jpeg' });
+  if(error) throw error;
+  return path;
+}
+function puzzleNewId(){ return 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function openPuzzleProposeModal(){
+  const isT = PROFILE.role==='teacher';
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>${isT?'Ajouter une photo au puzzle':'Proposer une photo'}</h3>
+    <div class="field"><label>La photo</label><input type="file" id="pp-file" accept="image/*"></div>
+    <div class="field"><label>Où a-t-elle été prise ? (ex. 경복궁 · Séoul)</label><input type="text" id="pp-place" maxlength="80"></div>
+    <div class="field"><label>Une phrase sur ce lieu (facultatif)</label><textarea id="pp-sentence" maxlength="300" style="min-height:60px;"></textarea></div>
+    <div class="field"><label>Source (facultatif — un lien ou un nom)</label><input type="text" id="pp-source" maxlength="200"></div>
+    <div id="pp-status" style="font-size:12px;margin-bottom:8px;"></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  const actions = modal.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Annuler</button>'); cancel.onclick = ()=>bg.remove();
+  const send = el(`<button class="btn celadon">${isT?'Ajouter':'Envoyer'}</button>`);
+  send.onclick = async ()=>{
+    const st = modal.querySelector('#pp-status'); st.style.color='var(--danger)';
+    const f = modal.querySelector('#pp-file').files[0];
+    const place = modal.querySelector('#pp-place').value.trim();
+    if(!f || !/^image\//.test(f.type)){ st.textContent = 'Choisis une photo.'; return; }
+    if(!place){ st.textContent = 'Indique où la photo a été prise.'; return; }
+    send.disabled = true; st.style.color='var(--ink-soft)'; st.textContent = 'Envoi…';
+    try{
+      const blob = await shrinkImage(f);           // redessinée dans un canvas : EXIF et GPS disparaissent
+      const ratio = await puzzleBlobRatio(blob);
+      const path = await puzzleUploadBlob(blob);
+      const src = modal.querySelector('#pp-source').value.trim();
+      const row = { id:puzzleNewId(), pos: isT ? Math.max(0, ...(PUZZLE_PHOTOS||[]).map(p=>p.pos||0)) + 1 : 1000, src:'user', file:path, ratio:Math.round(ratio*10000)/10000,
+        place, sentence: modal.querySelector('#pp-sentence').value.trim() || null,
+        source_label: src || null, source_url: safeHttpUrl(src) || null,
+        verified: isT, status: isT ? 'approved' : 'pending', author_id: SESSION.user.id, author_name: PROFILE.name || null };
+      const { error } = await sb.from('puzzle_photos').insert(row);
+      if(error){ sb.storage.from(PUZZLE_BUCKET).remove([path]).catch(()=>{}); throw error; }
+      await sbLoadPuzzlePhotos(); bg.remove(); render();
+    }catch(e){ send.disabled = false; st.style.color='var(--danger)'; st.textContent = 'Erreur : ' + ((e&&e.message)||e); }
+  };
+  actions.appendChild(cancel); actions.appendChild(send);
+  bg.appendChild(modal); document.body.appendChild(bg);
+}
+/* ---- Page professeure : valider, corriger, ajouter ---- */
+function puzzlePendingCount(){ return (PUZZLE_PHOTOS||[]).filter(p=>p.status==='pending').length; }
+function puzzleTabLabel(){
+  const n = (PUZZLE_PHOTOS||[]).filter(p=>p.status==='pending' && !p.delegated).length + (PUZZLE_TABLE_OK ? (PUZZLE_PHOTOS||[]).filter(p=>p.status==='approved' && !p.verified).length : 0);
+  return '🧩 Puzzles' + (n>0 ? ` <span style="background:var(--seal);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px;">${n}</span>` : '');
+}
+async function puzzleUpdate(id, patch){
+  const { error } = await sb.from('puzzle_photos').update(patch).eq('id', id);
+  if(error){ alert('Erreur : ' + error.message); return false; }
+  await sbLoadPuzzlePhotos(); render(); return true;
+}
+function openPuzzleEditModal(p){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal">
+    <h3>Modifier la photo</h3>
+    <div class="field"><label>Lieu</label><input type="text" id="pe-place" value="${escapeHtml(p.place||'')}"></div>
+    <div class="field"><label>Phrase (affichée à la fin du puzzle)</label><textarea id="pe-sentence" style="min-height:70px;">${escapeHtml(p.sentence||'')}</textarea></div>
+    <div class="field"><label>Nom de la source</label><input type="text" id="pe-slabel" value="${escapeHtml(p.source_label||'')}"></div>
+    <div class="field"><label>Lien de la source (facultatif)</label><input type="text" id="pe-surl" value="${escapeHtml(p.source_url||'')}"></div>
+    <div class="field"><label><input type="checkbox" id="pe-ver" ${p.verified?'checked':''} style="width:auto;"> ✔ Phrase vérifiée (visible par les élèves)</label></div>
+    <div class="field"><label>Remplacer la photo (facultatif)</label><input type="file" id="pe-file" accept="image/*"></div>
+    <div id="pe-status" style="font-size:12px;margin-bottom:8px;"></div>
+    <div class="modal-actions"></div>
+  </div>`);
+  const actions = modal.querySelector('.modal-actions');
+  const cancel = el('<button class="btn ghost">Annuler</button>'); cancel.onclick = ()=>bg.remove();
+  const save = el('<button class="btn celadon">Enregistrer</button>');
+  save.onclick = async ()=>{
+    const st = modal.querySelector('#pe-status'); st.style.color='var(--ink-soft)';
+    const place = modal.querySelector('#pe-place').value.trim();
+    if(!place){ st.style.color='var(--danger)'; st.textContent='Le lieu est obligatoire.'; return; }
+    save.disabled = true; st.textContent = 'Enregistrement…';
+    const patch = { place, sentence: modal.querySelector('#pe-sentence').value.trim() || null,
+      source_label: modal.querySelector('#pe-slabel').value.trim() || null, source_url: safeHttpUrl(modal.querySelector('#pe-surl').value.trim()) || null,
+      verified: modal.querySelector('#pe-ver').checked };
+    try{
+      const f = modal.querySelector('#pe-file').files[0];
+      if(f && /^image\//.test(f.type)){
+        const blob = await shrinkImage(f); patch.ratio = Math.round((await puzzleBlobRatio(blob))*10000)/10000;
+        patch.file = await puzzleUploadBlob(blob); patch.src = 'user';
+      }
+      if(await puzzleUpdate(p.id, patch)) bg.remove(); else save.disabled = false;
+    }catch(e){ save.disabled = false; st.style.color='var(--danger)'; st.textContent = 'Erreur : ' + ((e&&e.message)||e); }
+  };
+  actions.appendChild(cancel); actions.appendChild(save);
+  bg.appendChild(modal); document.body.appendChild(bg);
+}
+function puzzleAdminCard(p){
+  const pending = p.status==='pending';
+  const card = el(`<div class="item-card puzzle-admin-card" data-id="${escapeHtml(p.id)}" style="display:flex;gap:12px;align-items:flex-start;text-align:left;padding:12px 14px;margin-bottom:10px;"></div>`);
+  card.appendChild(el(`<img src="${escapeHtml(puzzlePhotoUrl(p))}" alt="" style="width:92px;height:92px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none;">`));
+  const body = el('<div style="flex:1;min-width:0;"></div>');
+  body.appendChild(el(`<div style="font-weight:600;">📍 ${escapeHtml(p.place||'')}</div>`));
+  if(p.author_name) body.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">📷 proposée par ${escapeHtml(p.author_name)}</div>`));
+  body.appendChild(el(`<div style="margin:4px 0;font-size:13.5px;">${p.sentence?escapeHtml(p.sentence):'<i style="color:var(--ink-soft);">Pas de phrase</i>'}</div>`));
+  const src = puzzleSourceHtml(p);
+  body.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">${src||'Aucune source trouvée'}</div>`));
+  body.appendChild(el(`<div style="margin:6px 0;font-size:12.5px;">${pending?(p.delegated?'🙋 Confiée à Jérémy (il cherche la phrase et la source)':'⏳ En attente'):p.verified?'✅ Validé':'⚠️ À vérifier'}</div>`));
+  const bar = el('<div style="display:flex;gap:6px;flex-wrap:wrap;"></div>');
+  if(pending || !p.verified){
+    const v = el(`<button class="btn celadon small">✔ ${pending?'Accepter':'Valider'}</button>`);
+    v.onclick = ()=> puzzleUpdate(p.id, { status:'approved', verified:true });
+    bar.appendChild(v);
+  }
+  if(pending){
+    const g = el(`<button class="btn ghost small">${p.delegated?'↩ Reprendre':'🙋 Laisser Jérémy s\'en occuper'}</button>`);
+    g.onclick = ()=> puzzleUpdate(p.id, { delegated: !p.delegated });
+    bar.appendChild(g);
+  }
+  const e = el('<button class="btn ghost small">✏️ Modifier</button>'); e.onclick = ()=> openPuzzleEditModal(p); bar.appendChild(e);
+  const d = el(`<button class="btn ghost small">🗑 ${pending?'Refuser':'Retirer'}</button>`);
+  d.onclick = async ()=>{
+    if(!confirm(pending?'Refuser cette photo ?':'Retirer cette photo du puzzle ?')) return;
+    const { error } = await sb.from('puzzle_photos').delete().eq('id', p.id);
+    if(error){ alert('Erreur : ' + error.message); return; }
+    if(p.src==='user' && p.file) sb.storage.from(PUZZLE_BUCKET).remove([p.file]).catch(()=>{});
+    await sbLoadPuzzlePhotos(); render();
+  };
+  bar.appendChild(d); body.appendChild(bar); card.appendChild(body);
+  return card;
+}
+async function renderPuzzlesAdmin(){
+  const box = el('<div class="puzzles-admin" style="max-width:760px;"></div>');
+  box.appendChild(el('<h2 style="margin:0 0 6px;">🧩 Puzzles — photos et légendes</h2>'));
+  if(!PUZZLE_TABLE_OK){
+    box.appendChild(el('<div class="note" style="border-color:var(--seal);margin:10px 0;">Cette page devient active après la migration <b>migration-puzzle-photos.sql</b> (Supabase). En attendant, les élèves voient les photos de départ, mais seules celles dont la phrase est déjà validée affichent leur légende.</div>'));
+    return box;
+  }
+  const all = PUZZLE_PHOTOS||[];
+  const pend = all.filter(p=>p.status==='pending');
+  const toCheck = all.filter(p=>p.status==='approved' && !p.verified);
+  const ok = puzzleList().filter(p=>p.verified);
+  box.appendChild(el(`<div class="note" style="margin:6px 0 14px;">${toCheck.length} phrase${toCheck.length>1?'s':''} à vérifier. Une phrase « à vérifier » n'est pas montrée aux élèves tant que tu ne l'as pas validée. Tu peux la corriger avant. Les photos à vérifier arrivent en dernier dans les puzzles.</div>`));
+  const add = el('<button class="btn celadon small" style="margin-bottom:16px;">➕ Ajouter une photo</button>'); add.onclick = ()=> openPuzzleProposeModal(); box.appendChild(add);
+  const section = (title, list, empty)=>{
+    const sec = el(`<div class="section-block" style="margin-top:14px;"><h3>${title} (${list.length})</h3></div>`);
+    if(!list.length && empty) sec.appendChild(el(`<div style="font-size:13px;color:var(--ink-soft);">${empty}</div>`));
+    list.forEach(p=>sec.appendChild(puzzleAdminCard(p)));
+    box.appendChild(sec);
+  };
+  section('📥 Photos proposées par les élèves', pend, 'Aucune photo en attente.');
+  const deleg = pend.filter(p=>p.delegated);
+  if(deleg.length){
+    const cp = el(`<button class="btn ghost small" style="margin:8px 0 0;">📋 Copier les ${deleg.length} photo${deleg.length>1?'s':''} confiée${deleg.length>1?'s':''} à Jérémy</button>`);
+    cp.onclick = async ()=>{
+      const txt = deleg.map(p=>`📍 ${p.place} — proposée par ${p.author_name||'?'}\nPhoto : ${puzzlePhotoUrl(p)}${p.sentence?`\nPhrase de l'élève : ${p.sentence}`:''}${p.source_label?`\nSource de l'élève : ${p.source_label}`:''}`).join('\n\n');
+      cp.textContent = (await copyText(txt)) ? '✔ Copié !' : 'Copie impossible';
+    };
+    box.querySelector('.section-block').appendChild(cp);
+  }
+  section('⚠️ Phrases à vérifier', toCheck, 'Tout est vérifié.');
+  section('✅ Dans le puzzle (dans l\'ordre où les élèves les découvrent)', ok, '');
+  return box;
 }
 
 function renderGrammarNotebook(){
