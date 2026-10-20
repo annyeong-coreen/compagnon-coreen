@@ -841,6 +841,7 @@ async function loadOwnProfile(){
     ASSIGNMENT = await sbMyAssignment();
     GROUPS = await sbAllGroups();
     await sbLoadPuzzlePhotos();
+    await sbLoadTopikEx();
     if(PROFILE.role==='student'){
       ACTIVE_GROUP_ID = PROFILE.group_id || null;
       WEAK_WORDS = await sbWeakWords();
@@ -1173,7 +1174,7 @@ function renderTopikHome(){
   const lv = el('<div class="level-tabs" style="margin-bottom:14px;"></div>');
   for(let n=1;n<=6;n++){
     const b = el(`<button class="level-tab ${state.topikLevel===n?'active':''}">Niveau ${n}</button>`);
-    b.onclick = ()=>{ state.topikLevel = n; state.topikAns = {}; state.topikOrder = {}; render(); };
+    b.onclick = ()=>{ state.topikLevel = n; state.topikAns = {}; state.topikOrder = {}; state.topikMode = 'gram'; state.topikEx = null; render(); };
     lv.appendChild(b);
   }
   w.appendChild(lv);
@@ -1182,6 +1183,15 @@ function renderTopikHome(){
     return w;
   }
   const n = state.topikLevel, qs = TOPIK_QS[n] || [];
+  const nEcr = topikExercises(n,'ecrite').length, nOra = topikExercises(n,'orale').length;
+  if(nEcr || nOra){
+    const modes = [['gram','✏️ Grammaire']].concat(nEcr?[['ecrite',`📖 Compréhension écrite (${nEcr})`]]:[]).concat(nOra?[['orale',`🎧 Compréhension orale (${nOra})`]]:[]);
+    if(!modes.some(m=>m[0]===state.topikMode)) state.topikMode = 'gram';
+    const mt = el('<div class="level-tabs topik-modes" style="margin-bottom:14px;"></div>');
+    modes.forEach(([k,l])=>{ const b = el(`<button class="level-tab ${state.topikMode===k?'active':''}" data-mode="${k}">${l}</button>`); b.onclick = ()=>{ state.topikMode = k; state.topikEx = null; state.topikEA = {}; state.topikScript = false; render(); }; mt.appendChild(b); });
+    w.appendChild(mt);
+    if(state.topikMode!=='gram'){ renderTopikExercises(w, n, state.topikMode); return w; }
+  }
   state.topikAns = state.topikAns || {}; state.topikOrder = state.topikOrder || {};
   w.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">${escapeHtml(TOPIK_META[n].title)} — ${escapeHtml(TOPIK_META[n].desc)}</div>`));
   let good = 0;
@@ -1207,6 +1217,67 @@ function renderTopikHome(){
   return w;
 }
 
+
+function renderTopikExercises(w, n, kind){
+  const list = topikExercises(n, kind);
+  const ex = state.topikEx ? list.find(x=>x.id===state.topikEx) : null;
+  if(ex){ renderTopikExercise(w, ex); return; }
+  w.appendChild(el(`<div class="note" style="margin-bottom:12px;">${kind==='orale'?'Écoute l\'audio autant de fois que tu veux, puis réponds.':'Lis le texte, puis réponds aux questions.'} Pas de note ni de chrono : les corrections t\'expliquent chaque réponse.</div>`));
+  list.forEach(x=>{
+    const r = topikResultOf(x.id, SESSION && SESSION.user && SESSION.user.id);
+    const c = el(`<div class="item-card topik-ex-item" style="text-align:left;padding:12px 14px;margin-bottom:8px;cursor:pointer;"><b>${kind==='orale'?'🎧':'📖'} ${escapeHtml(x.title)}</b> · ${(x.questions||[]).length} question${(x.questions||[]).length>1?'s':''} <span style="float:right;color:${r?'var(--celadon-dark)':'var(--ink-soft)'};">${r?`✔ ${r.score}/${r.total}`:'à faire'}</span></div>`);
+    c.onclick = ()=>{ state.topikEx = x.id; state.topikEA = {}; state.topikScript = false; render(); };
+    w.appendChild(c);
+  });
+}
+function renderTopikExercise(w, ex){
+  const qs = ex.questions || [];
+  state.topikEA = state.topikEA || {};
+  const back = el('<button class="btn ghost small" style="margin-bottom:12px;">← Retour à la liste</button>');
+  back.onclick = ()=>{ state.topikEx = null; state.topikEA = {}; state.topikScript = false; render(); };
+  w.appendChild(back);
+  w.appendChild(el(`<h2 style="margin:0 0 10px;">${escapeHtml(ex.title)}</h2>`));
+  if(safeHttpUrl(ex.image_url)) w.appendChild(el(`<img class="topik-img" src="${escapeHtml(ex.image_url)}" alt="" style="display:block;max-width:100%;max-height:420px;border-radius:10px;border:1.5px solid var(--line);margin-bottom:12px;">`));
+  if(ex.kind==='ecrite' && ex.body) w.appendChild(el(`<div class="item-card kr topik-body" style="text-align:left;padding:14px 16px;margin-bottom:14px;line-height:1.9;font-size:17px;white-space:pre-wrap;">${escapeHtml(ex.body)}</div>`));
+  if(ex.kind==='orale' && safeHttpUrl(ex.audio_url)) w.appendChild(el(`<div class="item-card" style="padding:14px 16px;margin-bottom:14px;text-align:left;"><div style="margin-bottom:8px;">🔊 Écoute autant de fois que tu veux.</div><audio controls src="${escapeHtml(ex.audio_url)}" style="width:100%;"></audio></div>`));
+  let good = 0, answered = 0;
+  qs.forEach((q,i)=>{
+    const ans = state.topikEA[i];
+    if(ans!==undefined){ answered++; if(ans===q.a) good++; }
+    const card = el(`<div class="section-block topik-q" style="margin-bottom:12px;"><div style="font-size:16px;margin-bottom:8px;"><b>${i+1}.</b> <span class="kr">${escapeHtml(q.q)}</span></div></div>`);
+    const row = el('<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;"></div>');
+    (q.o||[]).forEach((o,k)=>{
+      const b = el(`<button class="btn ghost small topik-opt" style="text-align:left;">${'①②③④'[k]||(k+1)} ${escapeHtml(o)}</button>`);
+      if(ans!==undefined){ b.disabled = true; if(k===q.a) b.style.borderColor='var(--celadon-dark)'; else if(k===ans) b.style.borderColor='var(--seal)'; }
+      b.onclick = ()=>{
+        state.topikEA[i] = k;
+        const all = qs.every((_,j)=>state.topikEA[j]!==undefined);
+        if(all){ const g = qs.filter((qq,j)=>state.topikEA[j]===qq.a).length; sbSaveTopikResult(ex, g, qs.length).then(()=>render()); }
+        render();
+      };
+      row.appendChild(b);
+    });
+    card.appendChild(row);
+    if(ans!==undefined) card.appendChild(el(`<div class="note" style="margin-top:8px;border-color:${ans===q.a?'var(--celadon-dark)':'var(--seal)'};">${ans===q.a?'✅ Bien joué.':'❌ Pas tout à fait.'} ${escapeHtml(q.e||'')}</div>`));
+    w.appendChild(card);
+  });
+  if(qs.length && answered===qs.length){
+    w.appendChild(el(`<div class="note topik-result" style="border-color:var(--gold);">Résultat : <b>${good} / ${qs.length}</b>. Tu peux recommencer quand tu veux.</div>`));
+  }
+  if(ex.kind==='orale' && ex.script){
+    if(state.topikScript){
+      w.appendChild(el(`<div class="item-card kr topik-script" style="text-align:left;padding:12px 16px;margin:10px 0;line-height:1.8;white-space:pre-wrap;">${escapeHtml(ex.script)}</div>`));
+    } else {
+      const sb2 = el('<button class="btn ghost small topik-script-btn" style="margin-top:6px;">👁️ Voir le script (après avoir répondu)</button>');
+      sb2.disabled = answered < qs.length;
+      sb2.onclick = ()=>{ state.topikScript = true; render(); };
+      w.appendChild(sb2);
+    }
+  }
+  const again = el('<button class="btn ghost small" style="margin:12px 0 0 8px;">↺ Recommencer</button>');
+  again.onclick = ()=>{ state.topikEA = {}; state.topikScript = false; render(); };
+  w.appendChild(again);
+}
 
 // ---------- Visite de bienvenue + guide élève ----------
 const TOUR_STEPS = [
@@ -2316,6 +2387,30 @@ const PUZZLE_COLS = 3, PUZZLE_ROWS = 2;
 const PUZZLE_ORDER = [4,1,3,0,5,2];      // ordre dans lequel les cases se dévoilent
 let GIFTS = [];                           // cadeaux déjà remis (élève : les siens ; professeure : tous)
 let ALL_GIFTS = [];
+/* ---- TOPIK : exercices de compréhension écrite / orale ---- */
+const TOPIK_BUCKET = 'topik-media';
+let TOPIK_EX = [];            // exercices créés par la professeure
+let TOPIK_RES = [];           // résultats (élève : les siens ; professeure : tous)
+let TOPIK_EX_OK = false;
+async function sbLoadTopikEx(){
+  try{
+    const a = await sb.from('topik_exercises').select('*').order('position');
+    if(a.error){ TOPIK_EX_OK = false; TOPIK_EX = []; TOPIK_RES = []; return; }
+    TOPIK_EX_OK = true; TOPIK_EX = a.data || [];
+    const b = await sb.from('topik_results').select('*');
+    TOPIK_RES = (b && !b.error && b.data) ? b.data : [];
+  }catch(e){ TOPIK_EX_OK = false; TOPIK_EX = []; TOPIK_RES = []; }
+}
+function topikExercises(level, kind){ return (TOPIK_EX||[]).filter(x=>x.level===level && x.kind===kind).sort((a,b)=>(a.position||0)-(b.position||0) || String(a.created_at||'').localeCompare(String(b.created_at||''))); }
+function topikResultOf(exId, studentId){ return (TOPIK_RES||[]).find(r=>r.exercise_id===exId && (!studentId || r.student_id===studentId)) || null; }
+async function sbSaveTopikResult(ex, good, total){
+  const prev = (TOPIK_RES||[]).find(r=>r.exercise_id===ex.id && r.student_id===SESSION.user.id);
+  if(prev && prev.score>=good) return;               // on garde le meilleur résultat
+  const row = { student_id:SESSION.user.id, exercise_id:ex.id, score:good, total, updated_at:new Date().toISOString() };
+  const { error } = await sb.from('topik_results').upsert(row, { onConflict:'student_id,exercise_id' });
+  if(!error){ TOPIK_RES = (TOPIK_RES||[]).filter(r=>!(r.exercise_id===ex.id && r.student_id===SESSION.user.id)).concat([row]); }
+}
+function topikNewId(){ return 'tx-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 /* ---- Puzzles avec de vraies photos ---- */
 const PUZZLE_BUCKET = 'puzzle-user';
 const PUZZLE_DEFAULTS = [
@@ -4056,9 +4151,160 @@ function dialogueToVocab(exchanges){
   return vocab;
 }
 
+const TOPIK_KIND_LABEL = { ecrite:'📖 Écrite', orale:'🎧 Orale' };
+function topikAdminBlock(){
+  const box = el('<div class="section-block topik-admin" style="border:1.5px solid var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:22px;"><h3 style="margin-top:0;">🎓 Exercices de compréhension (écrite et orale)</h3></div>');
+  box.appendChild(el('<div class="note" style="margin-bottom:12px;font-size:12.5px;">Crée tes propres exercices : un texte (ou un audio), puis des questions à choix. Ils apparaissent dans l\'onglet TOPIK des élèves, au niveau choisi.</div>'));
+  if(!TOPIK_EX_OK){ box.appendChild(el('<div class="note" style="border-color:var(--seal);font-size:12px;">Cette fonction devient active après la migration <b>migration-topik-exercices.sql</b> (Supabase).</div>')); return box; }
+  const add = el('<button class="btn celadon small topik-add" style="margin-bottom:12px;">➕ Ajouter un exercice</button>');
+  add.onclick = ()=> openTopikExModal(null); box.appendChild(add);
+  for(let n=1;n<=6;n++){
+    const list = (TOPIK_EX||[]).filter(x=>x.level===n).sort((a,b)=>(a.kind>b.kind?1:-1) || (a.position||0)-(b.position||0));
+    if(!list.length) continue;
+    box.appendChild(el(`<div style="font-weight:600;margin:10px 0 4px;">Niveau ${n}</div>`));
+    list.forEach(x=>{
+      const row = el(`<div class="vocab-row topik-admin-row" data-id="${escapeHtml(x.id)}" style="align-items:center;"><span>${TOPIK_KIND_LABEL[x.kind]||''} · ${escapeHtml(x.title)}</span><span>${(x.questions||[]).length} question${(x.questions||[]).length>1?'s':''}</span><span></span></div>`);
+      const act = row.lastElementChild;
+      const e = el('<button class="btn ghost small">✏️ Modifier</button>'); e.onclick = ()=> openTopikExModal(x); act.appendChild(e);
+      const d = el('<button class="btn ghost small" style="margin-left:6px;">🗑</button>');
+      d.onclick = async ()=>{
+        if(!confirm('Supprimer cet exercice ? Les résultats des élèves liés seront aussi supprimés.')) return;
+        const { error } = await sb.from('topik_exercises').delete().eq('id', x.id);
+        if(error){ alert('Erreur : ' + error.message); return; }
+        await sbLoadTopikEx(); render();
+      };
+      act.appendChild(d); box.appendChild(row);
+    });
+  }
+  return box;
+}
+function openTopikExModal(ex){
+  const isNew = !ex;
+  const st = { kind: ex?ex.kind:'ecrite', level: ex?ex.level:1, audio: ex?ex.audio_url:null, image: ex?ex.image_url:null,
+    qs: (ex&&ex.questions&&ex.questions.length ? ex.questions : [{q:'',o:['','','',''],a:0,e:''}]).map(q=>({q:q.q||'', o:[0,1,2,3].map(i=>(q.o||[])[i]||''), a:q.a||0, e:q.e||''})) };
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el('<div class="modal" style="max-width:640px;"></div>');
+  const draw = ()=>{
+    const keep = { title:(modal.querySelector('#tx-title')||{}).value, body:(modal.querySelector('#tx-body')||{}).value, script:(modal.querySelector('#tx-script')||{}).value };
+    modal.innerHTML = '';
+    modal.appendChild(el(`<h3>${isNew?'➕ Nouvel exercice de compréhension':'Modifier l\'exercice'} — TOPIK</h3>`));
+    const kt = el('<div class="level-tabs" style="margin-bottom:10px;"></div>');
+    ['ecrite','orale'].forEach(k=>{ const b = el(`<button type="button" class="level-tab ${st.kind===k?'active':''}" data-kind="${k}">${TOPIK_KIND_LABEL[k]}</button>`); b.onclick = ()=>{ st.kind = k; draw(); }; kt.appendChild(b); });
+    modal.appendChild(kt);
+    const lt = el('<div class="level-tabs" style="margin-bottom:14px;"></div>');
+    for(let n=1;n<=6;n++){ const b = el(`<button type="button" class="level-tab ${st.level===n?'active':''}" data-level="${n}">Niveau ${n}</button>`); b.onclick = ()=>{ st.level = n; draw(); }; lt.appendChild(b); }
+    modal.appendChild(lt);
+    modal.appendChild(el(`<div class="field"><label>Titre</label><input type="text" id="tx-title" value="${escapeHtml(keep.title!==undefined?keep.title:(ex?ex.title:''))}"></div>`));
+    if(st.kind==='ecrite'){
+      modal.appendChild(el(`<div class="field"><label>Texte coréen</label><textarea data-ko="1" id="tx-body" style="min-height:100px;">${escapeHtml(keep.body!==undefined?keep.body:(ex?ex.body||'':''))}</textarea></div>`));
+    } else {
+      const af = el('<div class="field"><label>L\'audio</label></div>');
+      const line = el('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"></div>');
+      const rec = el('<button type="button" class="btn seal small" id="tx-rec">🎙️ M\'enregistrer</button>');
+      const stat = el('<span id="tx-rec-status" style="font-size:12px;color:var(--ink-soft);"></span>');
+      wireVoiceRecorder(rec, stat, (url)=>{ st.audio = url; draw(); });
+      const file = el('<input type="file" accept="audio/*" style="display:none;">');
+      const fb = el('<button type="button" class="btn ghost small">📎 Ou ajouter un fichier audio</button>'); fb.onclick = ()=> file.click();
+      file.onchange = async ()=>{
+        const f = file.files[0]; if(!f) return; stat.textContent = 'Envoi…';
+        try{ const path = `audio/${Date.now()}-${Math.random().toString(36).slice(2,6)}.${(f.name.split('.').pop()||'mp3').toLowerCase().replace(/[^a-z0-9]/g,'')}`;
+          const { error } = await sb.storage.from(TOPIK_BUCKET).upload(path, f, { contentType: f.type||'audio/mpeg' }); if(error) throw error;
+          st.audio = sb.storage.from(TOPIK_BUCKET).getPublicUrl(path).data.publicUrl; draw();
+        }catch(e){ stat.textContent = 'Erreur : ' + ((e&&e.message)||e); }
+      };
+      line.appendChild(rec); line.appendChild(fb); line.appendChild(file); line.appendChild(stat); af.appendChild(line);
+      if(st.audio) af.appendChild(el(`<audio controls src="${escapeHtml(st.audio)}" style="width:100%;margin-top:8px;"></audio>`));
+      af.appendChild(el('<div class="note" style="margin-top:8px;font-size:12px;">Tu peux utiliser ta voix. Si tu utilises un audio qui existe déjà (annales, enregistrements d\'un manuel…), vérifie que tu as le droit de le diffuser.</div>'));
+      modal.appendChild(af);
+      modal.appendChild(el(`<div class="field"><label>Script de l'audio (montré à l'élève seulement après ses réponses)</label><textarea data-ko="1" id="tx-script" style="min-height:70px;">${escapeHtml(keep.script!==undefined?keep.script:(ex?ex.script||'':''))}</textarea></div>`));
+    }
+    const imf = el('<div class="field"><label>Image (facultatif)</label></div>');
+    if(st.image) imf.appendChild(el(`<div><img src="${escapeHtml(st.image)}" alt="" style="max-height:120px;border-radius:8px;border:1px solid var(--line);"> </div>`));
+    const imFile = el('<input type="file" accept="image/*" style="display:none;">');
+    const imBtn = el(`<button type="button" class="btn ghost small" id="tx-img">🖼️ ${st.image?'Remplacer l\'image':'Ajouter une image'}</button>`); imBtn.onclick = ()=> imFile.click();
+    const imStat = el('<span style="font-size:12px;color:var(--ink-soft);margin-left:8px;"></span>');
+    imFile.onchange = async ()=>{
+      const f = imFile.files[0]; if(!f) return; imStat.textContent = 'Envoi…';
+      try{ const blob = await shrinkImage(f); const path = `img/${Date.now()}-${Math.random().toString(36).slice(2,6)}.jpg`;
+        const { error } = await sb.storage.from(TOPIK_BUCKET).upload(path, blob, { contentType:'image/jpeg' }); if(error) throw error;
+        st.image = sb.storage.from(TOPIK_BUCKET).getPublicUrl(path).data.publicUrl; draw();
+      }catch(e){ imStat.textContent = 'Erreur : ' + ((e&&e.message)||e); }
+    };
+    imf.appendChild(imBtn); imf.appendChild(imFile); imf.appendChild(imStat);
+    if(st.image){ const rm = el('<button type="button" class="btn ghost small" style="margin-left:6px;">Retirer</button>'); rm.onclick = ()=>{ st.image = null; draw(); }; imf.appendChild(rm); }
+    imf.appendChild(el('<div class="note" style="margin-top:8px;font-size:12px;">⏱️ Les images ajoutent du temps : une affiche ou une annonce à photographier, recadrer et vérifier. Si tu es pressée, un texte seul suffit amplement.</div>'));
+    modal.appendChild(imf);
+    const qb = el('<div class="section-block" style="border:1.5px dashed var(--gold);border-radius:10px;padding:14px 16px;"><h3 style="margin-top:0;">Questions</h3></div>');
+    st.qs.forEach((q,i)=>{
+      const blk = el(`<div class="tx-q" style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line);"><div class="field"><label>Question ${i+1}</label><input type="text" data-ko="1" class="tx-qtext" value="${escapeHtml(q.q)}"></div></div>`);
+      blk.querySelector('.tx-qtext').oninput = e=>{ q.q = e.target.value; };
+      q.o.forEach((o,k)=>{
+        const r = el(`<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;"><input type="radio" name="tx-a-${i}" ${q.a===k?'checked':''} style="width:auto;" title="Bonne réponse"><span>${'①②③④'[k]}</span><input type="text" data-ko="1" class="tx-opt" value="${escapeHtml(o)}" style="flex:1;"></div>`);
+        r.querySelector('input[type=radio]').onchange = ()=>{ q.a = k; };
+        r.querySelector('.tx-opt').oninput = e=>{ q.o[k] = e.target.value; };
+        blk.appendChild(r);
+      });
+      blk.appendChild(el('<div style="font-size:11px;color:var(--ink-soft);margin:-2px 0 6px;">Coche le rond de la bonne réponse. Laisse une case vide pour avoir moins de 4 choix.</div>'));
+      const ef = el(`<div class="field"><label>Explication (facultatif)</label><input type="text" class="tx-exp" value="${escapeHtml(q.e)}"></div>`);
+      ef.querySelector('input').oninput = e=>{ q.e = e.target.value; }; blk.appendChild(ef);
+      if(st.qs.length>1){ const del = el('<button type="button" class="btn ghost small">🗑 Retirer cette question</button>'); del.onclick = ()=>{ st.qs.splice(i,1); draw(); }; blk.appendChild(del); }
+      qb.appendChild(blk);
+    });
+    const addq = el('<button type="button" class="btn ghost small" id="tx-addq">➕ Ajouter une question</button>'); addq.onclick = ()=>{ st.qs.push({q:'',o:['','','',''],a:0,e:''}); draw(); };
+    qb.appendChild(addq); modal.appendChild(qb);
+    modal.appendChild(el('<div id="tx-status" style="font-size:12px;margin:10px 0;"></div>'));
+    const act = el('<div class="modal-actions"></div>');
+    const cancel = el('<button type="button" class="btn ghost">Annuler</button>'); cancel.onclick = ()=> bg.remove();
+    const save = el('<button type="button" class="btn celadon" id="tx-save">Enregistrer l\'exercice</button>');
+    save.onclick = async ()=>{
+      const msg = modal.querySelector('#tx-status'); msg.style.color = 'var(--danger)';
+      const title = modal.querySelector('#tx-title').value.trim();
+      const body = st.kind==='ecrite' ? modal.querySelector('#tx-body').value.trim() : '';
+      const script = st.kind==='orale' ? modal.querySelector('#tx-script').value.trim() : '';
+      if(!title){ msg.textContent = 'Donne un titre à l\'exercice.'; return; }
+      if(st.kind==='ecrite' && !body){ msg.textContent = 'Colle le texte coréen.'; return; }
+      if(st.kind==='orale' && !st.audio){ msg.textContent = 'Enregistre ou ajoute l\'audio.'; return; }
+      const questions = [];
+      for(let i=0;i<st.qs.length;i++){
+        const q = st.qs[i]; const opts = []; let a = -1;
+        q.o.forEach((o,k)=>{ if(o.trim()){ if(q.a===k) a = opts.length; opts.push(o.trim()); } });
+        if(!q.q.trim()){ msg.textContent = `Question ${i+1} : écris la question.`; return; }
+        if(opts.length<2){ msg.textContent = `Question ${i+1} : au moins 2 choix.`; return; }
+        if(a<0){ msg.textContent = `Question ${i+1} : coche une bonne réponse parmi les choix remplis.`; return; }
+        questions.push({ q:q.q.trim(), o:opts, a, e:q.e.trim() });
+      }
+      save.disabled = true; msg.style.color = 'var(--ink-soft)'; msg.textContent = 'Enregistrement…';
+      const row = { level:st.level, kind:st.kind, title, body: body||null, audio_url: st.kind==='orale'?st.audio:null, script: script||null, image_url: st.image||null, questions };
+      let error;
+      if(isNew){ row.id = topikNewId(); row.position = Math.max(0, ...(TOPIK_EX||[]).map(x=>x.position||0)) + 1; ({ error } = await sb.from('topik_exercises').insert(row)); }
+      else { ({ error } = await sb.from('topik_exercises').update(row).eq('id', ex.id)); }
+      if(error){ save.disabled = false; msg.style.color = 'var(--danger)'; msg.textContent = 'Erreur : ' + error.message; return; }
+      await sbLoadTopikEx(); bg.remove(); render();
+    };
+    act.appendChild(cancel); act.appendChild(save); modal.appendChild(act);
+  };
+  draw();
+  bg.appendChild(modal); document.body.appendChild(bg);
+}
+// Résultats TOPIK d'un élève (suivi)
+function topikResultsBlock(studentId){
+  const mine = (TOPIK_RES||[]).filter(r=>r.student_id===studentId);
+  const box = el('<div class="topik-results" style="margin-top:10px;"></div>');
+  if(!mine.length) return box;
+  box.appendChild(el('<div style="font-weight:600;margin-bottom:4px;">🎓 TOPIK — compréhension</div>'));
+  for(let n=1;n<=6;n++) ['ecrite','orale'].forEach(k=>{
+    const all = topikExercises(n,k); if(!all.length) return;
+    const done = all.map(x=>mine.find(r=>r.exercise_id===x.id)).filter(Boolean);
+    const avg = done.length ? Math.round(100*done.reduce((t,r)=>t+(r.total?r.score/r.total:0),0)/done.length) : null;
+    box.appendChild(el(`<div class="vocab-row"><span>Niveau ${n} · ${TOPIK_KIND_LABEL[k]}</span><span>${done.length}/${all.length} exercice${all.length>1?'s':''}</span><span>${avg===null?'—':'Moyenne '+avg+' %'}</span></div>`));
+  });
+  return box;
+}
+
 async function renderManage(){
   const wrap = el('<div></div>');
   wrap.appendChild(el(`<h2 style="margin:0 0 6px;">Gérer les leçons — ${LEVEL_LABELS[state.level]}</h2>`));
+  if(state.level==='topik') wrap.appendChild(topikAdminBlock());
   wrap.appendChild(el('<div class="note" style="margin-bottom:20px;">Réservé au Mode Professeur. Une fois le vocabulaire entré, les fiches à mémoriser, les exercices, le quiz, le contrôle et les révisions sont générés automatiquement pour les élèves.</div>'));
 
   const form = el(`<div>
@@ -4667,6 +4913,7 @@ async function renderDashboard(){
     card.appendChild(groupRow);
 
     if(expanded){
+      card.appendChild(topikResultsBlock(p.id));
       if(rows.length===0){ card.appendChild(el('<div class="empty-level">Rien fait pour l\'instant.</div>')); }
       else{
         const table = el('<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px;"></div>');
