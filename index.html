@@ -4763,7 +4763,8 @@ async function renderDashboard(){
   box.appendChild(el('<div class="note" style="margin-bottom:20px;">Résultats d\'exercices, de quiz et de contrôle, leçon par leçon.</div>'));
 
   /* --- Créer un compte élève --- */
-  const defaultAppUrl = window.location.href.split('?')[0];
+  // Ouvert depuis un fichier de l'ordinateur (file://), l'adresse serait inutilisable par un élève : on propose le site en ligne
+  const defaultAppUrl = /^https?:/.test(window.location.protocol) ? window.location.href.split('?')[0].split('#')[0] : 'https://annyeong-coreen.github.io/compagnon-coreen/';
   const createBox = el(`<div class="section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:26px;">
     <h3 style="margin-top:0;">+ Créer un compte élève</h3>
     <div class="field"><label>Prénom</label><input type="text" id="cs-name"></div>
