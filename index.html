@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#B8433A">
 <script>
 /* Préférences d'affichage (propres à chaque appareil) : thème auto/clair/sombre, taille du texte */
-window.ccPrefs = function(){ var t='auto', z='m'; try{ t = localStorage.getItem('cc-theme')||'auto'; z = localStorage.getItem('cc-size')||'m'; }catch(e){} if(['auto','light','dark'].indexOf(t)<0) t='auto'; if(['m','l','xl'].indexOf(z)<0) z='m'; return {theme:t,size:z}; };
+window.ccPrefs = function(){ var t='light', z='m'; try{ t = localStorage.getItem('cc-theme')||'light'; z = localStorage.getItem('cc-size')||'m'; }catch(e){} if(['auto','light','dark'].indexOf(t)<0) t='light'; if(['m','l','xl'].indexOf(z)<0) z='m'; return {theme:t,size:z}; };
 window.ccApply = function(){
   var p = window.ccPrefs(), dark = p.theme==='dark' || (p.theme==='auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var h = document.documentElement; h.setAttribute('data-theme', dark?'dark':'light'); h.setAttribute('data-size', p.size);
@@ -1423,7 +1423,7 @@ const GUIDE_ITEMS = [
   ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom.'],
   ['Qu\'est-ce que « Mes leçons personnelles » ?', 'Si ta professeure prépare des leçons rien que pour toi, elles apparaissent dans la colonne de gauche, sous « Leçons du cours », dans « 👤 Mes leçons personnelles ». Elles sont rangées en dossiers (par exemple Octobre, puis Semaine 1) : clique sur un dossier pour l\'ouvrir. Toi seul(e) et ta professeure pouvez les voir. Tu les suis comme les autres leçons, avec les mêmes étapes. Si tu n\'en as pas, cette partie n\'apparaît pas : c\'est normal.'],
   ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
-  ['Texte trop petit ou écran trop clair ?', 'Ouvre ⚙️ Options → « 🎨 Affichage ». Tu peux agrandir le texte (Grand, Très grand) et choisir le mode Sombre, ou le laisser suivre ton appareil (Automatique). Ce réglage est propre à chaque appareil : refais-le sur ton téléphone et sur ton ordinateur si besoin.'],
+  ['Texte trop petit ou écran trop clair ?', 'Ouvre ⚙️ Options → « 🎨 Affichage ». L\'outil s\'affiche en mode clair par défaut. Tu peux agrandir le texte (Grand, Très grand) et choisir le mode Sombre, ou le laisser suivre ton appareil (Automatique). Ce réglage est propre à chaque appareil : refais-le sur ton téléphone et sur ton ordinateur si besoin.'],
   ['Installer l\'outil sur mon téléphone', 'Ouvre ⚙️ Options puis « Installer sur mon téléphone » : l\'outil s\'ouvre ensuite comme une application.'],
   ['J\'ai oublié mon mot de passe / je veux le changer', 'Connecté : ⚙️ Options → Changer le mot de passe. Sinon, demande à ta professeure.']
 ];
