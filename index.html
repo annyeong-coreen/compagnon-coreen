@@ -6,6 +6,18 @@
 <title>반가워요 — Compagnon de coréen</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#B8433A">
+<script>
+/* Préférences d'affichage (propres à chaque appareil) : thème auto/clair/sombre, taille du texte */
+window.ccPrefs = function(){ var t='auto', z='m'; try{ t = localStorage.getItem('cc-theme')||'auto'; z = localStorage.getItem('cc-size')||'m'; }catch(e){} if(['auto','light','dark'].indexOf(t)<0) t='auto'; if(['m','l','xl'].indexOf(z)<0) z='m'; return {theme:t,size:z}; };
+window.ccApply = function(){
+  var p = window.ccPrefs(), dark = p.theme==='dark' || (p.theme==='auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var h = document.documentElement; h.setAttribute('data-theme', dark?'dark':'light'); h.setAttribute('data-size', p.size);
+  var m = document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute('content', dark?'#1C1A17':'#B8433A');
+};
+window.ccSet = function(key, val){ try{ localStorage.setItem(key, val); }catch(e){} window.ccApply(); };
+window.ccApply();
+try{ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){ window.ccApply(); }); }catch(e){}
+</script>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -159,6 +171,26 @@
   @media(max-width:600px){ .main-card{padding:24px 16px;} .main-card::before{inset:9px;} header.top::after{height:7px;} .brand::before{width:30px;height:30px;font-size:17px;} }
 .upd-pill{font-size:11px;background:var(--gold);color:#fff;border-radius:10px;padding:1px 8px;white-space:nowrap;}
 .topik-opt{min-width:0;}
+
+/* ===== Affichage : mode sombre et taille du texte ===== */
+html[data-size="l"] body{zoom:1.1;} html[data-size="xl"] body{zoom:1.22;}
+html[data-theme="dark"]{color-scheme:dark;
+  --paper:#1C1A17; --paper-dim:#2A2622; --card:#23201C; --ink:#EDE6D8; --ink-soft:#B4AB9B;
+  --celadon:#4F7A5E; --celadon-dark:#8FB79B; --seal:#C9564C; --seal-dark:#E58A80; --gold:#D4A24A; --line:#3A352E; --danger:#E27A66;}
+html[data-theme="dark"] body{background-color:#1C1A17;background-image:none;}
+html[data-theme="dark"] header.top::after{background:repeating-linear-gradient(90deg,#4A7FB0 0 22px,#1C1A17 22px 26px,#C9564C 26px 48px,#1C1A17 48px 52px,#D4A24A 52px 74px,#1C1A17 74px 78px,#EDE6D8 78px 100px,#1C1A17 100px 104px);}
+html[data-theme="dark"] .stat-pill{border-color:#4A443B;}
+html[data-theme="dark"] .main-card{border-color:#4A443B;box-shadow:inset 0 0 0 6px var(--card),inset 0 0 0 7.5px #3A352E;}
+html[data-theme="dark"] .item-card,html[data-theme="dark"] .card-grid .item-card,html[data-theme="dark"] .flip-card{background:#2A2622;border-color:#3A352E;}
+html[data-theme="dark"] .note{background:#2A2622;}
+html[data-theme="dark"] .sidebar [style*="dashed"]{background:#2A2622;}
+html[data-theme="dark"] .lesson-path{border-left-color:#4A443B;}
+html[data-theme="dark"] .opt.correct,html[data-theme="dark"] .feedback.ok{background:#22352A;}
+html[data-theme="dark"] .opt.wrong,html[data-theme="dark"] .feedback.ko{background:#3A2520;}
+html[data-theme="dark"] .tree-row{background:rgba(255,255,255,.05);}
+html[data-theme="dark"] .ko-key.on{color:#1C1A17;}
+html[data-theme="dark"] input,html[data-theme="dark"] textarea,html[data-theme="dark"] select{background:#2A2622;color:var(--ink);border-color:#4A443B;}
+html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -1027,6 +1059,9 @@ function renderHeader(){
     const changePass = el(`<button style="${itemStyle}">🔑 Changer le mot de passe</button>`);
     changePass.onclick = ()=>{ state.headerMenuOpen=false; openChangePasswordModal(); render(); };
     menu.appendChild(changePass);
+    const disp = el(`<button style="${itemStyle}border-top:1px solid var(--line);">🎨 Affichage (texte, mode sombre)</button>`);
+    disp.onclick = ()=>{ state.headerMenuOpen=false; openDisplayModal(); render(); };
+    menu.appendChild(disp);
     if(!isStandaloneApp()){
       const inst = el(`<button style="${itemStyle}border-top:1px solid var(--line);">📲 Installer sur mon téléphone</button>`);
       inst.onclick = ()=>{ state.headerMenuOpen=false; openInstallHelp(); render(); };
@@ -1058,6 +1093,33 @@ function renderHeader(){
   }
   right.appendChild(optionsWrap);
   return h;
+}
+
+// Réglages d'affichage : propres à l'appareil (téléphone, tablette, ordinateur), mémorisés dans le navigateur
+function openDisplayModal(){
+  const bg = el('<div class="modal-bg"></div>');
+  const modal = el(`<div class="modal"><h3>Affichage</h3>
+    <div class="note" style="margin-bottom:14px;">Ces réglages sont propres à cet appareil. Tu peux les changer quand tu veux.</div>
+    <div style="font-weight:600;margin-bottom:6px;">Mode</div><div id="dp-theme" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <div style="font-weight:600;margin-bottom:6px;">Taille du texte</div><div id="dp-size" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <div class="modal-actions"></div></div>`);
+  const draw = ()=>{
+    const p = window.ccPrefs();
+    const fill = (id, key, cur, opts)=>{
+      const box = modal.querySelector(id); box.innerHTML = '';
+      opts.forEach(([v,label])=>{
+        const b = el(`<button type="button" class="btn ${cur===v?'':'ghost'} small" data-v="${v}" aria-pressed="${cur===v}">${label}</button>`);
+        b.onclick = ()=>{ window.ccSet(key, v); draw(); };
+        box.appendChild(b);
+      });
+    };
+    fill('#dp-theme','cc-theme',p.theme,[['auto','🌗 Automatique'],['light','☀️ Clair'],['dark','🌙 Sombre']]);
+    fill('#dp-size','cc-size',p.size,[['m','Normal'],['l','Grand'],['xl','Très grand']]);
+  };
+  draw();
+  const close = el('<button class="btn ghost">Fermer</button>'); close.onclick = ()=> bg.remove();
+  modal.querySelector('.modal-actions').appendChild(close);
+  bg.appendChild(modal); bg.onclick = e=>{ if(e.target===bg) bg.remove(); }; document.body.appendChild(bg);
 }
 
 function openReminderModal(){
@@ -1361,6 +1423,7 @@ const GUIDE_ITEMS = [
   ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom.'],
   ['Qu\'est-ce que « Mes leçons personnelles » ?', 'Si ta professeure prépare des leçons rien que pour toi, elles apparaissent dans la colonne de gauche, sous « Leçons du cours », dans « 👤 Mes leçons personnelles ». Elles sont rangées en dossiers (par exemple Octobre, puis Semaine 1) : clique sur un dossier pour l\'ouvrir. Toi seul(e) et ta professeure pouvez les voir. Tu les suis comme les autres leçons, avec les mêmes étapes. Si tu n\'en as pas, cette partie n\'apparaît pas : c\'est normal.'],
   ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
+  ['Texte trop petit ou écran trop clair ?', 'Ouvre ⚙️ Options → « 🎨 Affichage ». Tu peux agrandir le texte (Grand, Très grand) et choisir le mode Sombre, ou le laisser suivre ton appareil (Automatique). Ce réglage est propre à chaque appareil : refais-le sur ton téléphone et sur ton ordinateur si besoin.'],
   ['Installer l\'outil sur mon téléphone', 'Ouvre ⚙️ Options puis « Installer sur mon téléphone » : l\'outil s\'ouvre ensuite comme une application.'],
   ['J\'ai oublié mon mot de passe / je veux le changer', 'Connecté : ⚙️ Options → Changer le mot de passe. Sinon, demande à ta professeure.']
 ];
