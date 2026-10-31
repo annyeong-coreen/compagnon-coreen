@@ -781,17 +781,44 @@ function notifyDiscordIfStudent(preview){
   if(PROFILE.role!=='student') return; // seuls les messages élève -> prof notifient
   sb.functions.invoke('notify-discord', { body:{ studentName: PROFILE.name, preview: (preview||'').slice(0,200) } }).catch(()=>{});
 }
-async function sbUploadVoiceNote(blob){
+async function sbUploadVoiceNote(blob, privFolder){
+  // Messages vocaux de la messagerie / du groupe : espace PRIVÉ (lecture par lien temporaire).
+  // Audios de leçons et d'exercices TOPIK : espace public comme avant (privFolder absent).
+  if(privFolder){
+    const ppath = `${privFolder}/${SESSION.user.id}-${Date.now()}.webm`;
+    const { error:perr } = await sb.storage.from(VOICE_PRIVATE_BUCKET).upload(ppath, blob, { contentType: 'audio/webm' });
+    if(perr) throw perr;
+    return 'vm:' + ppath;
+  }
   const path = `${SESSION.user.id}/${Date.now()}.webm`;
   const { error } = await sb.storage.from('voice-notes').upload(path, blob, { contentType: 'audio/webm' });
   if(error) throw error;
   const { data } = sb.storage.from('voice-notes').getPublicUrl(path);
   return data.publicUrl;
 }
+const VOICE_PRIVATE_BUCKET = 'voice-messages';
+// Lecteur audio : un « vm:chemin » est résolu en lien temporaire ; une adresse http reste telle quelle (anciens messages).
+function voiceAudioHtml(url){
+  if(typeof url==='string' && url.indexOf('vm:')===0) return `<audio controls data-vm="${escapeHtml(url.slice(3))}" style="height:32px;margin-top:4px;"></audio>`;
+  return `<audio controls src="${escapeHtml(url)}" style="height:32px;margin-top:4px;"></audio>`;
+}
+async function hydrateVoiceAudio(root){
+  const nodes = [...root.querySelectorAll('audio[data-vm]')];
+  if(!nodes.length) return;
+  try{
+    const paths = [...new Set(nodes.map(n=>n.getAttribute('data-vm')))];
+    const { data, error } = await sb.storage.from(VOICE_PRIVATE_BUCKET).createSignedUrls(paths, 6*3600);
+    const map = {}; (data||[]).forEach(r=>{ if(r && r.signedUrl && !r.error) map[r.path] = r.signedUrl; });
+    nodes.forEach(n=>{
+      const u = map[n.getAttribute('data-vm')];
+      if(u) n.src = u; else { const m = document.createElement('span'); m.style.cssText='font-size:12px;color:var(--ink-soft);'; m.textContent = '🔒 Audio indisponible'; n.replaceWith(m); }
+    });
+  }catch(e){ nodes.forEach(n=>{ const m = document.createElement('span'); m.style.cssText='font-size:12px;color:var(--ink-soft);'; m.textContent = '🔒 Audio indisponible'; n.replaceWith(m); }); }
+}
 
 // Bouton d'enregistrement réutilisable : câble un bouton + une zone de statut,
 // enregistre au clic, envoie au stockage, et appelle onUploaded(url) une fois fait.
-function wireVoiceRecorder(recBtn, statusEl, onUploaded){
+function wireVoiceRecorder(recBtn, statusEl, onUploaded, privFolder){
   let mr = null;
   recBtn.onclick = async ()=>{
     if(mr){ mr.stop(); return; }
@@ -806,7 +833,7 @@ function wireVoiceRecorder(recBtn, statusEl, onUploaded){
         statusEl.textContent = 'Envoi…';
         try{
           const blob = new Blob(chunks, { type: 'audio/webm' });
-          const url = await sbUploadVoiceNote(blob);
+          const url = await sbUploadVoiceNote(blob, privFolder);
           statusEl.textContent = 'Envoyé ✓';
           onUploaded(url);
         }catch(err){ statusEl.textContent = "Erreur d'envoi."; }
@@ -5289,11 +5316,12 @@ async function renderChatPanel(){
   CHAT.forEach(m=>{
     const time = new Date(m.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     const bodyHtml = m.audio_url
-      ? `<audio controls src="${escapeHtml(m.audio_url)}" style="height:32px;margin-top:4px;"></audio>`
+      ? voiceAudioHtml(m.audio_url)
       : `<div>${escapeHtml(m.body)}</div>`;
     list.appendChild(el(`<div style="font-size:13px;line-height:1.4;"><b>${escapeHtml(m.author_name)}</b> <span class="mono" style="color:var(--ink-soft);font-size:11px;">${time}</span>${bodyHtml}</div>`));
   });
   box.appendChild(list);
+  hydrateVoiceAudio(list);
 
   const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
   const input = el('<input type="text" data-ko="1" placeholder="Écrire un message...">'); input.style.flex='1';
@@ -5322,7 +5350,7 @@ async function renderChatPanel(){
         RECORDING = null; VOICE_BUSY = false; recBtn.textContent = '🎙️'; recStatus.textContent = 'Envoi…';
         try{
           const blob = new Blob(chunks, { type: 'audio/webm' });
-          const url = await sbUploadVoiceNote(blob);
+          const url = await sbUploadVoiceNote(blob, 'group/' + ACTIVE_GROUP_ID);
           const r = await sbSendChat(ACTIVE_GROUP_ID, '', url);
           if(r.error){ recStatus.textContent = 'Envoi impossible : ' + r.error.message; return; }
           echoChat(r.data);
@@ -5466,11 +5494,12 @@ function renderDMMessages(container){
   DM.forEach(m=>{
     const time = new Date(m.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     const bodyHtml = m.audio_url
-      ? `<audio controls src="${escapeHtml(m.audio_url)}" style="height:32px;margin-top:4px;"></audio>`
+      ? voiceAudioHtml(m.audio_url)
       : `<div>${escapeHtml(m.body)}</div>`;
     list.appendChild(el(`<div style="font-size:13px;line-height:1.4;"><b>${escapeHtml(m.author_name)}</b> <span class="mono" style="color:var(--ink-soft);font-size:11px;">${time}</span>${bodyHtml}</div>`));
   });
   container.appendChild(list);
+  hydrateVoiceAudio(list);
   requestAnimationFrame(()=>{ list.scrollTop = list.scrollHeight; });   // toujours sur le dernier message
 
   const row = el('<div style="display:flex;gap:8px;align-items:center;"></div>');
@@ -5496,7 +5525,7 @@ function renderDMMessages(container){
     if(ok){ DM_DRAFTS[threadId] = ''; input.value = ''; }
   };
   send.onclick = doSend; input.onkeydown=(e)=>{ if(e.key==='Enter') doSend(); };
-  wireVoiceRecorder(recBtn, recStatus, async (url)=>{ await deliver('', url, '🎙️ Note vocale'); });
+  wireVoiceRecorder(recBtn, recStatus, async (url)=>{ await deliver('', url, '🎙️ Note vocale'); }, 'dm/' + threadId);
   row.appendChild(input); row.appendChild(send); row.appendChild(recBtn); row.appendChild(recStatus);
   container.appendChild(row);
 }
