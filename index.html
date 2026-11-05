@@ -6008,8 +6008,10 @@ function renderSuggestions(){
       catch(e){ send.disabled = false; msg.innerHTML = '<span class="error-text">Les images n\'ont pas pu être envoyées. Réessaie, ou envoie sans image.</span>'; return; }
       const row = { author_id:SESSION.user.id, kind, body, context:(ctxInput.value.trim().slice(0,300)) || null };
       if(paths.length) row.images = paths;
-      const { error } = await sb.from('suggestions').insert(row);
+      const { data:ins, error } = await sb.from('suggestions').insert(row).select('id').single();
       if(error){ if(paths.length) sb.storage.from(SUGGEST_BUCKET).remove(paths).catch(()=>{}); send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
+      // Prévient le salon Discord privé de la professeure (sans jamais gêner l'envoi si ça échoue)
+      try{ if(ins && ins.id) sb.functions.invoke('notify-suggestion', { body:{ id: ins.id } }).catch(()=>{}); }catch(e){}
       SUGGESTIONS = await sbSuggestions(); state.suggestSent = true; render();
     };
     form.appendChild(send); form.appendChild(msg);
