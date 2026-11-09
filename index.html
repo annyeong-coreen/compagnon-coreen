@@ -6011,7 +6011,7 @@ function renderSuggestions(){
       const { data:ins, error } = await sb.from('suggestions').insert(row).select('id').single();
       if(error){ if(paths.length) sb.storage.from(SUGGEST_BUCKET).remove(paths).catch(()=>{}); send.disabled = false; msg.innerHTML = '<span class="error-text">Envoi impossible pour le moment. Réessaie plus tard.</span>'; return; }
       // Prévient le salon Discord privé de la professeure (sans jamais gêner l'envoi si ça échoue)
-      try{ if(ins && ins.id) sb.functions.invoke('notify-suggestion', { body:{ id: ins.id } }).catch(()=>{}); }catch(e){}
+      try{ if(ins && ins.id) sb.functions.invoke('relais-messages', { body:{ id: ins.id } }).catch(()=>{}); }catch(e){}
       SUGGESTIONS = await sbSuggestions(); state.suggestSent = true; render();
     };
     form.appendChild(send); form.appendChild(msg);
