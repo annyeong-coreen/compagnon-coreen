@@ -30,10 +30,27 @@ try{ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change'
 <script>
   // Fusionné ici pour prévisualisation directe — en déploiement réel, ces valeurs
   // peuvent aussi vivre dans un config.js séparé (voir le zip complet du projet).
-  window.SUPABASE_CONFIG = {
+  // Le MÊME fichier sert la vraie version et la version de test : s'il est ouvert depuis le dossier /test/,
+  // il se connecte à la base de TEST (aucune vraie donnée d'élève) et affiche un repère « VERSION DE TEST ».
+  window.APP_IS_TEST = /\/test(\/|$)/.test(location.pathname);
+  window.SUPABASE_CONFIG = window.APP_IS_TEST ? {
+    url: "https://vfllwvmvbgwijuylwxxx.supabase.co",
+    anonKey: "sb_publishable_ZKY9POny8MJ1ANixJk5MWQ_bLpjK5MW"
+  } : {
     url: "https://vcnkcmgvswdmbwkjfsyg.supabase.co",
     anonKey: "sb_publishable_oNSTKKW1_Q3vapZo43t35A_KCtoMLWl"
   };
+  if(window.APP_IS_TEST){
+    try{
+      document.title = '[TEST] ' + document.title;
+      document.addEventListener('DOMContentLoaded', function(){
+        var t = document.createElement('div');
+        t.textContent = '🧪 VERSION DE TEST';
+        t.style.cssText = 'position:fixed;top:0;left:0;z-index:100000;background:#B8433A;color:#fff;font:700 11px Inter,system-ui,sans-serif;letter-spacing:.04em;padding:3px 10px;border-radius:0 0 8px 0;pointer-events:none;';
+        document.body.appendChild(t);
+      });
+    }catch(e){}
+  }
 </script>
 <style>
   :root{
@@ -198,7 +215,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-10-1';
+  var APP_VERSION = '2026-11-10-2';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
