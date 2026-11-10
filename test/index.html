@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-10-3';
+  var APP_VERSION = '2026-11-10-4';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -3075,7 +3075,7 @@ function puzzleRevealBlock(ph, small){
     const src = puzzleSourceHtml(ph);
     if(src) box.appendChild(el(`<div class="puzzle-source" style="margin-top:4px;font-size:12px;color:var(--ink-soft);">${src}</div>`));
   }
-  if(ph.src==='user' && ph.author_name) box.appendChild(el(`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">📷 Photo de ${escapeHtml(ph.author_name)}</div>`));
+  if(ph.src==='user' && ph.author_name && !ph.anonymous) box.appendChild(el(`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">📷 Photo de ${escapeHtml(ph.author_name)}</div>`));
   return box;
 }
 function openPuzzleReveal(idx){
@@ -3122,7 +3122,7 @@ function renderPuzzle(){
 /* ---- Photos proposées par les élèves ---- */
 function renderPuzzleProposals(){
   const box = el('<div class="section-block" style="margin-top:26px;"><h3>📷 Propose ta photo</h3></div>');
-  box.appendChild(el('<div class="note" style="font-size:12.5px;margin-bottom:10px;">Tu as une belle photo de Corée ? Envoie-la : elle deviendra un puzzle pour tout le monde une fois acceptée. Le lieu de la photo s\'affichera à la fin du puzzle, avec ton prénom. La position GPS de ta photo est supprimée avant l\'envoi.</div>'));
+  box.appendChild(el('<div class="note" style="font-size:12.5px;margin-bottom:10px;">Fais découvrir la Corée aux autres élèves à travers tes yeux ! Envoie ta plus belle photo : une fois acceptée, elle deviendra un puzzle pour tout le monde. Le lieu s\'affichera à la fin du puzzle, avec ton prénom si tu le souhaites (tu peux rester anonyme). La position GPS de ta photo est supprimée avant l\'envoi.</div>'));
   if(!PUZZLE_TABLE_OK){
     box.appendChild(el('<div class="note" style="font-size:12px;border-color:var(--seal);">L\'envoi de photos n\'est pas encore activé (migration-puzzle-photos.sql).</div>'));
     return box;
@@ -3159,6 +3159,7 @@ function openPuzzleProposeModal(){
     <div class="field"><label>Où a-t-elle été prise ? (ex. 경복궁 · Séoul)</label><input type="text" id="pp-place" maxlength="80"></div>
     <div class="field"><label>Une phrase sur ce lieu (facultatif)</label><textarea id="pp-sentence" maxlength="300" style="min-height:60px;"></textarea></div>
     <div class="field"><label>Source (facultatif — un lien ou un nom)</label><input type="text" id="pp-source" maxlength="200"></div>
+    ${isT?'':'<div class="field"><label><input type="checkbox" id="pp-anon" style="width:auto;"> 🙈 Je préfère rester anonyme (mon prénom ne sera pas affiché aux autres élèves ; ta professeure le voit toujours)</label></div>'}
     <div id="pp-status" style="font-size:12px;margin-bottom:8px;"></div>
     <div class="modal-actions"></div>
   </div>`);
@@ -3180,7 +3181,7 @@ function openPuzzleProposeModal(){
       const row = { id:puzzleNewId(), pos: isT ? Math.max(0, ...(PUZZLE_PHOTOS||[]).map(p=>p.pos||0)) + 1 : 1000, src:'user', file:path, ratio:Math.round(ratio*10000)/10000,
         place, sentence: modal.querySelector('#pp-sentence').value.trim() || null,
         source_label: src || null, source_url: safeHttpUrl(src) || null,
-        verified: isT, status: isT ? 'approved' : 'pending', author_id: SESSION.user.id, author_name: PROFILE.name || null };
+        verified: isT, status: isT ? 'approved' : 'pending', author_id: SESSION.user.id, author_name: PROFILE.name || null, anonymous: !isT && !!(modal.querySelector('#pp-anon')||{}).checked };
       const { error } = await sb.from('puzzle_photos').insert(row);
       if(error){ sb.storage.from(PUZZLE_BUCKET).remove([path]).catch(()=>{}); throw error; }
       await sbLoadPuzzlePhotos(); bg.remove(); render();
@@ -3242,7 +3243,7 @@ function puzzleAdminCard(p){
   card.appendChild(el(`<img src="${escapeHtml(puzzlePhotoUrl(p))}" alt="" style="width:92px;height:92px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none;">`));
   const body = el('<div style="flex:1;min-width:0;"></div>');
   body.appendChild(el(`<div style="font-weight:600;">📍 ${escapeHtml(p.place||'')}</div>`));
-  if(p.author_name) body.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">📷 proposée par ${escapeHtml(p.author_name)}</div>`));
+  if(p.author_name) body.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">📷 proposée par ${escapeHtml(p.author_name)}${p.anonymous?' · 🙈 veut rester anonyme':''}</div>`));
   body.appendChild(el(`<div style="margin:4px 0;font-size:13.5px;">${p.sentence?escapeHtml(p.sentence):'<i style="color:var(--ink-soft);">Pas de phrase</i>'}</div>`));
   const src = puzzleSourceHtml(p);
   body.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">${src||'Aucune source trouvée'}</div>`));
