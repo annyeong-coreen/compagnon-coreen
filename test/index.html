@@ -2835,7 +2835,7 @@ function openShopModal(k){
   let sel = cur && cur.item_id ? cur.item_id : null;
   const bg = el('<div class="modal-bg"></div>');
   const modal = el(`<div class="modal"><h3>🎁 La boutique</h3>
-    <div class="note" style="font-size:12.5px;margin-bottom:6px;">Choisis <b>un seul</b> cadeau pour l'image ${k}. Tu peux changer d'avis tant que ta professeure ne te l'a pas remis.</div>
+    <div class="note" style="font-size:12.5px;margin-bottom:6px;">Choisis <b>un seul</b> cadeau pour l'image ${k}. Tu peux changer d'avis tant que ta professeure ne te l'a pas remis. Si ton cadeau doit être envoyé par la poste, elle te demandera ton adresse en message privé sur Discord.</div>
     <div class="shop-grid"></div><div id="shop-st" style="font-size:12px;margin:6px 0;"></div><div class="modal-actions"></div></div>`);
   const grid = modal.querySelector('.shop-grid'), st = modal.querySelector('#shop-st');
   const ok = el('<button class="btn celadon" disabled>Choisir ce cadeau</button>');
@@ -2868,9 +2868,10 @@ function renderShopSection(done){
     const row = el(`<div class="note" style="border-color:var(--gold);margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1;min-width:180px;">${lost?`Image ${k} : l'article que tu avais choisi n'est plus disponible, choisis-en un autre.`:`🎉 Image ${k} terminée : tu as gagné un cadeau !`}</span></div>`);
     const b = el('<button class="btn small" style="background:var(--gold);border-color:var(--gold);color:#fff;">🎁 Choisir mon cadeau</button>'); b.onclick = ()=>openShopModal(k); row.appendChild(b); box.appendChild(row);
   });
-  if(!toChoose.length){
-    box.appendChild(el('<div class="note" style="font-size:12.5px;">🔒 La boutique s\'ouvre quand tu termines une image du puzzle. Voici ce que tu peux gagner :</div>'));
-    const g = el('<div class="shop-grid"></div>'); SHOP_ITEMS.forEach(it=>g.appendChild(shopTile(it,'locked'))); box.appendChild(g);
+  if(!toChoose.length && !waiting.length){
+    // boutique cachée : aucun article visible, seulement l'idée d'une récompense
+    box.querySelector('h3').textContent = '🎁 Ta récompense';
+    box.appendChild(el('<div class="note" style="font-size:12.5px;">À chaque image terminée, une surprise t\'attend : tu pourras choisir un petit cadeau.</div>'));
   }
   return box;
 }
@@ -3089,7 +3090,7 @@ function openPuzzleReveal(idx){
 function renderPuzzle(){
   const wrap = el('<div></div>');
   wrap.appendChild(el('<h2 style="margin:0 0 6px;">🧩 Mon puzzle</h2>'));
-  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Chaque contrôle réussi te donne une pièce. Quand l\'image est complète, la photo se révèle avec le nom du lieu, et ta professeur t\'envoie un petit cadeau 🎁.</div>'));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:14px;font-size:12.5px;">Chaque contrôle réussi te donne une pièce. Quand l\'image est complète, la photo se révèle avec le nom du lieu, et tu gagnes un petit cadeau à choisir 🎁.</div>'));
   if(!GIFTS_TABLE_OK) wrap.appendChild(el('<div class="note" style="border-color:var(--seal);font-size:12px;margin-bottom:10px;">Le suivi des cadeaux n\'est pas encore activé (migration-puzzle.sql). Ton puzzle fonctionne quand même.</div>'));
   const sh = puzzleShown();
   wrap.appendChild(el(`<div style="font-size:13px;margin-bottom:8px;"><b>Image ${sh.number}</b> · ${sh.pieces}/${PUZZLE_PIECES} pièces${sh.complete?' — terminée !':sh.n===0?' — réussis un contrôle pour gagner ta première pièce.':` — encore ${PUZZLE_PIECES-sh.pieces} contrôle${PUZZLE_PIECES-sh.pieces>1?'s':''} réussi${PUZZLE_PIECES-sh.pieces>1?'s':''}.`}</div>`));
