@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-15-5';
+  var APP_VERSION = '2026-11-15-6';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1626,10 +1626,14 @@ async function renderSidebar(){
       reviewBtn.style.cursor='pointer';
       reviewBtn.onclick = ()=>{ if(dueWords().length) state.reviewTab='jour'; state.reviewOrderFresh=false; state.reviewExerciseIndex=0; state.reviewMode = true; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
       box.appendChild(reviewBtn);
-      const gameBtn = el(`<div class="lesson-node" style="margin-bottom:10px;border:1.5px dashed var(--celadon-dark);"><span>🃏 Jeu de paires</span></div>`);
-      gameBtn.style.cursor='pointer';
-      gameBtn.onclick = ()=>{ state.reviewMode=true; state.reviewTab='jeu'; state.pairGame=null; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
-      box.appendChild(gameBtn);
+      try{ await lessonsForLevel(state.level); }catch(e){}
+      // Le jeu de paires n'apparaît que lorsqu'il y a assez de mots pour jouer (sinon on croirait à un bug)
+      if(pairPool().length>=4){
+        const gameBtn = el(`<div class="lesson-node" style="margin-bottom:10px;border:1.5px dashed var(--celadon-dark);"><span>🃏 Jeu de paires</span></div>`);
+        gameBtn.style.cursor='pointer';
+        gameBtn.onclick = ()=>{ state.reviewMode=true; state.reviewTab='jeu'; state.pairGame=null; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.lessonId=null; render(); };
+        box.appendChild(gameBtn);
+      }
       const puzzleBtn = el(`<div class="lesson-node ${state.puzzleMode?'active':''}" style="margin-bottom:10px;border:1.5px dashed var(--gold);">
         <span>🧩 Mon puzzle (${puzzleShown().pieces}/${PUZZLE_PIECES})</span>
       </div>`);
@@ -3441,7 +3445,7 @@ function renderWeakWordsPractice(){
   wrap.appendChild(addBox);
 
   const tabs = el('<div class="tabs"></div>');
-  [['jour',`Aujourd'hui (${dueWords().length})`],['memoriser','À mémoriser'],['exercices','Exercices'],['jeu','Jeu']].forEach(([key,label])=>{
+  [['jour',`Aujourd'hui (${dueWords().length})`],['memoriser','À mémoriser'],['exercices','Exercices']].concat(pairPool().length>=4 ? [['jeu','Jeu']] : []).forEach(([key,label])=>{
     const b = el(`<button class="tab-btn ${state.reviewTab===key?'active':''}">${label}</button>`);
     b.onclick = ()=>{ state.reviewTab=key; state.reviewExerciseIndex=0; state.reviewCorrectCount=0; state.reviewOrderFresh=false; state.pairGame=null; render(); };
     tabs.appendChild(b);
@@ -4496,7 +4500,7 @@ function buildDialogueEditor(initialExchanges){
         input.oninput = (e)=>{ seg.fr = e.target.value; seg.manual = true; seg.edited = true; };
         row.appendChild(input);
         if(!seg.manual && seg.fr){ row.appendChild(el('<span class="mono" style="font-size:10px;color:var(--gold);white-space:nowrap;">suggestion</span>')); }
-        const del = el('<button type="button" class="btn ghost small" title="Supprimer cette ligne" aria-label="Supprimer cette ligne" style="padding:2px 8px;color:var(--danger);">✕</button>');
+        const del = el('<button type="button" class="btn ghost small" title="Supprimer cette ligne" aria-label="Supprimer cette ligne" style="padding:2px 8px;color:var(--danger);border:none;background:transparent;box-shadow:none;font-size:16px;">✕</button>');
         del.onclick = ()=>{
           removed.add(seg.kr);
           ex.segments = ex.segments.filter(s=>s!==seg);
