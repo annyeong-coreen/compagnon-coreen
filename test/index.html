@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-10-4';
+  var APP_VERSION = '2026-11-15-2';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -970,7 +970,7 @@ async function loadOwnProfile(){
     return;
   }
   {
-    state.level = PROFILE.level || 'debutant';
+    state.level = (PROFILE.role==='student' && !PERSO_LEVELS.includes(PROFILE.level)) ? 'debutant' : (PROFILE.level || 'debutant');
     state.lastPersoLevel = state.level;
     PROGRESS = await sbAllProgressForSelf();
     ASSIGNMENT = await sbMyAssignment();
@@ -1494,10 +1494,14 @@ const GUIDE_ITEMS = [
   ['Ma professeure a modifié une leçon', 'Une bannière 🆕 s\'affiche en haut, avec une pastille « modifiée » devant la leçon. Elle disparaît quand tu ouvres la leçon.'],
   ['À quoi sert l\'onglet TOPIK ?', 'À découvrir l\'examen officiel de coréen : fonctionnement, six leçons (niveaux 1 à 6) et des questions d\'entraînement. C\'est un aperçu, sans pression, même si tu débutes.'],
   ['Compréhension écrite et orale (TOPIK)', 'Dans l\'onglet TOPIK, choisis un niveau : si ta professeure a préparé des exercices, tu verras « Compréhension écrite » (un texte, puis des questions) et « Compréhension orale » (un audio à réécouter autant que tu veux). La correction t\'explique chaque réponse. Pour l\'oral, le script s\'ouvre une fois que tu as répondu. Ton meilleur résultat est gardé et ta professeure le voit.'],
-  ['À quoi sert mon puzzle 🧩 ?', 'Chaque contrôle réussi te donne une pièce. Quand les 6 pièces sont réunies, la photo se révèle avec le nom du lieu en Corée et une phrase pour en apprendre plus. Tu peux revoir les photos terminées en cliquant dessus.'],
-  ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom.'],
+  ['À quoi sert mon puzzle 🧩 ?', 'Chaque contrôle réussi te donne une pièce. Quand les 6 pièces sont réunies, la photo se révèle avec le nom du lieu en Corée et une phrase pour en apprendre plus. Tu peux revoir les photos terminées en cliquant dessus. Chaque image terminée te donne aussi droit à un petit cadeau (voir « Comment choisir mon cadeau ? »).'],
+  ['Comment choisir mon cadeau ? 🎁', 'Quand tu termines une image du puzzle, une boutique s\'ouvre sous le puzzle : clique sur « Choisir mon cadeau », choisis un article, puis confirme. Tu peux changer d\'avis tant que ta professeure ne t\'a pas remis le cadeau. Si le cadeau doit être envoyé par la poste, elle te demandera ton adresse en message privé sur Discord. Avant la fin d\'une image, la boutique reste cachée : c\'est la surprise !'],
+  ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom. Tu préfères rester discret(e) ? Coche « 🙈 Je préfère rester anonyme » avant l\'envoi : ton prénom ne sera pas montré aux autres élèves (ta professeure, elle, le voit toujours).'],
   ['Qu\'est-ce que « Mes leçons personnelles » ?', 'Si ta professeure prépare des leçons rien que pour toi, elles apparaissent dans la colonne de gauche, sous « Leçons du cours », dans « 👤 Mes leçons personnelles ». Elles sont rangées en dossiers (par exemple Octobre, puis Semaine 1) : clique sur un dossier pour l\'ouvrir. Toi seul(e) et ta professeure pouvez les voir. Tu les suis comme les autres leçons, avec les mêmes étapes. Si tu n\'en as pas, cette partie n\'apparaît pas : c\'est normal.'],
   ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
+  ['Je reçois un e-mail de rappel : pourquoi ?', 'Si tu ne viens pas sur l\'outil pendant quelques jours, ta professeure t\'envoie un petit rappel par e-mail (au maximum une fois par semaine). Pour les arrêter ou changer le nombre de jours : ⚙️ Options → 🔔 Rappels par email.'],
+  ['Un message « Nouvelle version » s\'affiche', 'L\'outil a été mis à jour. Clique sur « Actualiser » quand tu es prêt(e) : rien ne se recharge tout seul, tu ne perds donc pas ce que tu faisais.'],
+  ['Pourquoi je ne vois qu\'un seul niveau ?', 'Ta professeure choisit ton niveau et tu vois les leçons qui lui correspondent. Si tu penses que ce n\'est plus le bon, parles-en avec elle : elle peut le changer.'],
   ['Texte trop petit ou écran trop clair ?', 'Ouvre ⚙️ Options → « 🎨 Affichage ». L\'outil s\'affiche en mode clair par défaut. Tu peux agrandir le texte (Grand, Très grand) et choisir le mode Sombre, ou le laisser suivre ton appareil (Automatique). Ce réglage est propre à chaque appareil : refais-le sur ton téléphone et sur ton ordinateur si besoin.'],
   ['Installer l\'outil sur mon téléphone', 'Ouvre ⚙️ Options puis « Installer sur mon téléphone » : l\'outil s\'ouvre ensuite comme une application.'],
   ['J\'ai oublié mon mot de passe / je veux le changer', 'Connecté : ⚙️ Options → Changer le mot de passe. Sinon, demande à ta professeure.']
@@ -1594,12 +1598,11 @@ async function renderSidebar(){
   }
   if(state.space==='perso'){
     const tabs = el('<div class="level-tabs"></div>');
-    PERSO_LEVELS.forEach(lv=>{
+    (PROFILE.role==='student' ? PERSO_LEVELS.filter(lv=>lv===state.level) : PERSO_LEVELS).forEach(lv=>{
       const b = el(`<button class="level-tab ${state.level===lv?'active':''}">${LEVEL_LABELS[lv]}</button>`);
       b.onclick = async ()=>{
         state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode = false;
         state.level = lv; state.lastPersoLevel = lv; state.lessonId=null; state.controlResult=null; state.quizResult=null;
-        if(PROFILE.role==='student' && PROFILE.level!==lv){ PROFILE.level=lv; await sb.from('profiles').update({level:lv}).eq('id',SESSION.user.id); }
         render();
       };
       tabs.appendChild(b);
@@ -3550,13 +3553,17 @@ function pairPool(){
     if(!kr||!fr||!isHangul(kr)||kr.length>12||fr.length>30||seenK.has(kr)||seenF.has(fr.toLowerCase())) return;
     seenK.add(kr); seenF.add(fr.toLowerCase()); out.push({kr,fr}); };
   WEAK_WORDS.forEach(w=>add(w.word,w.meaning));
-  Object.keys(LESSONS_CACHE).forEach(k=>(LESSONS_CACHE[k]||[]).forEach(l=>{ const pr=PROGRESS[l.id]; if(pr&&pr.control&&pr.control.passed) (l.vocab||[]).forEach(v=>add(v.kr,v.fr)); }));
+  const all=[]; Object.keys(LESSONS_CACHE).forEach(k=>(LESSONS_CACHE[k]||[]).forEach(l=>all.push(l)));
+  // 1) leçons au contrôle réussi, 2) leçons déjà travaillées, 3) à défaut, les leçons du niveau de l'élève (c'est de la pratique libre, sans note)
+  all.forEach(l=>{ const pr=PROGRESS[l.id]; if(pr&&pr.control&&pr.control.passed) (l.vocab||[]).forEach(v=>add(v.kr,v.fr)); });
+  all.forEach(l=>{ if(PROGRESS[l.id]) (l.vocab||[]).forEach(v=>add(v.kr,v.fr)); });
+  if(out.length<8) (LESSONS_CACHE[state.level]||[]).filter(l=>!l.student_id || l.student_id===SESSION.user.id).forEach(l=>(l.vocab||[]).forEach(v=>add(v.kr,v.fr)));
   return out;
 }
 function renderPairGame(){
   const wrap = el('<div></div>');
   const pool = pairPool();
-  if(pool.length<4){ wrap.appendChild(el('<div class="empty-state es-lantern"><span class="kr">아직이에요</span><div>Il te faut au moins 4 mots (dans « Mots à revoir » ou dans des leçons dont tu as réussi le contrôle) pour jouer aux paires.</div></div>')); return wrap; }
+  if(pool.length<4){ wrap.appendChild(el('<div class="empty-state es-lantern"><span class="kr">아직이에요</span><div>Il n\'y a pas encore assez de mots pour jouer (il en faut au moins 4). Ouvre une leçon de ton niveau, ou ajoute des mots dans « Mots à revoir ».</div></div>')); return wrap; }
   if(!state.pairGame){
     const items = pool.sort(()=>Math.random()-0.5).slice(0,6);
     state.pairGame = { items, left:items.map((_,i)=>i).sort(()=>Math.random()-0.5), right:items.map((_,i)=>i).sort(()=>Math.random()-0.5), solved:[], sel:null, errors:0 };
@@ -4432,12 +4439,15 @@ function buildDialogueEditor(initialExchanges){
   const analyzeBtn = el('<button type="button" class="btn ghost small">Analyser le texte</button>');
   const apiBtn = el('<button type="button" class="btn ghost small" style="display:none;">🌐 Suggérer les traductions manquantes</button>');
   const status = el('<span style="font-size:12px;color:var(--ink-soft);align-self:center;"></span>');
-  btnRow.appendChild(analyzeBtn); btnRow.appendChild(apiBtn); btnRow.appendChild(status);
+  const restoreBtn = el('<button type="button" class="btn ghost small" style="display:none;">↩ Remettre les lignes retirées</button>');
+  btnRow.appendChild(analyzeBtn); btnRow.appendChild(apiBtn); btnRow.appendChild(restoreBtn); btnRow.appendChild(status);
   wrap.appendChild(btnRow);
   const reviewBox = el('<div style="max-height:460px;overflow-y:auto;"></div>');
   wrap.appendChild(reviewBox);
 
   let lastAnalyzed = textarea.value;
+  const removed = new Set();   // lignes retirées à la main : elles ne reviennent pas à la ré-analyse
+  const refreshRestore = ()=>{ restoreBtn.style.display = removed.size ? 'inline-block' : 'none'; restoreBtn.textContent = `↩ Remettre les lignes retirées (${removed.size})`; };
   // Ré-analyse le texte SANS perdre le travail de relecture déjà fait : les
   // traductions corrigées à la main (et les suggestions déjà reçues) sont
   // reportées sur les segments dont le coréen n'a pas changé.
@@ -4445,6 +4455,7 @@ function buildDialogueEditor(initialExchanges){
     const known = new Map();
     exchanges.forEach(ex=>ex.segments.forEach(s=>{ if(s.fr) known.set(s.kr, { fr:s.fr, manual:s.manual, edited:s.edited }); }));
     exchanges = parseDialogueText(textarea.value);
+    if(removed.size){ exchanges.forEach(ex=>{ ex.segments = ex.segments.filter(s=>!removed.has(s.kr)); }); exchanges = exchanges.filter(ex=>ex.segments.length); }
     exchanges.forEach(ex=>ex.segments.forEach(s=>{
       const k = known.get(s.kr);
       if(k && (!s.fr || k.edited)){ s.fr = k.fr; s.manual = k.manual; if(k.edited) s.edited = true; }
@@ -4477,12 +4488,22 @@ function buildDialogueEditor(initialExchanges){
         input.oninput = (e)=>{ seg.fr = e.target.value; seg.manual = true; seg.edited = true; };
         row.appendChild(input);
         if(!seg.manual && seg.fr){ row.appendChild(el('<span class="mono" style="font-size:10px;color:var(--gold);white-space:nowrap;">suggestion</span>')); }
+        const del = el('<button type="button" class="btn ghost small" title="Supprimer cette ligne" aria-label="Supprimer cette ligne" style="padding:2px 8px;color:var(--danger);">✕</button>');
+        del.onclick = ()=>{
+          removed.add(seg.kr);
+          ex.segments = ex.segments.filter(s=>s!==seg);
+          if(!ex.segments.length) exchanges = exchanges.filter(e=>e!==ex);
+          status.textContent = countSummary();
+          refreshRestore(); renderReview();
+        };
+        row.appendChild(del);
         card.appendChild(row);
       });
       reviewBox.appendChild(card);
     });
   }
 
+  restoreBtn.onclick = ()=>{ removed.clear(); refreshRestore(); syncFromText(); status.textContent = countSummary(); renderReview(); };
   analyzeBtn.onclick = ()=>{
     syncFromText();
     status.textContent = countSummary();
@@ -5331,6 +5352,7 @@ async function renderDashboard(){
     <div class="field"><label>Prénom</label><input type="text" id="cs-name"></div>
     <div class="field"><label>Email</label><input type="email" id="cs-email" placeholder="ex : marjan@coreen.local"></div>
     <div class="field"><label>Mot de passe</label><input type="text" id="cs-pass" placeholder="6 caractères minimum"></div>
+    <div class="field"><label>Niveau de l'élève</label><select id="cs-level">${PERSO_LEVELS.map(k=>`<option value="${k}">${LEVEL_LABELS[k]}</option>`).join('')}</select><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">L'élève ne voit que les leçons de ce niveau. Tu pourras le changer plus tard dans sa fiche ci-dessous.</div></div>
     <div class="field"><label>Lien de l'outil (envoyé dans l'email de bienvenue)</label><input type="text" id="cs-appurl" value="${escapeHtml(defaultAppUrl)}"></div>
     <div class="field"><label><input type="checkbox" id="cs-sendmail" checked> Envoyer un email de bienvenue avec ses identifiants</label></div>
     <button class="btn celadon" id="cs-create-btn">Créer le compte</button>
@@ -5350,7 +5372,10 @@ async function renderDashboard(){
     try{
       const { data, error } = await sb.functions.invoke('create-student', { body:{ name, email, password, appUrl, sendWelcomeEmail } });
       if(error || (data && data.error)){ status.textContent = 'Erreur : ' + (error?.message || data.error); return; }
-      status.textContent = data.emailSent ? `Compte de ${name} créé ✓ — email de bienvenue envoyé` : `Compte de ${name} créé ✓ (email non envoyé — communique les identifiants toi-même)`;
+      const lvl = createBox.querySelector('#cs-level').value;
+      let lvlErr = false;
+      if(data && data.id){ const r = await sb.from('profiles').update({ level:lvl }).eq('id', data.id); lvlErr = !!r.error; }
+      status.textContent = (data.emailSent ? `Compte de ${name} créé ✓ — email de bienvenue envoyé` : `Compte de ${name} créé ✓ (email non envoyé — communique les identifiants toi-même)`) + (lvlErr ? ' — ⚠️ le niveau n\'a pas pu être réglé, change-le dans sa fiche.' : '');
       createBox.querySelector('#cs-name').value='';
       createBox.querySelector('#cs-email').value='';
       createBox.querySelector('#cs-pass').value='';
@@ -5431,6 +5456,15 @@ async function renderDashboard(){
     const dmBtn = el(`<button class="btn ghost small" style="margin-left:6px;">💬 Message${isThreadUnread(p.id)?' <span style="color:var(--seal);">●</span>':''}</button>`);
     dmBtn.onclick = (e)=>{ e.stopPropagation(); enterInbox(p.id); };
     header.appendChild(dmBtn);
+    const lvlSel = el(`<label style="margin-left:6px;font-size:12px;color:var(--ink-soft);">Niveau <select style="font-size:12px;padding:3px 6px;">${PERSO_LEVELS.includes(p.level)?'':'<option value="" selected>—</option>'}${PERSO_LEVELS.map(k=>`<option value="${k}" ${p.level===k?'selected':''}>${LEVEL_LABELS[k]}</option>`).join('')}</select></label>`);
+    lvlSel.onclick = (e)=>e.stopPropagation();
+    lvlSel.querySelector('select').onchange = async (e)=>{
+      const v = e.target.value; if(!v) return;
+      const { error } = await sb.from('profiles').update({ level:v }).eq('id', p.id);
+      if(error){ alert('Erreur : ' + error.message); e.target.value = PERSO_LEVELS.includes(p.level)?p.level:''; return; }
+      p.level = v; render();
+    };
+    header.appendChild(lvlSel);
     const pend = giftsPending(p.id, rows);
     if(pend.length){
       if(shopActive() || (SHOP_CHOICES||[]).length){
