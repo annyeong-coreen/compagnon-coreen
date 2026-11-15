@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-15-2';
+  var APP_VERSION = '2026-11-15-3';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1665,8 +1665,7 @@ async function renderSidebar(){
     box.appendChild(el(`<div class="empty-level">Aucune leçon dans cet espace pour l'instant.</div>`));
     return box;
   }
-  if(hasPersonal) box.appendChild(el('<h3 style="margin:14px 0 8px;font-size:15px;">Leçons du cours</h3>'));
-  if(list.length===0) box.appendChild(el(`<div class="empty-level">Aucune leçon commune pour l'instant.</div>`));
+  if(hasPersonal && list.length) box.appendChild(el('<h3 style="margin:14px 0 8px;font-size:15px;">Leçons du cours</h3>'));
   const path = el('<div class="lesson-path"></div>');
   list.forEach((l,idx)=>{
     const unlocked = isUnlockedSync(list, idx);
@@ -1686,13 +1685,13 @@ async function renderSidebar(){
     path.appendChild(node);
   });
   box.appendChild(path);
-  if(hasPersonal) renderPersonalSection(box, state.level, mine);
+  if(hasPersonal) renderPersonalSection(box, state.level, mine, list.length>0);
   return box;
 }
 // Élève : « Mes leçons personnelles » rangées en dossiers
-function renderPersonalSection(box, lvl, mine){
+function renderPersonalSection(box, lvl, mine, withCommon){
   const me = SESSION.user.id;
-  box.appendChild(el('<h3 style="margin:18px 0 8px;font-size:15px;">👤 Mes leçons personnelles</h3>'));
+  box.appendChild(el(`<h3 style="margin:${withCommon?18:6}px 0 8px;font-size:15px;">👤 ${withCommon?'Mes leçons personnelles':'Mes leçons'}</h3>`));
   state.pfOpen = state.pfOpen || {};
   const wrap = el('<div class="personal-tree"></div>');
   const activeFolderIds = new Set(); const act = mine.find(l=>l.id===state.lessonId);
@@ -4793,19 +4792,26 @@ function openAddNodeModal(node){
   const close = ()=> bg.remove();
   const go = (n, form)=>{ state.mopen[manageNodeKey(n)||'sp:'+n.space] = true; state.mopen['sp:'+n.space] = true; if(n.studentId) state.mopen['st:'+n.space+':'+n.studentId] = true; manageSelect(n.space, n.studentId ? n : null); state.mshowForm = !!form; close(); render(); };
   if(isSpace){
-    const b1 = el('<button class="btn celadon" style="width:100%;margin-bottom:10px;">📘 Nouvelle leçon pour tous (leçon commune)</button>'); b1.onclick = ()=> go(node, true);
-    modal.appendChild(b1);
+    const perso = PERSO_LEVELS.includes(node.space);
+    const spaceFor = (id)=>{ const pp = (ALL_PROFILES||[]).find(x=>x.id===id); return (perso && pp && PERSO_LEVELS.includes(pp.level)) ? pp.level : node.space; };
+    const b1 = el(`<button class="btn ${perso?'ghost':'celadon'}" style="width:100%;margin-bottom:10px;">${perso?'👥 Leçon commune à tous les élèves de '+escapeHtml(LEVEL_LABELS[node.space]):'📘 Nouvelle leçon pour tous (leçon commune)'}</button>`); b1.onclick = ()=> go(node, true);
+    if(!perso) modal.appendChild(b1);
     if(node.space!=='groupe'){
-      modal.appendChild(el('<div style="font-weight:600;margin:12px 0 6px;">Ou pour un seul élève :</div>'));
+      modal.appendChild(el(`<div style="font-weight:600;margin:12px 0 6px;">${perso?'Pour un seul élève (le plus courant) :':'Ou pour un seul élève :'}</div>`));
       const sel = el('<select id="an-student" style="width:100%;margin-bottom:8px;"></select>');
       (ALL_PROFILES||[]).filter(p=>p.role==='student' && !p.archived).sort((a,b)=>(b.level===node.space)-(a.level===node.space) || String(a.name).localeCompare(String(b.name))).forEach(p=> sel.appendChild(el(`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)));
       modal.appendChild(sel);
       modal.appendChild(el('<input type="text" id="an-name" placeholder="Nom du dossier (ex. Octobre)" maxlength="60" style="width:100%;margin-bottom:8px;box-sizing:border-box;">'));
       const b2 = el('<button class="btn ghost" style="margin-right:8px;">📁 Créer le dossier</button>');
-      b2.onclick = async ()=>{ const name = modal.querySelector('#an-name').value.trim(); if(!sel.value){ st.textContent='Choisis un élève.'; return; } if(!name){ st.textContent='Donne un nom au dossier.'; return; } await createFolderAt({space:node.space, studentId:sel.value, folderId:null}, name, st, go); };
+      b2.onclick = async ()=>{ const name = modal.querySelector('#an-name').value.trim(); if(!sel.value){ st.textContent='Choisis un élève.'; return; } if(!name){ st.textContent='Donne un nom au dossier.'; return; } await createFolderAt({space:spaceFor(sel.value), studentId:sel.value, folderId:null}, name, st, go); };
       const b3 = el('<button class="btn ghost">➕ Leçon pour cet élève</button>');
-      b3.onclick = ()=>{ if(!sel.value){ st.textContent='Choisis un élève.'; return; } go({space:node.space, studentId:sel.value, folderId:null}, true); };
+      b3.onclick = ()=>{ if(!sel.value){ st.textContent='Choisis un élève.'; return; } go({space:spaceFor(sel.value), studentId:sel.value, folderId:null}, true); };
       modal.appendChild(b2); modal.appendChild(b3);
+    }
+    if(perso){
+      modal.appendChild(el('<div style="font-weight:600;margin:16px 0 6px;">Ou pour toute la classe :</div>'));
+      modal.appendChild(b1);
+      modal.appendChild(el('<div class="note" style="font-size:12px;">Tous les élèves de ce niveau la verront, y compris ceux qui arriveront plus tard. Pratique pour un thème commun (par exemple les classificateurs).</div>'));
     }
   } else {
     modal.appendChild(el(`<div class="note" style="margin-bottom:10px;">Pour : <b>${escapeHtml(studentName(node.studentId))}</b></div>`));
@@ -4885,6 +4891,27 @@ async function renderManage(){
     wrap.appendChild(el(`<h2 style="margin:0 0 6px;">Gérer les leçons — ${LEVEL_LABELS[state.level]}</h2>`));
   }
   if(state.level==='topik') wrap.appendChild(topikAdminBlock());
+  if(!mnode && PERSO_LEVELS.includes(state.level)){
+    if(state.mshowForm){
+      const cn = el(`<div class="note mg-keep" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1;min-width:200px;">👥 <b>Leçon commune</b> : tous les élèves de ${escapeHtml(LEVEL_LABELS[state.level])} la verront, y compris ceux qui arriveront plus tard.</span></div>`);
+      const cc = el('<button class="btn ghost small">✕ Annuler</button>'); cc.onclick = ()=>{ state.mshowForm = false; render(); }; cn.appendChild(cc); wrap.appendChild(cn);
+    } else {
+      const ch = el('<div class="mg-keep section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:20px;"><h3 style="margin-top:0;">Pour qui est la nouvelle leçon ?</h3></div>');
+      const sts = (ALL_PROFILES||[]).filter(x=>x.role==='student' && !x.archived).sort((a,b)=>(b.level===state.level)-(a.level===state.level) || String(a.name).localeCompare(String(b.name)));
+      if(!sts.length) ch.appendChild(el('<div class="note">Aucun élève pour l\'instant : crée un compte dans « Suivi élèves ».</div>'));
+      const row = el('<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>');
+      sts.forEach(x=>{
+        const b = el(`<button class="btn celadon small">${escapeHtml(x.name)}${PERSO_LEVELS.includes(x.level)?` <small style="opacity:.8;">· ${escapeHtml(LEVEL_LABELS[x.level])}</small>`:''}</button>`);
+        b.onclick = ()=>{ const sp = PERSO_LEVELS.includes(x.level) ? x.level : state.level; const n = {space:sp, studentId:x.id, folderId:null}; state.mopen = state.mopen||{}; state.mopen['sp:'+sp]=true; state.mopen['st:'+sp+':'+x.id]=true; manageSelect(sp, n); state.mshowForm = true; render(); };
+        row.appendChild(b);
+      });
+      ch.appendChild(row);
+      const bc = el(`<button class="btn ghost small">👥 Leçon commune à tous les élèves de ${escapeHtml(LEVEL_LABELS[state.level])}</button>`); bc.onclick = ()=>{ state.mshowForm = true; render(); };
+      ch.appendChild(bc);
+      ch.appendChild(el('<div style="font-size:12px;color:var(--ink-soft);margin-top:8px;">Une leçon pour un élève n\'est vue que par lui (et par toi). Une leçon commune est vue par tous les élèves du niveau, utile pour un thème commun comme les classificateurs.</div>'));
+      wrap.appendChild(ch);
+    }
+  }
   wrap.appendChild(el('<div class="note" style="margin-bottom:20px;">Réservé au Mode Professeur. Une fois le vocabulaire entré, les fiches à mémoriser, les exercices, le quiz, le contrôle et les révisions sont générés automatiquement pour les élèves.</div>'));
 
   const form = el(`<div>
@@ -5018,9 +5045,9 @@ async function renderManage(){
     existing.appendChild(row);
   });
   wrap.appendChild(existing);
-  wrap.appendChild(buildBackupBox());
-  if(mnode && !state.mshowForm){
-    [...wrap.children].forEach(c=>{ if(!c.classList.contains('mg-keep') && !c.classList.contains('mg-existing')) c.style.display='none'; });
+  const bbox = buildBackupBox(); bbox.classList.add('mg-bb'); wrap.appendChild(bbox);
+  if(!state.mshowForm && (mnode || PERSO_LEVELS.includes(state.level))){
+    [...wrap.children].forEach(c=>{ if(c.classList.contains('mg-keep') || c.classList.contains('mg-existing') || (!mnode && c.classList.contains('mg-bb'))) return; c.style.display='none'; });
   }
   return wrap;
 }
@@ -5462,6 +5489,10 @@ async function renderDashboard(){
       const v = e.target.value; if(!v) return;
       const { error } = await sb.from('profiles').update({ level:v }).eq('id', p.id);
       if(error){ alert('Erreur : ' + error.message); e.target.value = PERSO_LEVELS.includes(p.level)?p.level:''; return; }
+      const r1 = await sb.from('lessons').update({ space:v }).eq('student_id', p.id).in('space', PERSO_LEVELS);
+      const r2 = await sb.from('lesson_folders').update({ space:v }).eq('student_id', p.id).in('space', PERSO_LEVELS);
+      if(r1.error || r2.error){ alert('Le niveau est changé, mais les leçons de cet élève n\'ont pas pu être déplacées : ' + ((r1.error||r2.error).message)); }
+      PERSO_LEVELS.forEach(k=>{ delete LESSONS_CACHE[k]; }); try{ await sbLoadFolders(); }catch(e){}
       p.level = v; render();
     };
     header.appendChild(lvlSel);
