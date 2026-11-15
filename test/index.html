@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-15-3';
+  var APP_VERSION = '2026-11-15-4';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1036,7 +1036,16 @@ function isUnlockedSync(list, idx){
 }
 
 /* ---------------- RENDER ---------------- */
+let RENDER_BUSY = false, RENDER_AGAIN = false;
 async function render(){
+  // Un seul affichage à la fois : si un autre est en cours, on en refait un juste après (évite la page dupliquée)
+  if(RENDER_BUSY){ RENDER_AGAIN = true; return; }
+  RENDER_BUSY = true;
+  try{
+    do{ RENDER_AGAIN = false; await renderOnce(); }while(RENDER_AGAIN);
+  } finally { RENDER_BUSY = false; }
+}
+async function renderOnce(){
   if(controlGuardCheckView()) return;
   const app = document.getElementById('app');
   app.innerHTML = '';
