@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-15-4';
+  var APP_VERSION = '2026-11-15-5';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1577,7 +1577,7 @@ function renderSpaceTabs(){
       state.space = key; state.lessonId=null; state.controlResult=null; state.quizResult=null;
       state.tab='cours'; state.exerciseIndex=0; state.exerciseCorrectCount=0; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.puzzleMode=false; state.globalQuizMode=false; state.topikLevel=null;
       if(key==='dashboard'){ ALL_STUDY_DAYS = null; ALL_PROFILES = await sbAllProfiles(); ALL_PROGRESS = await sbAllProgress(); ALL_GIFTS = await sbAllGifts(); await sbLoadShop(); GROUPS = await sbAllGroups(); }
-      else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); await sbLoadFolders(); state.mnode = null; state.mshowForm = false; }
+      else if(key==='manage'){ ALL_PROFILES = await sbAllProfiles(); GROUPS = await sbAllGroups(); await sbLoadFolders(); state.mnode = null; state.mshowForm = false; }
       else if(key==='suggest'){ SUGGESTIONS = await sbSuggestions(); }
       else if(key==='puzzles'){ await sbLoadPuzzlePhotos(); }
       else if(key==='boutique'){ ALL_PROFILES = await sbAllProfiles(); await sbLoadShop(); ALL_GIFTS = await sbAllGifts(); }
@@ -4724,7 +4724,9 @@ function topikResultsBlock(studentId){
 
 /* ---- Page professeure : arbre des espaces, élèves et dossiers ---- */
 function manageNodeKey(n){ return n ? (n.folderId ? 'f:'+n.folderId : 'st:'+n.space+':'+n.studentId) : null; }
-function manageSelect(space, node){ state.level = space; state.mnode = node; state.mshowForm = false; state.lessonId = null; }
+function manageSelect(space, node){ state.level = space; state.mnode = node; state.mshowForm = false; state.lessonId = null; state.mgroup = null; }
+function startGroupLesson(gid){ state.mopen = state.mopen||{}; state.mopen['sp:groupe'] = true; manageSelect('groupe', null); state.mgroup = gid || null; state.mshowForm = true; render(); }
+function groupNameOf(id){ const g=(GROUPS||[]).find(x=>x.id===id); return g ? g.name : 'groupe'; }
 async function renderManageTree(box){
   state.mopen = state.mopen || {};
   const q = (state.msearch||'').trim().toLowerCase();
@@ -4817,6 +4819,18 @@ function openAddNodeModal(node){
       b3.onclick = ()=>{ if(!sel.value){ st.textContent='Choisis un élève.'; return; } go({space:spaceFor(sel.value), studentId:sel.value, folderId:null}, true); };
       modal.appendChild(b2); modal.appendChild(b3);
     }
+    if(perso || node.space==='groupe'){
+      modal.appendChild(el('<div style="font-weight:600;margin:16px 0 6px;">Pour un groupe :</div>'));
+      if(!(GROUPS||[]).length) modal.appendChild(el('<div class="note" style="font-size:12px;">Aucun groupe pour l\'instant (à créer dans « Cours en groupe »).</div>'));
+      else {
+        const gsel = el('<select style="width:100%;margin-bottom:8px;"></select>');
+        GROUPS.forEach(g=> gsel.appendChild(el(`<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`)));
+        modal.appendChild(gsel);
+        const bg2 = el('<button class="btn ghost">👪 Leçon pour ce groupe</button>'); bg2.onclick = ()=>{ close(); startGroupLesson(gsel.value); };
+        modal.appendChild(bg2);
+        modal.appendChild(el('<div class="note" style="font-size:12px;margin-top:6px;">Tous les membres du groupe la verront dans « Cours en groupe », y compris les futurs membres.</div>'));
+      }
+    }
     if(perso){
       modal.appendChild(el('<div style="font-weight:600;margin:16px 0 6px;">Ou pour toute la classe :</div>'));
       modal.appendChild(b1);
@@ -4900,14 +4914,15 @@ async function renderManage(){
     wrap.appendChild(el(`<h2 style="margin:0 0 6px;">Gérer les leçons — ${LEVEL_LABELS[state.level]}</h2>`));
   }
   if(state.level==='topik') wrap.appendChild(topikAdminBlock());
-  if(!mnode && PERSO_LEVELS.includes(state.level)){
+  if(!mnode && (PERSO_LEVELS.includes(state.level) || state.level==='groupe')){
+    const isG = state.level==='groupe';
     if(state.mshowForm){
-      const cn = el(`<div class="note mg-keep" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1;min-width:200px;">👥 <b>Leçon commune</b> : tous les élèves de ${escapeHtml(LEVEL_LABELS[state.level])} la verront, y compris ceux qui arriveront plus tard.</span></div>`);
+      const cn = el(`<div class="note mg-keep" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1;min-width:200px;">${isG ? (state.mgroup ? '👪 <b>Leçon du groupe « '+escapeHtml(groupNameOf(state.mgroup))+' »</b> : seuls ses membres la verront (y compris les futurs membres).' : '👪 <b>Leçon pour tous les groupes</b> : tous les membres de tous les groupes la verront.') : '👥 <b>Leçon commune</b> : tous les élèves de '+escapeHtml(LEVEL_LABELS[state.level])+' la verront, y compris ceux qui arriveront plus tard.'}</span></div>`);
       const cc = el('<button class="btn ghost small">✕ Annuler</button>'); cc.onclick = ()=>{ state.mshowForm = false; render(); }; cn.appendChild(cc); wrap.appendChild(cn);
     } else {
       const ch = el('<div class="mg-keep section-block" style="border:1.5px dashed var(--celadon-dark);border-radius:10px;padding:16px 18px;margin-bottom:20px;"><h3 style="margin-top:0;">Pour qui est la nouvelle leçon ?</h3></div>');
-      const sts = (ALL_PROFILES||[]).filter(x=>x.role==='student' && !x.archived).sort((a,b)=>(b.level===state.level)-(a.level===state.level) || String(a.name).localeCompare(String(b.name)));
-      if(!sts.length) ch.appendChild(el('<div class="note">Aucun élève pour l\'instant : crée un compte dans « Suivi élèves ».</div>'));
+      const sts = isG ? [] : (ALL_PROFILES||[]).filter(x=>x.role==='student' && !x.archived).sort((a,b)=>(b.level===state.level)-(a.level===state.level) || String(a.name).localeCompare(String(b.name)));
+      if(!isG && !sts.length) ch.appendChild(el('<div class="note">Aucun élève pour l\'instant : crée un compte dans « Suivi élèves ».</div>'));
       const row = el('<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>');
       sts.forEach(x=>{
         const b = el(`<button class="btn celadon small">${escapeHtml(x.name)}${PERSO_LEVELS.includes(x.level)?` <small style="opacity:.8;">· ${escapeHtml(LEVEL_LABELS[x.level])}</small>`:''}</button>`);
@@ -4915,8 +4930,17 @@ async function renderManage(){
         row.appendChild(b);
       });
       ch.appendChild(row);
-      const bc = el(`<button class="btn ghost small">👥 Leçon commune à tous les élèves de ${escapeHtml(LEVEL_LABELS[state.level])}</button>`); bc.onclick = ()=>{ state.mshowForm = true; render(); };
-      ch.appendChild(bc);
+      if(!isG){
+        const bc = el(`<button class="btn ghost small">👥 Leçon commune à tous les élèves de ${escapeHtml(LEVEL_LABELS[state.level])}</button>`); bc.onclick = ()=>{ state.mshowForm = true; render(); };
+        ch.appendChild(bc);
+      }
+      if((GROUPS||[]).length){
+        ch.appendChild(el(`<div style="font-weight:600;margin:${isG?0:12}px 0 6px;font-size:14px;">${isG?'Pour quel groupe ?':'Ou pour un groupe (tous ses membres la verront) :'}</div>`));
+        const gr = el('<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;"></div>');
+        GROUPS.forEach(g=>{ const b = el(`<button class="btn celadon small">👪 ${escapeHtml(g.name)}</button>`); b.onclick = ()=> startGroupLesson(g.id); gr.appendChild(b); });
+        ch.appendChild(gr);
+      } else if(isG) ch.appendChild(el('<div class="note">Aucun groupe pour l\'instant : crée-en un dans l\'onglet « Cours en groupe ».</div>'));
+      if(isG){ const ball = el('<button class="btn ghost small">👪 Leçon pour tous les groupes</button>'); ball.onclick = ()=> startGroupLesson(null); ch.appendChild(ball); }
       ch.appendChild(el('<div style="font-size:12px;color:var(--ink-soft);margin-top:8px;">Une leçon pour un élève n\'est vue que par lui (et par toi). Une leçon commune est vue par tous les élèves du niveau, utile pour un thème commun comme les classificateurs.</div>'));
       wrap.appendChild(ch);
     }
@@ -5007,7 +5031,7 @@ async function renderManage(){
     const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
     const list = await lessonsForLevel(state.level);
     const id = state.level[0] + (list.length+1) + '-' + Date.now().toString(36);
-    const { error } = await sbAddLesson(Object.assign({id, space:state.level, position:list.length+1, title, vowels:[], vocab, dialogue, grammar, pass_score:passScore, translations, audio_url:pendingAudioUrl}, mnode ? {student_id:mnode.studentId, folder_id:mnode.folderId||null} : {}));
+    const { error } = await sbAddLesson(Object.assign({id, space:state.level, position:list.length+1, title, vowels:[], vocab, dialogue, grammar, pass_score:passScore, translations, audio_url:pendingAudioUrl}, mnode ? {student_id:mnode.studentId, folder_id:mnode.folderId||null} : (state.level==='groupe' && state.mgroup ? {group_id:state.mgroup} : {})));
     addBtn.disabled = false;
     if(error){
       addStatus.style.color='var(--danger)';
@@ -5027,7 +5051,7 @@ async function renderManage(){
   const existing = el('<div class="section-block mg-existing" style="margin-top:30px;"><h3>Leçons existantes</h3></div>');
   if(list.length===0){ existing.appendChild(el('<div class="empty-level">Aucune pour l\'instant.</div>')); }
   list.forEach(l=>{
-    const row = el(`<div class="vocab-row" style="align-items:center;"><span>${escapeHtml(l.title)}${l.audio_url?' 🔊':''}</span><span></span><span></span></div>`);
+    const row = el(`<div class="vocab-row" style="align-items:center;"><span>${escapeHtml(l.title)}${l.audio_url?' 🔊':''}${l.group_id?` <small style="opacity:.7;">· 👪 ${escapeHtml(groupNameOf(l.group_id))}</small>`:(l.space==='groupe'?' <small style="opacity:.7;">· tous les groupes</small>':'')}</span><span></span><span></span></div>`);
     const editBtn = el('<button class="btn ghost small">✏️ Modifier</button>');
     editBtn.onclick = ()=> openEditLessonModal(l);
     const assignBtn = el('<button class="btn ghost small" style="margin-left:6px;">🎯 Assigner</button>');
@@ -5055,7 +5079,7 @@ async function renderManage(){
   });
   wrap.appendChild(existing);
   const bbox = buildBackupBox(); bbox.classList.add('mg-bb'); wrap.appendChild(bbox);
-  if(!state.mshowForm && (mnode || PERSO_LEVELS.includes(state.level))){
+  if(!state.mshowForm && (mnode || PERSO_LEVELS.includes(state.level) || state.level==='groupe')){
     [...wrap.children].forEach(c=>{ if(c.classList.contains('mg-keep') || c.classList.contains('mg-existing') || (!mnode && c.classList.contains('mg-bb'))) return; c.style.display='none'; });
   }
   return wrap;
