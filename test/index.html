@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-17-4';
+  var APP_VERSION = '2026-11-17-6';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1506,7 +1506,7 @@ const GUIDE_ITEMS = [
   ['À quoi sert mon puzzle 🧩 ?', 'Chaque contrôle réussi te donne une pièce. Quand les 6 pièces sont réunies, la photo se révèle avec le nom du lieu en Corée et une phrase pour en apprendre plus. Tu peux revoir les photos terminées en cliquant dessus. Chaque image terminée te donne aussi droit à un petit cadeau (voir « Comment choisir mon cadeau ? »).'],
   ['Comment choisir mon cadeau ? 🎁', 'Quand tu termines une image du puzzle, une boutique s\'ouvre sous le puzzle : clique sur « Choisir mon cadeau », choisis un article, puis confirme. Tu peux changer d\'avis tant que ta professeure ne t\'a pas remis le cadeau. Si le cadeau doit être envoyé par la poste, elle te demandera ton adresse en message privé sur Discord. Avant la fin d\'une image, la boutique reste cachée : c\'est la surprise !'],
   ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom. Tu préfères rester discret(e) ? Coche « 🙈 Je préfère rester anonyme » avant l\'envoi : ton prénom ne sera pas montré aux autres élèves (ta professeure, elle, le voit toujours).'],
-  ['Comment traduire du français vers le coréen ?', 'Dans l\'onglet « Traduction » d\'une leçon, choisis « 🇫🇷 → 🇰🇷 Traduire en coréen » : tu vois le texte en français, tu écris ta version en coréen, puis tu compares avec le texte de la leçon. Pour un mot seul, va dans « Mots à revoir » et utilise « Chercher en coréen » : tape le mot en français, puis clique sur le mot coréen qui convient. Plusieurs réponses sont souvent possibles : en cas de doute, demande à ta professeur.'],
+  ['Comment traduire du français vers le coréen ?', 'Certains textes de l\'onglet « Traduction » sont à traduire du français vers le coréen : ta professeur choisit le sens de chaque texte. Tu écris ta version en coréen, tu la valides, puis tu vois la réponse pour comparer. Pour un mot seul, va dans « Mots à revoir » et utilise « Chercher en coréen » : tape le mot en français, puis clique sur le mot coréen qui convient. Plusieurs réponses sont souvent possibles : en cas de doute, demande à ta professeur.'],
   ['Qu\'est-ce que « Mes leçons personnelles » ?', 'Si ta professeure prépare des leçons rien que pour toi, elles apparaissent dans la colonne de gauche, sous « Leçons du cours », dans « 👤 Mes leçons personnelles ». Elles sont rangées en dossiers (par exemple Octobre, puis Semaine 1) : clique sur un dossier pour l\'ouvrir. Toi seul(e) et ta professeure pouvez les voir. Tu les suis comme les autres leçons, avec les mêmes étapes. Si tu n\'en as pas, cette partie n\'apparaît pas : c\'est normal.'],
   ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
   ['Je reçois un e-mail de rappel : pourquoi ?', 'Si tu ne viens pas sur l\'outil pendant quelques jours, ta professeure t\'envoie un petit rappel par e-mail (au maximum une fois par semaine). Pour les arrêter ou changer le nombre de jours : ⚙️ Options → 🔔 Rappels par email.'],
@@ -3773,6 +3773,23 @@ function renderPractice(lesson){
   return wrap;
 }
 
+
+function bindTransDirLabels(root, pre){
+  const sel = root.querySelector('#'+pre+'-trans-dir'), ko = root.querySelector('#'+pre+'-lbl-ko'), fr = root.querySelector('#'+pre+'-lbl-fr'), note = root.querySelector('[data-dirnote]');
+  if(!sel||!ko||!fr) return;
+  const upd = ()=>{
+    if(sel.value==='fk'){
+      ko.textContent = 'Texte en coréen = la réponse (révélée à l\'élève quand il a fini)';
+      fr.textContent = 'Texte en français = ce que l\'élève doit traduire en coréen';
+      if(note) note.textContent = 'L\'élève voit seulement le texte français, écrit sa version en coréen, la valide, puis voit ton texte coréen pour comparer. Aucune aide automatique.';
+    } else {
+      ko.textContent = 'Texte en coréen = ce que l\'élève doit traduire en français';
+      fr.textContent = 'Traduction de référence en français (optionnelle — révélée après la traduction de l\'élève)';
+      if(note) note.textContent = 'L\'élève voit le texte coréen et peut cliquer sur les mots pour de l\'aide.';
+    }
+  };
+  sel.onchange = upd; upd();
+}
 function renderTraductionReverse(wrap, item, opts){
   const dk = (opts.generated ? 'practiceDraft' : 'translationDraft') + 'FK', vk = (opts.generated ? 'practiceValidated' : 'translationValidated') + 'FK';
   wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Traduis ce texte en coréen. Il n\'y a pas une seule bonne réponse : valide ta version, puis compare avec le texte coréen de la leçon.</div>'));
@@ -3808,16 +3825,6 @@ function renderTraduction(lesson, opts){
   const item = items[0];
   // Choix du sens : coréen → français (par défaut) ou français → coréen (si une référence française existe)
   if(item.dir==='fk' && item.ref){ return renderTraductionReverse(wrap, item, opts); }
-  if(item.ref && item.dir!=='kf'){
-    const dirRow = el('<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;"></div>');
-    [['kf','🇰🇷 → 🇫🇷 Traduire en français'],['fk','🇫🇷 → 🇰🇷 Traduire en coréen']].forEach(([k,label])=>{
-      const b = el(`<button type="button" class="btn ${ (state.trDir||'kf')===k?'celadon':'ghost'} small">${label}</button>`);
-      b.onclick = ()=>{ state.trDir = k; render(); };
-      dirRow.appendChild(b);
-    });
-    wrap.appendChild(dirRow);
-    if(state.trDir==='fk') return renderTraductionReverse(wrap, item, opts);
-  }
   wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Traduis ce texte en français. Bloqué sur un mot ? Clique dessus directement dans le texte pour voir une proposition de traduction.</div>'));
   wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ Ces traductions sont automatiques. Quand un mot a plusieurs sens possibles, tu verras plusieurs propositions séparées par "/" — à toi de choisir celle qui colle au contexte, ou de rester prudent si aucune ne te semble sûre. En cas de doute, fie-toi plutôt à la liste préparée par ta professeur ci-dessous, ou demande-lui directement dans le chat.</div>`));
 
@@ -5036,9 +5043,9 @@ async function renderManage(){
       <div id="mg-vocab-preview" class="note" style="margin-top:8px;font-size:12px;">Aucun mot détecté pour l'instant.</div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="mg-grammar"></textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Le cours lui-même (phrases, vocabulaire, dialogues) se colle dans « Contenu du cours » plus haut, sinon il n'alimente ni les exercices ni le quiz. <button type="button" class="btn ghost small" id="mg-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Sens de l'exercice de traduction</label><select id="mg-trans-dir" style="width:100%;"><option value="">L'élève choisit (coréen → français ou français → coréen)</option><option value="kf">Coréen → français seulement (avec aide au clic sur les mots)</option><option value="fk">Français → coréen seulement, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;">Pour « français → coréen », remplis le texte en coréen (la réponse) et le texte en français (ce que l'élève traduit).</div></div>
-    <div class="field"><label>Texte en coréen (optionnel) — l'élève le traduit en français, ou le retrouve après avoir traduit le français</label><textarea data-ko="1" id="mg-trans-text" placeholder="Colle ou écris le texte en coréen..." style="min-height:80px;"></textarea></div>
-    <div class="field"><label>Texte en français = traduction de référence (optionnel) — sert aux deux exercices : révélée après la traduction coréen → français, et proposée à traduire en coréen (français → coréen)</label>
+    <div class="field"><label>Sens de l'exercice de traduction (c'est toi qui choisis)</label><select id="mg-trans-dir" style="width:100%;"><option value="kf">Coréen → français (l'élève traduit le texte coréen, avec l'aide au clic sur les mots)</option><option value="fk">Français → coréen, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;" data-dirnote="1"></div></div>
+    <div class="field"><label id="mg-lbl-ko">Texte en coréen (optionnel)</label><textarea data-ko="1" id="mg-trans-text" placeholder="Colle ou écris le texte en coréen..." style="min-height:80px;"></textarea></div>
+    <div class="field"><label id="mg-lbl-fr">Traduction de référence en français (optionnelle)</label>
       <textarea id="mg-trans-ref" placeholder="Tu peux l'écrire ici, ou juste l'enregistrer à voix haute ci-dessous — les deux sont possibles."></textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
         <button type="button" class="btn ghost small" id="mg-ref-rec-btn">🎙️ Enregistrer plutôt à l'oral</button>
@@ -5054,7 +5061,7 @@ async function renderManage(){
         <span id="mg-rec-status" style="font-size:12px;color:var(--ink-soft);">Enregistre-toi en train de dire les nouveaux mots avec la bonne intonation — l'élève pourra la réécouter à volonté.</span>
       </div>
     </div>
-  </div>`);
+  </div>`); bindTransDirLabels(form2,'mg');
   wrap.appendChild(form2);
 
   form2.querySelector('#mg-grammar-move').onclick = ()=>{
@@ -5292,9 +5299,9 @@ function openEditLessonModal(lesson){
       <div id="em-vocab-preview" class="note" style="margin-top:8px;font-size:12px;"></div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="em-grammar">${escapeHtml((lesson.grammar||[]).join('\n'))}</textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Si tout ton cours se trouve ici, déplace-le vers « Contenu du cours » pour qu'il alimente les exercices et le quiz. <button type="button" class="btn ghost small" id="em-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Sens de l'exercice de traduction</label><select id="em-trans-dir" style="width:100%;"><option value="">L'élève choisit (coréen → français ou français → coréen)</option><option value="kf"${(t.dir==='kf')?' selected':''}>Coréen → français seulement (avec aide au clic sur les mots)</option><option value="fk"${(t.dir==='fk')?' selected':''}>Français → coréen seulement, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;">Pour « français → coréen », remplis le texte en coréen (la réponse) et le texte en français (ce que l'élève traduit).</div></div>
-    <div class="field"><label>Texte en coréen (optionnel) — l'élève le traduit en français, ou le retrouve après avoir traduit le français</label><textarea data-ko="1" id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
-    <div class="field"><label>Texte en français = traduction de référence (optionnel) — sert aux deux exercices (coréen → français et français → coréen)</label>
+    <div class="field"><label>Sens de l'exercice de traduction (c'est toi qui choisis)</label><select id="em-trans-dir" style="width:100%;"><option value="kf"${(t.dir==='kf')?' selected':''}>Coréen → français (l'élève traduit le texte coréen, avec l'aide au clic sur les mots)</option><option value="fk"${(t.dir==='fk')?' selected':''}>Français → coréen, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;" data-dirnote="1"></div></div>
+    <div class="field"><label id="em-lbl-ko">Texte en coréen (optionnel)</label><textarea data-ko="1" id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
+    <div class="field"><label id="em-lbl-fr">Traduction de référence en français (optionnelle)</label>
       <textarea id="em-trans-ref">${escapeHtml(t.ref||'')}</textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
         <button type="button" class="btn ghost small" id="em-ref-rec-btn">🎙️ ${t.refAudio?'Remplacer':'Enregistrer'} à l'oral</button>
@@ -5309,7 +5316,7 @@ function openEditLessonModal(lesson){
       <div id="em-notify-box" style="display:none;margin-top:8px;"><input type="text" id="em-notify-note" maxlength="140" placeholder="Ce qui a changé (facultatif) — ex. : 3 nouveaux mots ajoutés"></div>
     </div>
     <div class="modal-actions"></div>
-  </div>`);
+  </div>`); bindTransDirLabels(form2,'em');
   modal.appendChild(form2);
   form2.querySelector('#em-notify').onchange = (e)=>{ form2.querySelector('#em-notify-box').style.display = e.target.checked ? 'block' : 'none'; };
   form2.querySelector('#em-grammar-move').onclick = ()=>{
