@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-17-6';
+  var APP_VERSION = '2026-11-17-7';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -3809,7 +3809,7 @@ function renderTraductionReverse(wrap, item, opts){
     wrap.appendChild(again);
     wrap.appendChild(el('<h3 style="margin-top:22px;">Texte coréen de la leçon</h3>'));
     wrap.appendChild(el(`<div class="item-card kr" style="text-align:left;font-size:19px;line-height:2.2;padding:20px;margin-top:8px;white-space:pre-wrap;">${escapeHtml(item.text||'')}</div>`));
-    wrap.appendChild(el('<div class="note" style="margin-top:10px;font-size:12.5px;">Compare avec ta version : plusieurs phrases justes sont souvent possibles. Pour les mots, repasse en « 🇰🇷 → 🇫🇷 » et clique dessus.</div>'));
+    wrap.appendChild(el('<div class="note" style="margin-top:10px;font-size:12.5px;">Compare avec ta version : plusieurs phrases justes sont souvent possibles.</div>'));
   }
   return wrap;
 }
