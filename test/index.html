@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-15-6';
+  var APP_VERSION = '2026-11-17-4';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1506,6 +1506,7 @@ const GUIDE_ITEMS = [
   ['À quoi sert mon puzzle 🧩 ?', 'Chaque contrôle réussi te donne une pièce. Quand les 6 pièces sont réunies, la photo se révèle avec le nom du lieu en Corée et une phrase pour en apprendre plus. Tu peux revoir les photos terminées en cliquant dessus. Chaque image terminée te donne aussi droit à un petit cadeau (voir « Comment choisir mon cadeau ? »).'],
   ['Comment choisir mon cadeau ? 🎁', 'Quand tu termines une image du puzzle, une boutique s\'ouvre sous le puzzle : clique sur « Choisir mon cadeau », choisis un article, puis confirme. Tu peux changer d\'avis tant que ta professeure ne t\'a pas remis le cadeau. Si le cadeau doit être envoyé par la poste, elle te demandera ton adresse en message privé sur Discord. Avant la fin d\'une image, la boutique reste cachée : c\'est la surprise !'],
   ['Comment proposer une photo pour le puzzle ?', 'Dans Mon puzzle, tout en bas : « Envoyer une photo ». Indique où elle a été prise (c\'est obligatoire), et si tu veux une phrase et une source. La position GPS est supprimée avant l\'envoi. Ta professeure la valide : une fois acceptée, elle devient un puzzle pour tout le monde, avec ton prénom. Tu préfères rester discret(e) ? Coche « 🙈 Je préfère rester anonyme » avant l\'envoi : ton prénom ne sera pas montré aux autres élèves (ta professeure, elle, le voit toujours).'],
+  ['Comment traduire du français vers le coréen ?', 'Dans l\'onglet « Traduction » d\'une leçon, choisis « 🇫🇷 → 🇰🇷 Traduire en coréen » : tu vois le texte en français, tu écris ta version en coréen, puis tu compares avec le texte de la leçon. Pour un mot seul, va dans « Mots à revoir » et utilise « Chercher en coréen » : tape le mot en français, puis clique sur le mot coréen qui convient. Plusieurs réponses sont souvent possibles : en cas de doute, demande à ta professeur.'],
   ['Qu\'est-ce que « Mes leçons personnelles » ?', 'Si ta professeure prépare des leçons rien que pour toi, elles apparaissent dans la colonne de gauche, sous « Leçons du cours », dans « 👤 Mes leçons personnelles ». Elles sont rangées en dossiers (par exemple Octobre, puis Semaine 1) : clique sur un dossier pour l\'ouvrir. Toi seul(e) et ta professeure pouvez les voir. Tu les suis comme les autres leçons, avec les mêmes étapes. Si tu n\'en as pas, cette partie n\'apparaît pas : c\'est normal.'],
   ['Comment écrire à ma professeure ?', 'Dans l\'onglet Messagerie. Pour une idée ou un problème avec l\'outil, utilise 💡 ou ⚠️ en haut et indique la page concernée.'],
   ['Je reçois un e-mail de rappel : pourquoi ?', 'Si tu ne viens pas sur l\'outil pendant quelques jours, ta professeure t\'envoie un petit rappel par e-mail (au maximum une fois par semaine). Pour les arrêter ou changer le nombre de jours : ⚙️ Options → 🔔 Rappels par email.'],
@@ -1850,7 +1851,7 @@ function renderCours(lesson){
     lesson.grammar.forEach(g=>block.appendChild(el(`<div class="note" style="margin-bottom:10px;">${g}</div>`)));
     wrap.appendChild(block);
   }
-  wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);">Une fois à l'aise, passe à Exercices puis Quiz, et enfin au Contrôle — il faut au moins ${Math.round((lesson.pass_score||0.8)*100)}% pour débloquer la suite.</div>`));
+  wrap.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);">Une fois à l'aise, passe à Exercices puis Quiz, et enfin au Contrôle (réussite à partir de ${Math.round((lesson.pass_score||0.8)*100)}%).</div>`));
   return wrap;
 }
 
@@ -3415,6 +3416,11 @@ function renderWeakWordsPractice(){
     </div>
     <button class="btn celadon small" id="ww-one-btn" style="margin-top:8px;">Ajouter ce mot</button>
     <span id="ww-one-status" style="margin-left:8px;font-size:12px;color:var(--ink-soft);"></span>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px;">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">🇫🇷 → 🇰🇷 Tu connais le mot en français ? Cherche-le en coréen</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="ww-ffr" placeholder="voiture" style="flex:1;min-width:150px;font-size:16px;"><button class="btn ghost small" id="ww-f2k">Chercher en coréen</button></div>
+      <div id="ww-f2k-out" style="margin-top:8px;"></div>
+    </div>
     <details style="margin-top:14px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ajouter plusieurs mots d'un coup (coller des notes de cours)</summary>
     <div class="note" style="margin:8px 0;font-size:12px;">Colle même un morceau brut de tes notes de cours — l'outil repère tout seul les lignes où il y a du coréen suivi d'une traduction en français (ex. "바람이 불다 il y a du vent"), même sans séparateur. Les lignes sans traduction sont simplement ignorées.</div>
     <textarea id="ww-paste" data-ko="1" style="width:100%;min-height:80px;padding:8px 10px;border:1.5px solid var(--ink);border-radius:8px;font-size:13px;" placeholder="예쁘다 → joli, mignon"></textarea>
@@ -3431,6 +3437,34 @@ function renderWeakWordsPractice(){
     await sbAddWeakWord(kr, fr);
     render();
   };
+  const f2k = async ()=>{
+    const fr = addBox.querySelector('#ww-ffr').value.trim(); const out = addBox.querySelector('#ww-f2k-out');
+    if(!fr){ out.textContent = 'Écris un mot en français.'; return; }
+    out.textContent = 'Je cherche…';
+    try{
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(fr)}&langpair=fr|ko`);
+      const data = await res.json();
+      const raw = [];
+      const push = (t)=>{ t=String(t||'').trim(); if(t && isHangul(t) && t.length<=14 && !raw.includes(t)) raw.push(t); };
+      const best = data && data.responseData && data.responseData.translatedText; push(best);
+      (data.matches||[]).slice().sort((a,b)=>(parseFloat(b.match)||0)-(parseFloat(a.match)||0)).forEach(m=>push(m.translation));
+      const cands = raw.slice(0,5);
+      if(!cands.length){ out.textContent = 'Je ne trouve pas de mot coréen pour « '+fr+' ». Essaie un autre mot, ou demande à ta professeur.'; return; }
+      // on recoupe avec le dictionnaire : on garde ce qui existe vraiment
+      const checked = await Promise.all(cands.map(async c=>{ try{ const w = c.replace(/[^가-힣]/g,''); const v = await translateWordKoFr(w, {dictOnly:true, noStrip:true}); return (v && v.length) ? {kr:w, hint:v.slice(0,2).join(' / ')} : null; }catch(e){ return null; } }));
+      const good = []; checked.forEach(x=>{ if(x && !good.some(g=>g.kr===x.kr)) good.push(x); });
+      const list = good.length ? good : cands.map(c=>({kr:c, hint:'non vérifié'}));
+      out.innerHTML = '<div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">Clique sur le mot qui convient pour le garder dans « Mots à revoir » :</div>';
+      list.forEach(x=>{
+        const b = el(`<button type="button" class="var-chip" style="font-size:15px;padding:4px 12px;margin:0 6px 6px 0;border:1.5px solid var(--line);border-radius:999px;background:var(--paper);cursor:pointer;"><span class="kr">${escapeHtml(x.kr)}</span> <small style="opacity:.7;">${escapeHtml(x.hint)}</small></button>`);
+        b.onclick = async ()=>{ await sbAddWeakWord(x.kr, fr); render(); };
+        out.appendChild(b);
+      });
+      out.appendChild(el('<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Plusieurs mots possibles selon le contexte : en cas de doute, demande à ta professeur (Messagerie).</div>'));
+    }catch(e){ out.textContent = 'La recherche n\'a pas pu aboutir (connexion ?). Réessaie dans un instant.'; }
+  };
+  addBox.querySelector('#ww-f2k').onclick = f2k;
+  addBox.querySelector('#ww-ffr').onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); f2k(); } };
   addBox.querySelector('#ww-paste-btn').onclick = async ()=>{
     const raw = addBox.querySelector('#ww-paste').value;
     const status = addBox.querySelector('#ww-paste-status');
@@ -3739,6 +3773,29 @@ function renderPractice(lesson){
   return wrap;
 }
 
+function renderTraductionReverse(wrap, item, opts){
+  const dk = (opts.generated ? 'practiceDraft' : 'translationDraft') + 'FK', vk = (opts.generated ? 'practiceValidated' : 'translationValidated') + 'FK';
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Traduis ce texte en coréen. Il n\'y a pas une seule bonne réponse : valide ta version, puis compare avec le texte coréen de la leçon.</div>'));
+  wrap.appendChild(el(`<div class="item-card" style="text-align:left;font-size:17px;line-height:1.9;padding:20px;margin-bottom:16px;white-space:pre-wrap;">${escapeHtml(item.ref)}</div>`));
+  const ta = el('<textarea lang="ko" data-ko="1" style="width:100%;min-height:110px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:16px;" placeholder="Ta traduction en coréen… (bouton 한 pour écrire en hangul)"></textarea>');
+  ta.value = state[dk] || ''; ta.disabled = !!state[vk];
+  ta.oninput = (e)=>{ state[dk] = e.target.value; };
+  wrap.appendChild(ta);
+  if(!state[vk]){
+    const v = el('<button class="btn celadon" style="margin-top:10px;">✓ Valider ma traduction</button>');
+    v.onclick = ()=>{ if(!ta.value.trim()){ alert('Écris ta traduction avant de valider.'); return; } state[vk] = true; render(); };
+    wrap.appendChild(v);
+    wrap.appendChild(el('<div class="note" style="margin-top:16px;font-size:12.5px;">🔒 Valide d\'abord ta traduction pour voir le texte coréen de la leçon.</div>'));
+  } else {
+    const again = el('<button class="btn ghost small" style="margin-top:10px;">✏️ Modifier ma traduction</button>');
+    again.onclick = ()=>{ state[vk] = false; render(); };
+    wrap.appendChild(again);
+    wrap.appendChild(el('<h3 style="margin-top:22px;">Texte coréen de la leçon</h3>'));
+    wrap.appendChild(el(`<div class="item-card kr" style="text-align:left;font-size:19px;line-height:2.2;padding:20px;margin-top:8px;white-space:pre-wrap;">${escapeHtml(item.text||'')}</div>`));
+    wrap.appendChild(el('<div class="note" style="margin-top:10px;font-size:12.5px;">Compare avec ta version : plusieurs phrases justes sont souvent possibles. Pour les mots, repasse en « 🇰🇷 → 🇫🇷 » et clique dessus.</div>'));
+  }
+  return wrap;
+}
 function renderTraduction(lesson, opts){
   opts = opts || {};
   const dk = opts.generated ? 'practiceDraft' : 'translationDraft', vk = opts.generated ? 'practiceValidated' : 'translationValidated';
@@ -3749,6 +3806,18 @@ function renderTraduction(lesson, opts){
     return wrap;
   }
   const item = items[0];
+  // Choix du sens : coréen → français (par défaut) ou français → coréen (si une référence française existe)
+  if(item.dir==='fk' && item.ref){ return renderTraductionReverse(wrap, item, opts); }
+  if(item.ref && item.dir!=='kf'){
+    const dirRow = el('<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;"></div>');
+    [['kf','🇰🇷 → 🇫🇷 Traduire en français'],['fk','🇫🇷 → 🇰🇷 Traduire en coréen']].forEach(([k,label])=>{
+      const b = el(`<button type="button" class="btn ${ (state.trDir||'kf')===k?'celadon':'ghost'} small">${label}</button>`);
+      b.onclick = ()=>{ state.trDir = k; render(); };
+      dirRow.appendChild(b);
+    });
+    wrap.appendChild(dirRow);
+    if(state.trDir==='fk') return renderTraductionReverse(wrap, item, opts);
+  }
   wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Traduis ce texte en français. Bloqué sur un mot ? Clique dessus directement dans le texte pour voir une proposition de traduction.</div>'));
   wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:16px;font-size:12.5px;">⚠️ Ces traductions sont automatiques. Quand un mot a plusieurs sens possibles, tu verras plusieurs propositions séparées par "/" — à toi de choisir celle qui colle au contexte, ou de rester prudent si aucune ne te semble sûre. En cas de doute, fie-toi plutôt à la liste préparée par ta professeur ci-dessous, ou demande-lui directement dans le chat.</div>`));
 
@@ -4967,8 +5036,9 @@ async function renderManage(){
       <div id="mg-vocab-preview" class="note" style="margin-top:8px;font-size:12px;">Aucun mot détecté pour l'instant.</div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="mg-grammar"></textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Le cours lui-même (phrases, vocabulaire, dialogues) se colle dans « Contenu du cours » plus haut, sinon il n'alimente ni les exercices ni le quiz. <button type="button" class="btn ghost small" id="mg-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea data-ko="1" id="mg-trans-text" placeholder="Colle ou écris le texte en coréen que l'élève devra traduire..." style="min-height:80px;"></textarea></div>
-    <div class="field"><label>Ta traduction de référence (optionnel — fiable, révélée à la demande de l'élève, séparément du texte)</label>
+    <div class="field"><label>Sens de l'exercice de traduction</label><select id="mg-trans-dir" style="width:100%;"><option value="">L'élève choisit (coréen → français ou français → coréen)</option><option value="kf">Coréen → français seulement (avec aide au clic sur les mots)</option><option value="fk">Français → coréen seulement, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;">Pour « français → coréen », remplis le texte en coréen (la réponse) et le texte en français (ce que l'élève traduit).</div></div>
+    <div class="field"><label>Texte en coréen (optionnel) — l'élève le traduit en français, ou le retrouve après avoir traduit le français</label><textarea data-ko="1" id="mg-trans-text" placeholder="Colle ou écris le texte en coréen..." style="min-height:80px;"></textarea></div>
+    <div class="field"><label>Texte en français = traduction de référence (optionnel) — sert aux deux exercices : révélée après la traduction coréen → français, et proposée à traduire en coréen (français → coréen)</label>
       <textarea id="mg-trans-ref" placeholder="Tu peux l'écrire ici, ou juste l'enregistrer à voix haute ci-dessous — les deux sont possibles."></textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
         <button type="button" class="btn ghost small" id="mg-ref-rec-btn">🎙️ Enregistrer plutôt à l'oral</button>
@@ -5032,7 +5102,7 @@ async function renderManage(){
       const [word,meaning] = line.split('|').map(s=>s&&s.trim());
       return {word:word||'', meaning:meaning||''};
     }).filter(h=>h.word);
-    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
+    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp, dir:form2.querySelector('#mg-trans-dir').value}] : [];
     const list = await lessonsForLevel(state.level);
     const id = state.level[0] + (list.length+1) + '-' + Date.now().toString(36);
     const { error } = await sbAddLesson(Object.assign({id, space:state.level, position:list.length+1, title, vowels:[], vocab, dialogue, grammar, pass_score:passScore, translations, audio_url:pendingAudioUrl}, mnode ? {student_id:mnode.studentId, folder_id:mnode.folderId||null} : (state.level==='groupe' && state.mgroup ? {group_id:state.mgroup} : {})));
@@ -5222,8 +5292,9 @@ function openEditLessonModal(lesson){
       <div id="em-vocab-preview" class="note" style="margin-top:8px;font-size:12px;"></div>
     </div>
     <div class="field"><label>Notes de grammaire (une par ligne)</label><textarea id="em-grammar">${escapeHtml((lesson.grammar||[]).join('\n'))}</textarea><div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">⚠️ Ici, uniquement des <b>explications de grammaire</b>. Si tout ton cours se trouve ici, déplace-le vers « Contenu du cours » pour qu'il alimente les exercices et le quiz. <button type="button" class="btn ghost small" id="em-grammar-move" style="margin-left:4px;">↪ Déplacer ce texte vers « Contenu du cours »</button></div></div>
-    <div class="field"><label>Texte coréen à traduire (optionnel)</label><textarea data-ko="1" id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
-    <div class="field"><label>Ta traduction de référence (optionnel)</label>
+    <div class="field"><label>Sens de l'exercice de traduction</label><select id="em-trans-dir" style="width:100%;"><option value="">L'élève choisit (coréen → français ou français → coréen)</option><option value="kf"${(t.dir==='kf')?' selected':''}>Coréen → français seulement (avec aide au clic sur les mots)</option><option value="fk"${(t.dir==='fk')?' selected':''}>Français → coréen seulement, sans aide : plus difficile, l'élève voit la réponse (ton texte coréen) quand il a fini</option></select><div class="note" style="font-size:12px;margin-top:4px;">Pour « français → coréen », remplis le texte en coréen (la réponse) et le texte en français (ce que l'élève traduit).</div></div>
+    <div class="field"><label>Texte en coréen (optionnel) — l'élève le traduit en français, ou le retrouve après avoir traduit le français</label><textarea data-ko="1" id="em-trans-text" style="min-height:80px;">${escapeHtml(t.text||'')}</textarea></div>
+    <div class="field"><label>Texte en français = traduction de référence (optionnel) — sert aux deux exercices (coréen → français et français → coréen)</label>
       <textarea id="em-trans-ref">${escapeHtml(t.ref||'')}</textarea>
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
         <button type="button" class="btn ghost small" id="em-ref-rec-btn">🎙️ ${t.refAudio?'Remplacer':'Enregistrer'} à l'oral</button>
@@ -5285,7 +5356,7 @@ function openEditLessonModal(lesson){
       const [word,meaning] = line.split('|').map(s=>s&&s.trim());
       return {word:word||'', meaning:meaning||''};
     }).filter(h=>h.word);
-    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp}] : [];
+    const translations = transText ? [{text:transText, ref:transRef, refAudio:pendingRefAudioUrl, help:transHelp, dir:form2.querySelector('#em-trans-dir').value}] : [];
     save.disabled = true; status.style.color='var(--ink-soft)'; status.textContent = 'Enregistrement…';
     const upd = {title, vocab, dialogue, grammar, pass_score:passScore, translations};
     if(form2.querySelector('#em-notify').checked){ upd.notified_at = new Date().toISOString(); upd.notify_note = form2.querySelector('#em-notify-note').value.trim() || null; }
