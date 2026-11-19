@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-19-3';
+  var APP_VERSION = '2026-11-19-4';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -4221,7 +4221,8 @@ function buildControlQs(lesson, N){
       if(cand){ used[fi].add(cand); picks.push({fi, item:cand}); progress = true; }
     }
   }
-  return shuffle(picks).map((pk,i)=>{
+  // regroupées par catégorie (ordre des FORMATS), mélangées à l'intérieur de chaque catégorie
+  return shuffle(picks).sort((a,b)=>a.fi-b.fi).map((pk,i)=>{
     const f = FORMATS[pk.fi], it = pk.item, id = 'q'+lesson.id+'_'+i;
     const frOf = x=>x.fr||x.rom;
     if(f.t==='mcq'){
@@ -4354,7 +4355,11 @@ function renderControle(lesson, list, idx){
     wrap.appendChild(go);
     return wrap;
   }
+  const SECT = {'mcqkf':'Choix multiple : coréen → français','mcqfk':'Choix multiple : français → coréen','wrkf':'À écrire : coréen → français','wrfk':'À écrire : français → coréen'};
+  let lastSect = '', secNo = 0;
   qs.forEach(q=>{
+    const sk = q.type+q.dir;
+    if(sk!==lastSect){ lastSect = sk; secNo++; const n = qs.filter(x=>x.type+x.dir===sk).length; wrap.appendChild(el(`<h3 style="margin:${secNo>1?26:6}px 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line);">${secNo}. ${SECT[sk]} <small style="font-weight:400;color:var(--ink-soft);">(${n} question${n>1?'s':''})</small></h3>`)); }
     const qb = el(`<div class="q-block"><div class="q-text">${q.dir==='kf' && q.type==='mcq' ? 'Que signifie <span class="kr">'+escapeHtml(q.item.kr)+'</span> ?' : escapeHtml(q.prompt).replace(/(Traduis en français : )(.*)/, '$1<span class="kr">$2</span>')}</div></div>`);
     if(q.type==='mcq'){
       const opts = el('<div class="opt-list"></div>');
