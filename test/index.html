@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-19-6';
+  var APP_VERSION = '2026-11-19-8';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2052,8 +2052,8 @@ function koVariants(kr){
   return [...out];
 }
 // Français : temps (présent → imparfait) et contraires courants.
-const FR_TENSE = {'est':'était','sont':'étaient','suis':'étais','ai':'avais','a':'avait','avez':'aviez','avons':'avions','peux':'pouvais','pouvez':'pouviez','veux':'voulais','voulez':'vouliez','fait':'faisait','va':'allait','vais':'allais','allez':'alliez','prends':'prenais','prenez':'preniez','mange':'mangeais','mangez':'mangiez','coûte':'coûtait','pense':'pensais','aime':'aimais','habite':'habitais','travaille':'travaillais','voudrais':'voulais'};
-const FR_FUTUR = {'ai':'aurai','a':'aura','avez':'aurez','avons':'aurons','est':'sera','sont':'seront','suis':'serai','peux':'pourrai','pouvez':'pourrez','fait':'fera','va':'ira','vais':'irai','allez':'irez'};
+const FR_TENSE = {'est':'était','sont':'étaient','suis':'étais','ai':'avais','a':'avait','avez':'aviez','avons':'avions','peux':'pouvais','pouvez':'pouviez','veux':'voulais','voulez':'vouliez','fait':'faisait','va':'allait','vais':'allais','allez':'alliez','êtes':'étiez','prends':'prenais','prenez':'preniez','mange':'mangeais','mangez':'mangiez','coûte':'coûtait','pense':'pensais','aime':'aimais','habite':'habitais','travaille':'travaillais','voudrais':'voulais'};
+const FR_FUTUR = {'êtes':'serez','ai':'aurai','a':'aura','avez':'aurez','avons':'aurons','est':'sera','sont':'seront','suis':'serai','peux':'pourrai','pouvez':'pourrez','fait':'fera','va':'ira','vais':'irai','allez':'irez'};
 const FR_ANTONYMS = [['bon marché','bon'],['ici','là'],['là','là-bas'],['bon marché','cher'],['beaucoup','peu'],['ici','là-bas'],["aujourd'hui",'hier'],['demain','hier'],['oui','non'],['grand','petit'],['grande','petite'],['bon','mauvais'],['bonne','mauvaise'],['toujours','jamais'],['avant','après'],['devant','derrière'],['ouvert','fermé'],['chaud','froid'],['facile','difficile'],['près','loin'],['vite','lentement']];
 function frVariants(fr){
   const out = new Set(); const src = String(fr||'');
@@ -2061,6 +2061,41 @@ function frVariants(fr){
   [FR_TENSE, FR_FUTUR].forEach(TB=>Object.keys(TB).forEach(w=>{ if(w==='est' && /est-ce/i.test(src)) return; const m = src.match(wb(w)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? TB[w][0].toUpperCase()+TB[w].slice(1) : TB[w]; out.add(src.replace(wb(w), (x,a)=>a+rep).replace(/\bC'sera\b/g,'Ce sera').replace(/\bc'sera\b/g,'ce sera').replace(/\bC'seront\b/g,'Ce seront').replace(/\bc'seront\b/g,'ce seront')); } }));
   FR_ANTONYMS.forEach(([a,c])=>[[a,c],[c,a]].forEach(([x,y])=>{ if((x==='bon'||x==='bonne') && /bon marché/i.test(src)) return; const m = src.match(wb(x)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? y[0].toUpperCase()+y.slice(1) : y; out.add(src.replace(wb(x), (z,p)=>p+rep)); } }));
   out.delete(src);
+  return [...out];
+}
+// Catégorie d'un mot/d'une phrase coréenne : 'verb' (…다), 'sentence' (phrase), 'noun' (le reste)
+function koCat(kr){
+  const t = String(kr||'').trim(), bare = t.replace(/[.?!~…\s]+$/,'');
+  if(/[.?!]/.test(t) || /\s/.test(bare) || /(요|니다|까)$/.test(bare)) return 'sentence';
+  if(/다$/.test(bare)) return 'verb';
+  return 'noun';
+}
+const punctSig = t => (String(t||'').match(/[.?!]/g)||[]).join('');
+const splitSent = t => String(t||'').match(/[^.!?]+[.!?]+\s*|[^.!?]+$/g) || [];
+// Raccords : on remplace UNE phrase de la bonne réponse par une phrase de même nature, pour que le résultat garde du sens :
+// une salutation d'accueil par une autre salutation d'accueil (Bienvenue ! → Bonjour !), un au revoir par un autre au revoir,
+// et une phrase ordinaire par une phrase ordinaire de la leçon ayant la même ponctuation.
+const SENT_FR = { open:/^(bonjour|bonsoir|bienvenue|salut|excusez-moi|pardon)(?![a-zà-ÿ])/i, close:/^(au revoir|revenez|à bientôt|bonne (journée|soirée)|merci)(?![a-zà-ÿ])/i };
+const SENT_KO = { open:/^(안녕하세요|어서\s?오세요|실례합니다|죄송합니다)/, close:/^(안녕히|또 오세요|감사합니다|다음에)/ };
+const GREET_BUILTIN = {
+  fr: { open:['Bonjour !','Bonsoir !','Bienvenue !','Excusez-moi !'], close:['Au revoir !','À bientôt !','Bonne journée !','Merci !'] },
+  ko: { open:['안녕하세요!','어서오세요!','실례합니다!'], close:['안녕히 가세요!','안녕히 계세요!','또 오세요!','감사합니다!'] }
+};
+function sentClass(t, lang){ const R = lang==='ko' ? SENT_KO : SENT_FR; const x = String(t||'').trim(); return R.open.test(x) ? 'open' : R.close.test(x) ? 'close' : 'other'; }
+function spliceVariants(texts, ans, lang){
+  const parts = splitSent(ans); if(parts.length<2) return [];
+  const pool = []; texts.forEach(t=>{ if(t && t!==ans) splitSent(t).forEach(x=>pool.push(x.trim())); });
+  const out = new Set();
+  parts.forEach((pt,i)=>{
+    const end = (pt.trim().match(/[.?!]+$/)||[''])[0]; if(!end) return;
+    const cls = sentClass(pt, lang), trail = pt.match(/\s*$/)[0];
+    let cands = pool.filter(x=>x.endsWith(end) && sentClass(x, lang)===cls);
+    if(cls!=='other') cands = cands.concat(GREET_BUILTIN[lang][cls].filter(x=>x.endsWith(end)));
+    cands.filter(x=>x!==pt.trim() && !parts.some(y=>y.trim()===x)).sort(()=>Math.random()-0.5).slice(0,2).forEach(x=>{
+      const c = parts.slice(); c[i] = x + trail; out.add(c.join('').trim());
+    });
+  });
+  out.delete(ans.trim());
   return [...out];
 }
 function pickDistractors(items, it, dir, n){
@@ -2075,17 +2110,24 @@ function pickDistractors(items, it, dir, n){
   const seen = new Set([normFr(frOf(it)||''), it.kr]);
   const out = [];
   // 1) mauvaises réponses fabriquées à partir de la bonne réponse (phrases surtout)
-  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).sort(()=>Math.random()-0.5);
+  const txtOf = x=> dir==='fk' ? x.kr : frOf(x);
+  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
   for(const t of made){ const key = dir==='kf' ? normFr(t) : t; if(seen.has(key) || t===ansTxt) continue; seen.add(key); out.push(t); if(out.length>=n) return out; }
-  // 2) puis des mots proches de la leçon
+  // 2) puis des éléments proches de la leçon : même catégorie (verbe/nom/phrase) et, pour les phrases, même ponctuation
+  const cat = koCat(it.kr), sig = punctSig(ansTxt);
   const cands = items.filter(x=>x!==it && x.kr!==it.kr).map(x=>({x,s:sc(x)})).sort((p,q)=>p.s-q.s);
-  for(const {x} of cands){
-    const t = dir==='kf' ? frOf(x) : x.kr;
-    const key = dir==='kf' ? normFr(t||'') : t;
-    if(!t || t===ansTxt || seen.has(key)) continue;
-    // on ne propose jamais un mot de même sens que la bonne réponse
-    if(dir==='fk' && normFr(frOf(x)||'')===normFr(frOf(it)||'')) continue;
-    seen.add(key); out.push(t); if(out.length>=n) break;
+  const tiers = [
+    c=> koCat(c.x.kr)===cat && (cat!=='sentence' || punctSig(txtOf(c.x))===sig),
+    c=> koCat(c.x.kr)===cat,
+    c=> true
+  ];
+  for(const tier of tiers){
+    for(const c of cands.filter(tier)){
+      const x = c.x, t = txtOf(x), key = dir==='kf' ? normFr(t||'') : t;
+      if(!t || t===ansTxt || seen.has(key)) continue;
+      if(dir==='fk' && normFr(frOf(x)||'')===normFr(frOf(it)||'')) continue;
+      seen.add(key); out.push(t); if(out.length>=n) return out;
+    }
   }
   return out;
 }
