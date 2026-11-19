@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-17-7';
+  var APP_VERSION = '2026-11-19-2';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1495,7 +1495,7 @@ function openTour(){
 }
 const GUIDE_ITEMS = [
   ['Comment avancer dans une leçon ?', 'Suis les onglets dans l\'ordre : Cours, À mémoriser, Exercices, Quiz, puis Contrôle. Rien n\'est verrouillé : tu peux revenir sur une étape autant que tu veux.'],
-  ['À quoi sert le Contrôle ?', 'À voir ce qui est vraiment acquis. Le résultat est vu par ta professeure. Reste sur la page pendant le contrôle : si tu quittes la page, cela est noté.'],
+  ['À quoi sert le Contrôle ?', 'À voir ce qui est vraiment acquis. Le résultat est vu par ta professeure. Il compte 20 questions mélangées (choix multiple et réponses à écrire, du coréen vers le français et du français vers le coréen). Si une réponse en coréen n\'a qu\'une petite faute d\'écriture (ㅅ/ㅆ, ㄱ/ㄲ, ㄷ/ㄸ, ㅈ/ㅉ, ㅂ/ㅃ, ㅐ/ㅔ, ㅎ/ㅇ), tu peux la réécrire une fois à la fin : bien réécrite, elle compte ½ point. Reste sur la page pendant le contrôle : si tu quittes la page, cela est noté.'],
   ['Que veut dire « Mots à revoir » ?', 'Les mots que tu as ratés reviennent à intervalles de plus en plus espacés (1, 3, 7, 14, 30 jours). Ceux « à revoir aujourd\'hui » sont à faire en priorité. Quand tu réussis un mot, il revient plus tard.'],
   ['Qu\'est-ce que la série 🔥 ?', 'C\'est le nombre de jours de suite où tu as fait au moins un exercice. Ce n\'est pas une obligation, juste un repère pour garder le rythme.'],
   ['À quoi servent le jeu de paires, « Mot entendu » et le Quiz global ?', 'Ce sont des façons variées de réviser : associer un mot coréen et son sens, reconnaître un mot entendu, ou mélanger le vocabulaire de toutes les leçons que tu as validées.'],
@@ -2030,9 +2030,12 @@ function buildMCQ(lesson, count, smart){
   });
 }
 
+// Nombres écrits en lettres = chiffres (« deux » = « 2 »). « un/une » et « neuf » (nouveau) sont exclus : trop ambigus.
+const FR_NUMS = {zero:0,deux:2,trois:3,quatre:4,cinq:5,six:6,sept:7,huit:8,dix:10,onze:11,douze:12,treize:13,quatorze:14,quinze:15,seize:16,vingt:20,trente:30,quarante:40,cinquante:50,soixante:60,cent:100};
 function normFr(s){
   return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[’‘`]/g,"'").replace(/[^a-z0-9' ]+/g,' ').replace(/\s+/g,' ').trim();
+    .replace(/[’‘`]/g,"'").replace(/[^a-z0-9' ]+/g,' ').replace(/\s+/g,' ').trim()
+    .split(' ').map(w=> Object.prototype.hasOwnProperty.call(FR_NUMS,w) ? String(FR_NUMS[w]) : w).join(' ');
 }
 // Réponse acceptée si elle correspond à la traduction entière OU à l'une de ses
 // variantes ("être changé / être modifié" -> l'une ou l'autre), sans tenir
@@ -2163,7 +2166,7 @@ async function renderGlobalQuiz(){
 
   if(state.globalQuizResult){
     const r = state.globalQuizResult;
-    const box = el(`<div class="result-box"><div class="score mono">${r.correct}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé, ou refais-en un autre.'}</div></div>`);
+    const box = el(`<div class="result-box"><div class="score mono">${fmtPts(r.correct)}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé, ou refais-en un autre.'}</div></div>`);
     const retry = el('<button class="btn celadon">Nouveau quiz global</button>');
     retry.onclick = ()=>{ state.globalQuizResult=null; state.globalQuizAnswers={}; render(); };
     box.appendChild(retry); wrap.appendChild(box);
@@ -3997,7 +4000,7 @@ function renderQuiz(lesson){
   const wrap = el('<div></div>');
   if(state.quizResult){
     const r = state.quizResult;
-    const box = el(`<div class="result-box"><div class="score mono">${r.correct}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé.'}</div></div>`);
+    const box = el(`<div class="result-box"><div class="score mono">${fmtPts(r.correct)}/${r.total}</div><div style="margin:8px 0 16px;">${r.correct===r.total?'Sans faute 👏':'Sans enjeu — regarde ce qui a coincé.'}</div></div>`);
     const retry = el('<button class="btn celadon">Refaire le quiz</button>');
     retry.onclick = ()=>{ state.quizResult=null; delete lesson._quiz; render(); };
     box.appendChild(retry); wrap.appendChild(box);
@@ -4118,6 +4121,66 @@ function controlGuardCheckView(){
   return false;
 }
 
+/* ---------- Contrôle à 20 questions : QCM + réponses écrites, dans les deux sens ---------- */
+function koStrip(s){ return String(s||'').normalize('NFC').replace(/[\s.,?!~…·'"“”‘’()]/g,''); }
+// Écriture « équivalente » : consonnes simples/doubles (ㄱ/ㄲ, ㄷ/ㄸ, ㅂ/ㅃ, ㅅ/ㅆ, ㅈ/ㅉ), ㅐ/ㅔ (et ㅒ/ㅖ), ㅎ/ㅇ
+function koCanon(s){
+  const LM = {1:0,4:3,8:7,10:9,13:12,18:11}, VM = {1:5,3:7}, TM = {2:1,20:19,27:21};
+  const out = [];
+  for(const ch of koStrip(s)){
+    const c = ch.charCodeAt(0);
+    if(c>=0xAC00 && c<=0xD7A3){
+      let n = c-0xAC00; const T = n%28; n = (n-T)/28; const V = n%21; const L = (n-V)/21;
+      out.push((LM[L]!==undefined?LM[L]:L)+'.'+(VM[V]!==undefined?VM[V]:V)+'.'+(TM[T]!==undefined?TM[T]:T));
+    } else out.push(ch);
+  }
+  return out.join(',');
+}
+// 'exact' : bonne écriture ; 'near' : petite faute d'écriture (une des confusions ci-dessus) ; 'no'
+function koLevel(input, expected){
+  const given = koStrip(input); if(!given) return 'no';
+  const alts = String(expected||'').split(/[\/;]/).map(x=>x.trim()).filter(Boolean);
+  if(alts.some(a=>koStrip(a)===given)) return 'exact';
+  const cg = koCanon(input);
+  if(alts.some(a=>koCanon(a)===cg)) return 'near';
+  return 'no';
+}
+function fmtPts(n){ return (Math.round(n*2)/2).toString().replace('.',','); }
+function buildControlQs(lesson, N){
+  const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr}))).filter(x=>x.kr);
+  const shortKr = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
+  const FORMATS = [
+    {t:'mcq', d:'kf', ok:x=>!!(x.fr||x.rom)},
+    {t:'mcq', d:'fk', ok:x=>!!x.fr},
+    {t:'wr',  d:'kf', ok:x=>!!x.fr},
+    {t:'wr',  d:'fk', ok:x=>!!x.fr && shortKr(x)}   // phrases longues : pas d'écriture français → coréen
+  ];
+  const shuffle = a=>[...a].sort(()=>Math.random()-0.5);
+  const used = FORMATS.map(()=>new Set());
+  const order = FORMATS.map(f=>shuffle(items.filter(f.ok)));
+  const picks = []; let progress = true;
+  while(picks.length<N && progress){
+    progress = false;
+    for(let fi=0; fi<FORMATS.length && picks.length<N; fi++){
+      const cand = order[fi].find(x=>!used.some(u=>u.has(x))) || order[fi].find(x=>!used[fi].has(x));
+      if(cand){ used[fi].add(cand); picks.push({fi, item:cand}); progress = true; }
+    }
+  }
+  return shuffle(picks).map((pk,i)=>{
+    const f = FORMATS[pk.fi], it = pk.item, id = 'q'+lesson.id+'_'+i;
+    const frOf = x=>x.fr||x.rom;
+    if(f.t==='mcq'){
+      const answer = f.d==='kf' ? frOf(it) : it.kr;
+      const pool = items.filter(x=>x!==it).map(x=>f.d==='kf'?frOf(x):x.kr).filter(x=>x && x!==answer);
+      const distract = shuffle([...new Set(pool)]).slice(0,3);
+      return {id, type:'mcq', dir:f.d, item:it, answer, options:shuffle(distract.concat([answer])),
+              prompt: f.d==='kf' ? 'Que signifie '+it.kr+' ?' : 'Comment dit-on « '+frOf(it)+' » en coréen ?'};
+    }
+    return {id, type:'wr', dir:f.d, item:it, answer: f.d==='kf' ? it.fr : it.kr,
+            prompt: f.d==='kf' ? 'Traduis en français : '+it.kr : 'Écris en coréen : « '+it.fr+' »'};
+  });
+}
+
 function renderControle(lesson, list, idx){
   const wrap = el('<div style="user-select:none;-webkit-user-select:none;"></div>');
   ['copy','cut','paste','contextmenu','dragstart'].forEach(ev=> wrap.addEventListener(ev, e=>e.preventDefault()));
@@ -4130,13 +4193,13 @@ function renderControle(lesson, list, idx){
       box.appendChild(el(`<div class="score mono" style="font-size:22px;">⛔</div>`));
       box.appendChild(el(`<div style="margin:8px 0 16px;"><b>Contrôle annulé.</b> Tu as quitté la page ${r.leaves} fois pendant le contrôle. Ta professeur le voit, pour t'aider à voir où ça coince. Il faut le refaire en restant sur la page.</div>`));
       const retry = el('<button class="btn celadon">Recommencer le contrôle</button>');
-      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; delete lesson._control; controlGuardReset(); render(); };
+      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
       box.appendChild(retry); wrap.appendChild(box);
       return wrap;
     }
     if(r.passed && !r.burst){ r.burst=true; petalBurst(); }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
-    box.appendChild(el(`<div class="score mono">${r.correct}/${r.total}</div>`));
+    box.appendChild(el(`<div class="score mono">${fmtPts(r.correct)}/${r.total}</div>`));
     box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi, bravo !":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
     if(r.newPiece){
       box.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">🧩 <b>Nouvelle pièce de puzzle !</b>${r.puzzleDone?' 🎉 L\'image est complète : ta professeur va t\'envoyer un petit cadeau.':''}</div>`));
@@ -4145,7 +4208,7 @@ function renderControle(lesson, list, idx){
       box.appendChild(see);
     }
     const retry = el('<button class="btn celadon">Retenter le contrôle</button>');
-    retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; delete lesson._control; controlGuardReset(); render(); };
+    retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
     box.appendChild(retry); wrap.appendChild(box);
     if(r.wrong.length){
       const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
@@ -4159,7 +4222,7 @@ function renderControle(lesson, list, idx){
   if(g.phase!=='active'){
     const intro = el('<div></div>');
     if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
-    intro.appendChild(el(`<div class="note" style="margin-bottom:14px;">Ce contrôle sert à voir ce que tu as <b>vraiment</b> retenu, pour que ta professeur puisse revenir sur ce qui coince. Pour ça :<br>• reste sur cette page pendant tout le contrôle (pas d'autre onglet ni d'autre application) ;<br>• n'ouvre l'outil que dans <b>un seul</b> onglet ;<br>• après ${CONTROL_MAX_LEAVES} sorties, le contrôle est annulé et ta professeur le voit.<br>Réussi, il te donne une pièce de puzzle 🧩.</div>`));
+    intro.appendChild(el(`<div class="note" style="margin-bottom:14px;">Ce contrôle sert à voir ce que tu as <b>vraiment</b> retenu, pour que ta professeur puisse revenir sur ce qui coince. Pour ça :<br>• reste sur cette page pendant tout le contrôle (pas d'autre onglet ni d'autre application) ;<br>• n'ouvre l'outil que dans <b>un seul</b> onglet ;<br>• après ${CONTROL_MAX_LEAVES} sorties, le contrôle est annulé et ta professeur le voit.<br><br><b>20 questions</b> mélangées : choix multiple et réponses à écrire, du coréen vers le français et du français vers le coréen (pour écrire en coréen, utilise le clavier 한).<br><b>Orthographe en coréen :</b> si ta réponse a seulement une petite faute (ㅅ/ㅆ, ㄱ/ㄲ, ㄷ/ㄸ, ㅈ/ㅉ, ㅂ/ㅃ, ㅐ/ㅔ ou ㅎ/ㅇ), l'outil te le dit à la fin et tu peux la <b>réécrire une seule fois</b> : bien réécrite, elle compte ½ point ; sinon 0.<br>Réussi (${Math.round((lesson.pass_score||0.8)*100)}% minimum), il te donne une pièce de puzzle 🧩.</div>`));
     if(g.phase==='blocked') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">L'outil est déjà ouvert dans un autre onglet. Ferme-le, puis reviens ici.</div>`));
     const start = el(`<button class="btn seal" ${g.phase==='checking'?'disabled':''}>${g.phase==='checking'?'Vérification…':'Commencer le contrôle'}</button>`);
     start.onclick = async ()=>{
@@ -4175,40 +4238,87 @@ function renderControle(lesson, list, idx){
     return intro;
   }
 
-  const qs = lesson._control || (lesson._control = buildMCQ(lesson, 10));
+  const qs = lesson._control || (lesson._control = buildControlQs(lesson, 20));
   if(g.banner){ wrap.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
-  qs.forEach(q=>{
-    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
-    const opts = el('<div class="opt-list"></div>');
-    q.options.forEach(opt=>{
-      const b = el(`<button class="opt">${opt}</button>`);
-      b.onclick = ()=>{ state.controlAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
-      opts.appendChild(b);
+  const grade = (q)=>{
+    const gv = state.controlAnswers[q.id] || '';
+    if(q.type==='mcq') return {pts: gv===q.answer?1:0, level: gv===q.answer?'exact':'no'};
+    if(q.dir==='kf'){ const lv = frAnswerLevel(gv, q.answer); return {pts: lv!=='no'?1:0, level: lv}; }
+    const lv = koLevel(gv, q.answer); return {pts: lv==='exact'?1:0, level: lv};
+  };
+  const writeBox = (q, store)=>{
+    const row = el('<div style="display:flex;gap:8px;max-width:420px;margin-top:8px;"></div>');
+    const inp = el(`<input type="text" ${q.dir==='fk'?'data-ko="1" lang="ko"':''} autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${q.dir==='fk'?'ta réponse en coréen...':'traduction en français...'}">`);
+    inp.style.flex = '1'; inp.value = store[q.id] || '';
+    inp.oninput = ()=>{ store[q.id] = inp.value; };
+    row.appendChild(inp); return row;
+  };
+  const finish = async (retryAns)=>{
+    let points = 0; const wrong = [], rec = [];
+    qs.forEach(q=>{
+      const r = grade(q); let pts = r.pts, given = state.controlAnswers[q.id] || '';
+      if(r.level==='near' && r.pts===0){
+        const re = (retryAns && retryAns[q.id]) || '';
+        if(koLevel(re, q.answer)==='exact') pts = 0.5;
+        given = re || given;
+      }
+      points += pts;
+      if(pts<1) wrong.push({kr:q.prompt, given: given + (pts===0.5?' → petite faute corrigée (½ point)':''), answer:q.answer});
+      rec.push({kr:q.item.kr, ok: pts===1});
     });
-    qb.appendChild(opts); wrap.appendChild(qb);
-  });
-  const submit = el('<button class="btn seal">Valider le contrôle</button>');
-  submit.onclick = async ()=>{
-    let correct=0; const wrong=[];
-    qs.forEach(q=>{ const gv=state.controlAnswers[q.id]; if(gv===q.answer) correct++; else wrong.push({kr:q.kr, given:gv, answer:q.answer}); });
-    const total=qs.length, ratio=correct/total, passedNow = ratio >= (lesson.pass_score||0.8);
+    const correct = points, total = qs.length, ratio = total ? correct/total : 0, passedNow = ratio >= (lesson.pass_score||0.8);
     const prevCtl = (PROGRESS[lesson.id] && PROGRESS[lesson.id].control) || {};
     const wasPassed = !!prevCtl.passed;
     const piecesBefore = (PROFILE.role==='student') ? puzzleCount() : 0;
-    // « réussi » reste acquis : rater un nouvel essai n'enlève ni la réussite ni la pièce
     const passed = passedNow || wasPassed;
     const flags = Object.assign({ exits:0, cancelled:0, secs:0 }, prevCtl.flags||{});
     flags.exits += g.leaves; flags.secs += g.awaySecs; if(g.leaves) flags.last = new Date().toISOString().slice(0,10);
     const ctl = { passed, score: Math.max(prevCtl.score||0, ratio), last_score: ratio, date:new Date().toISOString().slice(0,10), attempts:(prevCtl.attempts||0)+1, flags };
     controlGuardReset();
+    state.controlRetry = null; state.controlRetryAns = {};
     state.controlResult = {correct, total, passed:passedNow, wrong};
-    await sbRecordAnswers(lesson.id, qs.map(q=>({ kr:q.kr, ok: state.controlAnswers[q.id]===q.answer })));
+    await sbRecordAnswers(lesson.id, rec);
     await sbUpsertProgress(lesson.id, {control: ctl});
     if(passedNow && PROFILE.role==='student'){
       const after = puzzleCount();
       if(after>piecesBefore){ state.controlResult.newPiece = true; state.controlResult.puzzleDone = (after % PUZZLE_PIECES === 0); }
     }
     render();
+  };
+  // Seconde chance : réponses coréennes avec une petite faute d'écriture
+  if(state.controlRetry){
+    state.controlRetryAns = state.controlRetryAns || {};
+    const nq = qs.filter(q=>state.controlRetry.ids.includes(q.id));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:14px;">✏️ <b>Presque !</b> Il y a une petite faute d'écriture dans ${nq.length>1?nq.length+' réponses':'une réponse'}. Réécris-${nq.length>1?'les':'la'} (une seule fois) : bien réécrite, elle compte ½ point.</div>`));
+    nq.forEach(q=>{
+      const qb = el(`<div class="q-block"><div class="q-text">${escapeHtml(q.prompt)}</div><div style="font-size:13px;color:var(--ink-soft);margin-top:4px;">Ta réponse : <span class="kr">${escapeHtml(state.controlAnswers[q.id]||'')}</span></div></div>`);
+      qb.appendChild(writeBox(q, state.controlRetryAns));
+      wrap.appendChild(qb);
+    });
+    const go = el('<button class="btn seal">Valider mes corrections</button>');
+    go.onclick = async ()=>{ go.disabled = true; await finish(state.controlRetryAns); };
+    wrap.appendChild(go);
+    return wrap;
+  }
+  qs.forEach(q=>{
+    const qb = el(`<div class="q-block"><div class="q-text">${q.dir==='kf' && q.type==='mcq' ? 'Que signifie <span class="kr">'+escapeHtml(q.item.kr)+'</span> ?' : escapeHtml(q.prompt).replace(/(Traduis en français : )(.*)/, '$1<span class="kr">$2</span>')}</div></div>`);
+    if(q.type==='mcq'){
+      const opts = el('<div class="opt-list"></div>');
+      q.options.forEach(opt=>{
+        const b = el(`<button class="opt">${q.dir==='fk'?'<span class="kr">'+escapeHtml(opt)+'</span>':escapeHtml(opt)}</button>`);
+        b.onclick = ()=>{ state.controlAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
+        if(state.controlAnswers[q.id]===opt) b.style.borderColor='var(--ink)';
+        opts.appendChild(b);
+      });
+      qb.appendChild(opts);
+    } else qb.appendChild(writeBox(q, state.controlAnswers));
+    wrap.appendChild(qb);
+  });
+  const submit = el('<button class="btn seal">Valider le contrôle</button>');
+  submit.onclick = async ()=>{
+    const nearQs = qs.filter(q=>grade(q).level==='near' && grade(q).pts===0);
+    if(nearQs.length){ state.controlRetry = { ids: nearQs.map(q=>q.id) }; state.controlRetryAns = {}; render(); return; }
+    submit.disabled = true; await finish(null);
   };
   wrap.appendChild(submit);
   return wrap;
