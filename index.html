@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-19-2';
+  var APP_VERSION = '2026-11-19-8';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2020,13 +2020,126 @@ function smartOrder(arr, krOf){
   return arr.map(x=>{ const s = missScore(krOf(x)); return { x, k: Math.random() - Math.min(3, s.score)*0.4 + Math.min(s.known, 6)*0.04 }; })
     .sort((a,b)=>a.k-b.k).map(o=>o.x);
 }
+// --- Choix de mauvaises réponses « proches » (QCM plus difficiles), uniquement avec les mots de la leçon ---
+function levDist(a,b){
+  const m=a.length, n=b.length; if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; }
+  return prev[n];
+}
+function koJamo(s){ return String(s||'').normalize('NFD').replace(/[\s.,?!~…]/g,''); }
+// --- Mauvaises réponses FABRIQUÉES : la bonne phrase, légèrement modifiée (temps, contraire…) ---
+// Coréen : uniquement des transformations sûres (vrai coréen, mais sens différent de la phrase française).
+const KO_ANTONYMS = [['있어요','없어요'],['있어?','없어?'],['좋아요','싫어요'],['많아요','적어요'],['싸요','비싸요'],['커요','작아요'],['여기','저기'],['여기','거기'],['거기','저기'],['오늘','어제'],['어제','내일'],['네','아니요'],['맛있어요','맛없어요'],['재미있어요','재미없어요'],['이쪽','저쪽'],['위','아래'],['앞','뒤'],['빨리','천천히'],['많이','조금']];
+function koVariants(kr){
+  const out = new Set(); const src = String(kr||'');
+  const toks = src.split(/(\s+)/);
+  const parts = t=>{ const m = t.match(/^([^가-힣]*)([가-힣]+)([^가-힣]*)$/); return m ? {pre:m[1], body:m[2], post:m[3]} : null; };
+  const rebuild = (i, newBody)=>{ const pt = parts(toks[i]); const c = toks.slice(); c[i] = pt.pre+newBody+pt.post; return c.join(''); };
+  toks.forEach((t,i)=>{
+    const pt = parts(t); if(!pt) return; const b = pt.body;
+    // passé : …아요/어요/해요 → …았어요/었어요/했어요 ; 이에요 → 이었어요 ; 예요 → 였어요
+    let m;
+    if(/이에요$/.test(b)) out.add(rebuild(i, b.replace(/이에요$/,'이었어요')));
+    else if(/예요$/.test(b)) out.add(rebuild(i, b.replace(/예요$/,'였어요')));
+    else if((m = b.match(/^(.+)([아어해])요$/)) && !/세$/.test(m[1])) out.add(rebuild(i, m[1] + ({아:'았',어:'었',해:'했'})[m[2]] + '어요'));
+    // contraires et mots de sens opposé
+    KO_ANTONYMS.forEach(([a,c])=>{
+      [[a,c],[c,a]].forEach(([x,y])=>{ if(b===x) out.add(rebuild(i,y)); else if(x.length>=3 && /(있|없)어요$/.test(x) && b.endsWith(x) && b!==x) out.add(rebuild(i, b.slice(0,b.length-x.length)+y)); });
+    });
+  });
+  out.delete(src);
+  return [...out];
+}
+// Français : temps (présent → imparfait) et contraires courants.
+const FR_TENSE = {'est':'était','sont':'étaient','suis':'étais','ai':'avais','a':'avait','avez':'aviez','avons':'avions','peux':'pouvais','pouvez':'pouviez','veux':'voulais','voulez':'vouliez','fait':'faisait','va':'allait','vais':'allais','allez':'alliez','êtes':'étiez','prends':'prenais','prenez':'preniez','mange':'mangeais','mangez':'mangiez','coûte':'coûtait','pense':'pensais','aime':'aimais','habite':'habitais','travaille':'travaillais','voudrais':'voulais'};
+const FR_FUTUR = {'êtes':'serez','ai':'aurai','a':'aura','avez':'aurez','avons':'aurons','est':'sera','sont':'seront','suis':'serai','peux':'pourrai','pouvez':'pourrez','fait':'fera','va':'ira','vais':'irai','allez':'irez'};
+const FR_ANTONYMS = [['bon marché','bon'],['ici','là'],['là','là-bas'],['bon marché','cher'],['beaucoup','peu'],['ici','là-bas'],["aujourd'hui",'hier'],['demain','hier'],['oui','non'],['grand','petit'],['grande','petite'],['bon','mauvais'],['bonne','mauvaise'],['toujours','jamais'],['avant','après'],['devant','derrière'],['ouvert','fermé'],['chaud','froid'],['facile','difficile'],['près','loin'],['vite','lentement']];
+function frVariants(fr){
+  const out = new Set(); const src = String(fr||'');
+  const wb = w => new RegExp("(^|[^A-Za-zÀ-ÿ])("+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+")(?![A-Za-zÀ-ÿ])",'i');
+  [FR_TENSE, FR_FUTUR].forEach(TB=>Object.keys(TB).forEach(w=>{ if(w==='est' && /est-ce/i.test(src)) return; const m = src.match(wb(w)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? TB[w][0].toUpperCase()+TB[w].slice(1) : TB[w]; out.add(src.replace(wb(w), (x,a)=>a+rep).replace(/\bC'sera\b/g,'Ce sera').replace(/\bc'sera\b/g,'ce sera').replace(/\bC'seront\b/g,'Ce seront').replace(/\bc'seront\b/g,'ce seront')); } }));
+  FR_ANTONYMS.forEach(([a,c])=>[[a,c],[c,a]].forEach(([x,y])=>{ if((x==='bon'||x==='bonne') && /bon marché/i.test(src)) return; const m = src.match(wb(x)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? y[0].toUpperCase()+y.slice(1) : y; out.add(src.replace(wb(x), (z,p)=>p+rep)); } }));
+  out.delete(src);
+  return [...out];
+}
+// Catégorie d'un mot/d'une phrase coréenne : 'verb' (…다), 'sentence' (phrase), 'noun' (le reste)
+function koCat(kr){
+  const t = String(kr||'').trim(), bare = t.replace(/[.?!~…\s]+$/,'');
+  if(/[.?!]/.test(t) || /\s/.test(bare) || /(요|니다|까)$/.test(bare)) return 'sentence';
+  if(/다$/.test(bare)) return 'verb';
+  return 'noun';
+}
+const punctSig = t => (String(t||'').match(/[.?!]/g)||[]).join('');
+const splitSent = t => String(t||'').match(/[^.!?]+[.!?]+\s*|[^.!?]+$/g) || [];
+// Raccords : on remplace UNE phrase de la bonne réponse par une phrase de même nature, pour que le résultat garde du sens :
+// une salutation d'accueil par une autre salutation d'accueil (Bienvenue ! → Bonjour !), un au revoir par un autre au revoir,
+// et une phrase ordinaire par une phrase ordinaire de la leçon ayant la même ponctuation.
+const SENT_FR = { open:/^(bonjour|bonsoir|bienvenue|salut|excusez-moi|pardon)(?![a-zà-ÿ])/i, close:/^(au revoir|revenez|à bientôt|bonne (journée|soirée)|merci)(?![a-zà-ÿ])/i };
+const SENT_KO = { open:/^(안녕하세요|어서\s?오세요|실례합니다|죄송합니다)/, close:/^(안녕히|또 오세요|감사합니다|다음에)/ };
+const GREET_BUILTIN = {
+  fr: { open:['Bonjour !','Bonsoir !','Bienvenue !','Excusez-moi !'], close:['Au revoir !','À bientôt !','Bonne journée !','Merci !'] },
+  ko: { open:['안녕하세요!','어서오세요!','실례합니다!'], close:['안녕히 가세요!','안녕히 계세요!','또 오세요!','감사합니다!'] }
+};
+function sentClass(t, lang){ const R = lang==='ko' ? SENT_KO : SENT_FR; const x = String(t||'').trim(); return R.open.test(x) ? 'open' : R.close.test(x) ? 'close' : 'other'; }
+function spliceVariants(texts, ans, lang){
+  const parts = splitSent(ans); if(parts.length<2) return [];
+  const pool = []; texts.forEach(t=>{ if(t && t!==ans) splitSent(t).forEach(x=>pool.push(x.trim())); });
+  const out = new Set();
+  parts.forEach((pt,i)=>{
+    const end = (pt.trim().match(/[.?!]+$/)||[''])[0]; if(!end) return;
+    const cls = sentClass(pt, lang), trail = pt.match(/\s*$/)[0];
+    let cands = pool.filter(x=>x.endsWith(end) && sentClass(x, lang)===cls);
+    if(cls!=='other') cands = cands.concat(GREET_BUILTIN[lang][cls].filter(x=>x.endsWith(end)));
+    cands.filter(x=>x!==pt.trim() && !parts.some(y=>y.trim()===x)).sort(()=>Math.random()-0.5).slice(0,2).forEach(x=>{
+      const c = parts.slice(); c[i] = x + trail; out.add(c.join('').trim());
+    });
+  });
+  out.delete(ans.trim());
+  return [...out];
+}
+function pickDistractors(items, it, dir, n){
+  const frOf = x=>x.fr||x.rom;
+  const ansTxt = dir==='kf' ? frOf(it) : it.kr;
+  const firstWord = t=>normFr(t).split(' ')[0];
+  const sc = x=>{
+    if(dir==='fk') return levDist(koJamo(it.kr), koJamo(x.kr)) + Math.abs((it.kr||'').length-(x.kr||'').length)*0.5 + Math.random()*0.8;
+    const a=frOf(it)||'', b=frOf(x)||'';
+    return Math.abs(a.length-b.length)*0.35 + levDist(koJamo(it.kr), koJamo(x.kr))*0.4 + (firstWord(a)&&firstWord(a)===firstWord(b)?-2.5:0) + Math.random()*0.8;
+  };
+  const seen = new Set([normFr(frOf(it)||''), it.kr]);
+  const out = [];
+  // 1) mauvaises réponses fabriquées à partir de la bonne réponse (phrases surtout)
+  const txtOf = x=> dir==='fk' ? x.kr : frOf(x);
+  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
+  for(const t of made){ const key = dir==='kf' ? normFr(t) : t; if(seen.has(key) || t===ansTxt) continue; seen.add(key); out.push(t); if(out.length>=n) return out; }
+  // 2) puis des éléments proches de la leçon : même catégorie (verbe/nom/phrase) et, pour les phrases, même ponctuation
+  const cat = koCat(it.kr), sig = punctSig(ansTxt);
+  const cands = items.filter(x=>x!==it && x.kr!==it.kr).map(x=>({x,s:sc(x)})).sort((p,q)=>p.s-q.s);
+  const tiers = [
+    c=> koCat(c.x.kr)===cat && (cat!=='sentence' || punctSig(txtOf(c.x))===sig),
+    c=> koCat(c.x.kr)===cat,
+    c=> true
+  ];
+  for(const tier of tiers){
+    for(const c of cands.filter(tier)){
+      const x = c.x, t = txtOf(x), key = dir==='kf' ? normFr(t||'') : t;
+      if(!t || t===ansTxt || seen.has(key)) continue;
+      if(dir==='fk' && normFr(frOf(x)||'')===normFr(frOf(it)||'')) continue;
+      seen.add(key); out.push(t); if(out.length>=n) return out;
+    }
+  }
+  return out;
+}
 function buildMCQ(lesson, count, smart){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr})));
   const shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
   return shuffled.map((it,i)=>{
-    const correct = it.fr || it.rom;
-    const distractors = items.filter(x=>x!==it).sort(()=>Math.random()-0.5).slice(0,3).map(x=>x.fr||x.rom);
-    return {id:'q'+lesson.id+'_'+i, kr:it.kr, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
+    // un mot sur deux est demandé dans l'autre sens (français → coréen), sauf les lettres sans traduction
+    const dir = (it.fr && i%2===1) ? 'fk' : 'kf';
+    const correct = dir==='fk' ? it.kr : (it.fr || it.rom);
+    const distractors = pickDistractors(items, it, dir, 3);
+    return {id:'q'+lesson.id+'_'+i, kr:it.kr, dir, fr:it.fr||it.rom, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
   });
 }
 
@@ -2103,27 +2216,50 @@ function renderExercices(lesson){
       : '<div class="empty-state">Rien à travailler ici.</div>'));
     return wrap;
   }
-  if(!lesson._exOrder || lesson._exOrder.length!==items.length) lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+  const shortKrEx = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
+  if(!lesson._exOrder || lesson._exOrder.length!==items.length){
+    lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+    // une carte sur deux est à écrire en coréen (français → coréen), sauf lettres et phrases longues
+    lesson._exDirs = items.map((it)=> (it.fr && !it.rom && shortKrEx(it) && Math.random()<0.5) ? 'fk' : 'kf');
+  }
   const total = items.length;
   if(state.exerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.exerciseCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Entraînement terminé — refais un tour, ou passe au Quiz.</div></div>`);
     const restart = el('<button class="btn celadon">Recommencer</button>');
-    restart.onclick = ()=>{ state.exerciseIndex=0; state.exerciseCorrectCount=0; lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr); render(); };
+    restart.onclick = ()=>{ state.exerciseIndex=0; state.exerciseCorrectCount=0; lesson._exOrder = null; render(); };
     done.appendChild(restart); wrap.appendChild(done); return wrap;
   }
   const item = items[lesson._exOrder[state.exerciseIndex]];
   const askRom = !!item.rom;
-  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">' + (askRom ? 'Tape la romanisation de mémoire, sans pression.' : 'Tape la traduction française de mémoire, sans pression.') + '</div>'));
+  const fk = (lesson._exDirs||[])[lesson._exOrder[state.exerciseIndex]]==='fk';
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">' + (fk ? 'Écris ce mot en coréen de mémoire (clavier 한), sans pression.' : askRom ? 'Tape la romanisation de mémoire, sans pression.' : 'Tape la traduction française de mémoire, sans pression.') + '</div>'));
   wrap.appendChild(el(`<div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Carte ${state.exerciseIndex+1} / ${total}</div>`));
-  wrap.appendChild(el(`<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${item.kr}</span></div>`));
+  wrap.appendChild(el(fk
+    ? `<div class="item-card" style="max-width:260px;padding:26px 16px;margin-bottom:16px;"><span style="font-size:24px;font-weight:600;">${escapeHtml(frDisplay(item.fr))}</span></div>`
+    : `<div class="item-card" style="max-width:220px;padding:26px 16px;margin-bottom:16px;"><span class="kr" style="font-size:34px;">${item.kr}</span></div>`));
   const row = el('<div style="display:flex;gap:8px;max-width:340px;"></div>');
-  const input = el(`<input type="text" placeholder="${askRom ? 'romanisation...' : 'traduction en français...'}">`); input.style.flex='1';
+  const input = el(`<input type="text" ${fk?'data-ko="1" lang="ko" autocomplete="off" spellcheck="false"':''} placeholder="${fk ? 'en coréen...' : askRom ? 'romanisation...' : 'traduction en français...'}">`); input.style.flex='1';
   const checkBtn = el('<button class="btn celadon">Vérifier</button>');
   row.appendChild(input); row.appendChild(checkBtn); wrap.appendChild(row);
   const fb = el('<div style="margin-top:10px;"></div>'); wrap.appendChild(fb);
   const nextBtn = el('<button class="btn ghost" style="margin-top:12px;display:none;">Suivant →</button>'); wrap.appendChild(nextBtn);
+  let retried = false;
   const doCheck = ()=>{
     if(input.disabled) return;
+    if(fk){
+      const lv = koLevel(input.value, item.kr);
+      if(lv==='near' && !retried){
+        retried = true;
+        fb.innerHTML = '<div class="feedback ko">Presque ! Il y a une petite faute d\'écriture. Réécris-le (une seule fois).</div>';
+        input.focus(); return;
+      }
+      const ok = lv==='exact';
+      sbRecordAnswers(lesson.id, [{ kr:item.kr, ok }]);
+      if(ok){ state.exerciseCorrectCount=(state.exerciseCorrectCount||0)+1; fb.innerHTML = '<div class="feedback ok">Exact 👍 — <span class="kr">'+escapeHtml(item.kr)+'</span></div>'; }
+      else fb.innerHTML = '<div class="feedback ko">Pas tout à fait — <span class="kr">'+escapeHtml(item.kr)+'</span>.</div>';
+      checkBtn.disabled=true; input.disabled=true; nextBtn.style.display='inline-block';
+      return;
+    }
     const expected = askRom ? item.rom : item.fr;
     const level = askRom ? ((input.value.trim().toLowerCase() === (expected||'').toLowerCase()) ? 'exact' : 'no') : frAnswerLevel(input.value, expected);
     const ok = level!=='no';
@@ -2186,10 +2322,10 @@ async function renderGlobalQuiz(){
   });
   wrap.appendChild(el(`<div class="note" style="margin-bottom:16px;">${qs.length} question(s) piochées dans ${pool.length} mot(s) au total.</div>`));
   qs.forEach(q=>{
-    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
+    const qb = el(`<div class="q-block"><div class="q-text">${q.dir==='fk' ? 'Comment dit-on « '+escapeHtml(q.fr)+' » en coréen ?' : 'Que signifie <span class="kr">'+q.kr+'</span> ?'}</div></div>`);
     const opts = el('<div class="opt-list"></div>');
     q.options.forEach(opt=>{
-      const b = el(`<button class="opt">${opt}</button>`);
+      const b = el(`<button class="opt">${q.dir==='fk' ? '<span class="kr">'+escapeHtml(opt)+'</span>' : opt}</button>`);
       b.onclick = ()=>{ state.globalQuizAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
       opts.appendChild(b);
     });
@@ -4013,12 +4149,12 @@ function renderQuiz(lesson){
   }
   const qs = lesson._quiz || (lesson._quiz = buildMCQ(lesson, 10, true));
   if(qs.length===0){ wrap.appendChild(el('<div class="empty-state">Pas de contenu pour un quiz ici.</div>')); return wrap; }
-  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Petit contrôle rapide, sans enjeu.</div>'));
+  wrap.appendChild(el('<div class="note" style="margin-bottom:16px;">Petit contrôle rapide, sans enjeu. Attention : les mauvaises réponses se ressemblent ! Les questions vont du coréen vers le français et du français vers le coréen.</div>'));
   qs.forEach(q=>{
-    const qb = el(`<div class="q-block"><div class="q-text">Que signifie <span class="kr">${q.kr}</span> ?</div></div>`);
+    const qb = el(`<div class="q-block"><div class="q-text">${q.dir==='fk' ? 'Comment dit-on « '+escapeHtml(q.fr)+' » en coréen ?' : 'Que signifie <span class="kr">'+q.kr+'</span> ?'}</div></div>`);
     const opts = el('<div class="opt-list"></div>');
     q.options.forEach(opt=>{
-      const b = el(`<button class="opt">${opt}</button>`);
+      const b = el(`<button class="opt">${q.dir==='fk' ? '<span class="kr">'+escapeHtml(opt)+'</span>' : opt}</button>`);
       b.onclick = ()=>{ state.quizAnswers[q.id]=opt; [...opts.children].forEach(c=>c.style.borderColor='var(--line)'); b.style.borderColor='var(--ink)'; };
       opts.appendChild(b);
     });
@@ -4166,13 +4302,13 @@ function buildControlQs(lesson, N){
       if(cand){ used[fi].add(cand); picks.push({fi, item:cand}); progress = true; }
     }
   }
-  return shuffle(picks).map((pk,i)=>{
+  // regroupées par catégorie (ordre des FORMATS), mélangées à l'intérieur de chaque catégorie
+  return shuffle(picks).sort((a,b)=>a.fi-b.fi).map((pk,i)=>{
     const f = FORMATS[pk.fi], it = pk.item, id = 'q'+lesson.id+'_'+i;
     const frOf = x=>x.fr||x.rom;
     if(f.t==='mcq'){
       const answer = f.d==='kf' ? frOf(it) : it.kr;
-      const pool = items.filter(x=>x!==it).map(x=>f.d==='kf'?frOf(x):x.kr).filter(x=>x && x!==answer);
-      const distract = shuffle([...new Set(pool)]).slice(0,3);
+      const distract = pickDistractors(items, it, f.d, 3);
       return {id, type:'mcq', dir:f.d, item:it, answer, options:shuffle(distract.concat([answer])),
               prompt: f.d==='kf' ? 'Que signifie '+it.kr+' ?' : 'Comment dit-on « '+frOf(it)+' » en coréen ?'};
     }
@@ -4300,7 +4436,11 @@ function renderControle(lesson, list, idx){
     wrap.appendChild(go);
     return wrap;
   }
+  const SECT = {'mcqkf':'Choix multiple : coréen → français','mcqfk':'Choix multiple : français → coréen','wrkf':'À écrire : coréen → français','wrfk':'À écrire : français → coréen'};
+  let lastSect = '', secNo = 0;
   qs.forEach(q=>{
+    const sk = q.type+q.dir;
+    if(sk!==lastSect){ lastSect = sk; secNo++; const n = qs.filter(x=>x.type+x.dir===sk).length; wrap.appendChild(el(`<h3 style="margin:${secNo>1?26:6}px 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line);">${secNo}. ${SECT[sk]} <small style="font-weight:400;color:var(--ink-soft);">(${n} question${n>1?'s':''})</small></h3>`)); }
     const qb = el(`<div class="q-block"><div class="q-text">${q.dir==='kf' && q.type==='mcq' ? 'Que signifie <span class="kr">'+escapeHtml(q.item.kr)+'</span> ?' : escapeHtml(q.prompt).replace(/(Traduis en français : )(.*)/, '$1<span class="kr">$2</span>')}</div></div>`);
     if(q.type==='mcq'){
       const opts = el('<div class="opt-list"></div>');
