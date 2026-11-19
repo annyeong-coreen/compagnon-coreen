@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-19-4';
+  var APP_VERSION = '2026-11-19-6';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2028,6 +2028,41 @@ function levDist(a,b){
   return prev[n];
 }
 function koJamo(s){ return String(s||'').normalize('NFD').replace(/[\s.,?!~…]/g,''); }
+// --- Mauvaises réponses FABRIQUÉES : la bonne phrase, légèrement modifiée (temps, contraire…) ---
+// Coréen : uniquement des transformations sûres (vrai coréen, mais sens différent de la phrase française).
+const KO_ANTONYMS = [['있어요','없어요'],['있어?','없어?'],['좋아요','싫어요'],['많아요','적어요'],['싸요','비싸요'],['커요','작아요'],['여기','저기'],['여기','거기'],['거기','저기'],['오늘','어제'],['어제','내일'],['네','아니요'],['맛있어요','맛없어요'],['재미있어요','재미없어요'],['이쪽','저쪽'],['위','아래'],['앞','뒤'],['빨리','천천히'],['많이','조금']];
+function koVariants(kr){
+  const out = new Set(); const src = String(kr||'');
+  const toks = src.split(/(\s+)/);
+  const parts = t=>{ const m = t.match(/^([^가-힣]*)([가-힣]+)([^가-힣]*)$/); return m ? {pre:m[1], body:m[2], post:m[3]} : null; };
+  const rebuild = (i, newBody)=>{ const pt = parts(toks[i]); const c = toks.slice(); c[i] = pt.pre+newBody+pt.post; return c.join(''); };
+  toks.forEach((t,i)=>{
+    const pt = parts(t); if(!pt) return; const b = pt.body;
+    // passé : …아요/어요/해요 → …았어요/었어요/했어요 ; 이에요 → 이었어요 ; 예요 → 였어요
+    let m;
+    if(/이에요$/.test(b)) out.add(rebuild(i, b.replace(/이에요$/,'이었어요')));
+    else if(/예요$/.test(b)) out.add(rebuild(i, b.replace(/예요$/,'였어요')));
+    else if((m = b.match(/^(.+)([아어해])요$/)) && !/세$/.test(m[1])) out.add(rebuild(i, m[1] + ({아:'았',어:'었',해:'했'})[m[2]] + '어요'));
+    // contraires et mots de sens opposé
+    KO_ANTONYMS.forEach(([a,c])=>{
+      [[a,c],[c,a]].forEach(([x,y])=>{ if(b===x) out.add(rebuild(i,y)); else if(x.length>=3 && /(있|없)어요$/.test(x) && b.endsWith(x) && b!==x) out.add(rebuild(i, b.slice(0,b.length-x.length)+y)); });
+    });
+  });
+  out.delete(src);
+  return [...out];
+}
+// Français : temps (présent → imparfait) et contraires courants.
+const FR_TENSE = {'est':'était','sont':'étaient','suis':'étais','ai':'avais','a':'avait','avez':'aviez','avons':'avions','peux':'pouvais','pouvez':'pouviez','veux':'voulais','voulez':'vouliez','fait':'faisait','va':'allait','vais':'allais','allez':'alliez','prends':'prenais','prenez':'preniez','mange':'mangeais','mangez':'mangiez','coûte':'coûtait','pense':'pensais','aime':'aimais','habite':'habitais','travaille':'travaillais','voudrais':'voulais'};
+const FR_FUTUR = {'ai':'aurai','a':'aura','avez':'aurez','avons':'aurons','est':'sera','sont':'seront','suis':'serai','peux':'pourrai','pouvez':'pourrez','fait':'fera','va':'ira','vais':'irai','allez':'irez'};
+const FR_ANTONYMS = [['bon marché','bon'],['ici','là'],['là','là-bas'],['bon marché','cher'],['beaucoup','peu'],['ici','là-bas'],["aujourd'hui",'hier'],['demain','hier'],['oui','non'],['grand','petit'],['grande','petite'],['bon','mauvais'],['bonne','mauvaise'],['toujours','jamais'],['avant','après'],['devant','derrière'],['ouvert','fermé'],['chaud','froid'],['facile','difficile'],['près','loin'],['vite','lentement']];
+function frVariants(fr){
+  const out = new Set(); const src = String(fr||'');
+  const wb = w => new RegExp("(^|[^A-Za-zÀ-ÿ])("+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+")(?![A-Za-zÀ-ÿ])",'i');
+  [FR_TENSE, FR_FUTUR].forEach(TB=>Object.keys(TB).forEach(w=>{ if(w==='est' && /est-ce/i.test(src)) return; const m = src.match(wb(w)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? TB[w][0].toUpperCase()+TB[w].slice(1) : TB[w]; out.add(src.replace(wb(w), (x,a)=>a+rep).replace(/\bC'sera\b/g,'Ce sera').replace(/\bc'sera\b/g,'ce sera').replace(/\bC'seront\b/g,'Ce seront').replace(/\bc'seront\b/g,'ce seront')); } }));
+  FR_ANTONYMS.forEach(([a,c])=>[[a,c],[c,a]].forEach(([x,y])=>{ if((x==='bon'||x==='bonne') && /bon marché/i.test(src)) return; const m = src.match(wb(x)); if(m){ const rep = /^[A-ZÀ-Ý]/.test(m[2]) ? y[0].toUpperCase()+y.slice(1) : y; out.add(src.replace(wb(x), (z,p)=>p+rep)); } }));
+  out.delete(src);
+  return [...out];
+}
 function pickDistractors(items, it, dir, n){
   const frOf = x=>x.fr||x.rom;
   const ansTxt = dir==='kf' ? frOf(it) : it.kr;
@@ -2038,8 +2073,12 @@ function pickDistractors(items, it, dir, n){
     return Math.abs(a.length-b.length)*0.35 + levDist(koJamo(it.kr), koJamo(x.kr))*0.4 + (firstWord(a)&&firstWord(a)===firstWord(b)?-2.5:0) + Math.random()*0.8;
   };
   const seen = new Set([normFr(frOf(it)||''), it.kr]);
-  const cands = items.filter(x=>x!==it && x.kr!==it.kr).map(x=>({x,s:sc(x)})).sort((p,q)=>p.s-q.s);
   const out = [];
+  // 1) mauvaises réponses fabriquées à partir de la bonne réponse (phrases surtout)
+  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).sort(()=>Math.random()-0.5);
+  for(const t of made){ const key = dir==='kf' ? normFr(t) : t; if(seen.has(key) || t===ansTxt) continue; seen.add(key); out.push(t); if(out.length>=n) return out; }
+  // 2) puis des mots proches de la leçon
+  const cands = items.filter(x=>x!==it && x.kr!==it.kr).map(x=>({x,s:sc(x)})).sort((p,q)=>p.s-q.s);
   for(const {x} of cands){
     const t = dir==='kf' ? frOf(x) : x.kr;
     const key = dir==='kf' ? normFr(t||'') : t;
