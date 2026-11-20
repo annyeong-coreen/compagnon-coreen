@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-19-8';
+  var APP_VERSION = '2026-11-20-1';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -4180,7 +4180,8 @@ const CONTROL_GUARD = { phase:'idle', leaves:0, awayAt:null, awaySecs:0, view:nu
 let TAB_CHANNEL = null; const TAB_ID = Math.random().toString(36).slice(2);
 try{
   if(typeof BroadcastChannel!=='undefined'){
-    TAB_CHANNEL = new BroadcastChannel('compagnon-coreen-tabs');
+    // un canal par version : la version de test et la vraie version ouvertes en même temps ne se gênent plus
+    TAB_CHANNEL = new BroadcastChannel('compagnon-coreen-tabs-' + (location.pathname.indexOf('/test/')>=0 ? 'test' : 'prod'));
     TAB_CHANNEL.onmessage = (e)=>{
       const m = e.data||{}; if(m.from===TAB_ID) return;
       if(m.type==='ping') TAB_CHANNEL.postMessage({type:'pong', from:TAB_ID});
@@ -4359,7 +4360,7 @@ function renderControle(lesson, list, idx){
     const intro = el('<div></div>');
     if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
     intro.appendChild(el(`<div class="note" style="margin-bottom:14px;">Ce contrôle sert à voir ce que tu as <b>vraiment</b> retenu, pour que ta professeur puisse revenir sur ce qui coince. Pour ça :<br>• reste sur cette page pendant tout le contrôle (pas d'autre onglet ni d'autre application) ;<br>• n'ouvre l'outil que dans <b>un seul</b> onglet ;<br>• après ${CONTROL_MAX_LEAVES} sorties, le contrôle est annulé et ta professeur le voit.<br><br><b>20 questions</b> mélangées : choix multiple et réponses à écrire, du coréen vers le français et du français vers le coréen (pour écrire en coréen, utilise le clavier 한).<br><b>Orthographe en coréen :</b> si ta réponse a seulement une petite faute (ㅅ/ㅆ, ㄱ/ㄲ, ㄷ/ㄸ, ㅈ/ㅉ, ㅂ/ㅃ, ㅐ/ㅔ ou ㅎ/ㅇ), l'outil te le dit à la fin et tu peux la <b>réécrire une seule fois</b> : bien réécrite, elle compte ½ point ; sinon 0.<br>Réussi (${Math.round((lesson.pass_score||0.8)*100)}% minimum), il te donne une pièce de puzzle 🧩.</div>`));
-    if(g.phase==='blocked') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">L'outil est déjà ouvert dans un autre onglet. Ferme-le, puis reviens ici.</div>`));
+    if(g.phase==='blocked') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">L'outil est déjà ouvert dans un autre onglet ou une autre fenêtre (même un onglet en veille, ou sur un autre appareil du même navigateur). Ferme-le, puis recharge cette page (Ctrl+F5) et réessaie.</div>`));
     const start = el(`<button class="btn seal" ${g.phase==='checking'?'disabled':''}>${g.phase==='checking'?'Vérification…':'Commencer le contrôle'}</button>`);
     start.onclick = async ()=>{
       g.phase = 'checking'; render();
