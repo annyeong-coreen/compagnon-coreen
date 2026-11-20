@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-20-1';
+  var APP_VERSION = '2026-11-20-2';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2796,6 +2796,7 @@ const PUZZLE_DEFAULTS = [
 "id": "busan-citizen-park",
 "pos": 1,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/busan-citizen-park.jpg",
 "ratio": 0.75,
 "place": "부산시민공원 · Busan",
@@ -2809,6 +2810,7 @@ const PUZZLE_DEFAULTS = [
 "id": "ulsan-taehwa",
 "pos": 2,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/ulsan-taehwa.jpg",
 "ratio": 1.3333,
 "place": "태화강 국가정원 · Ulsan",
@@ -2822,6 +2824,7 @@ const PUZZLE_DEFAULTS = [
 "id": "seoul-starfield",
 "pos": 3,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/seoul-starfield.jpg",
 "ratio": 1.7766,
 "place": "별마당 도서관 · Séoul",
@@ -2835,6 +2838,7 @@ const PUZZLE_DEFAULTS = [
 "id": "busan-jagalchi",
 "pos": 4,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/busan-jagalchi.jpg",
 "ratio": 1.3333,
 "place": "자갈치시장 · Busan",
@@ -2848,6 +2852,7 @@ const PUZZLE_DEFAULTS = [
 "id": "ulsan-grand-park",
 "pos": 5,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/ulsan-grand-park.jpg",
 "ratio": 1.3333,
 "place": "울산대공원 · Ulsan",
@@ -2861,6 +2866,7 @@ const PUZZLE_DEFAULTS = [
 "id": "busan-port",
 "pos": 6,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/busan-port.jpg",
 "ratio": 1.3333,
 "place": "부산항 · Busan",
@@ -2874,6 +2880,7 @@ const PUZZLE_DEFAULTS = [
 "id": "songdo-central-park",
 "pos": 7,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/songdo.jpg",
 "ratio": 1.3333,
 "place": "송도 센트럴파크 · Incheon",
@@ -2887,6 +2894,7 @@ const PUZZLE_DEFAULTS = [
 "id": "ulsan-memorial",
 "pos": 8,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/ulsan-memorial.jpg",
 "ratio": 0.75,
 "place": "울산대공원 현충탑 · Ulsan",
@@ -2900,6 +2908,7 @@ const PUZZLE_DEFAULTS = [
 "id": "incheon-chinatown",
 "pos": 9,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/chinatown.jpg",
 "ratio": 1.3333,
 "place": "차이나타운 · Incheon",
@@ -2913,6 +2922,7 @@ const PUZZLE_DEFAULTS = [
 "id": "incheon-michuhol",
 "pos": 10,
 "src": "repo",
+"author_name": "Jérémy",
 "file": "puzzle-photos/michuhol.jpg",
 "ratio": 0.75,
 "place": "미추홀공원 · Incheon",
@@ -3230,7 +3240,7 @@ function puzzleRevealBlock(ph, small){
     const src = puzzleSourceHtml(ph);
     if(src) box.appendChild(el(`<div class="puzzle-source" style="margin-top:4px;font-size:12px;color:var(--ink-soft);">${src}</div>`));
   }
-  if(ph.src==='user' && ph.author_name && !ph.anonymous) box.appendChild(el(`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">📷 Photo de ${escapeHtml(ph.author_name)}</div>`));
+  if(ph.author_name && !ph.anonymous) box.appendChild(el(`<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">📷 Photo de ${escapeHtml(ph.author_name)}</div>`));
   return box;
 }
 function openPuzzleReveal(idx){
@@ -4337,7 +4347,8 @@ function renderControle(lesson, list, idx){
     if(r.passed && !r.burst){ r.burst=true; petalBurst(); }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
     box.appendChild(el(`<div class="score mono">${fmtPts(r.correct)}/${r.total}</div>`));
-    box.appendChild(el(`<div style="margin:8px 0 16px;">${r.passed?"Réussi, bravo !":`Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.`}</div>`));
+    if(r.passed) box.appendChild(el(`<div style="margin:0 0 6px;font-weight:600;">Réussi, bravo !</div><div style="margin:0 0 16px;color:var(--ink-soft);">Continue à bien réviser, et le coréen n'aura plus aucun secret pour toi ! 💪</div>`));
+    if(!r.passed) box.appendChild(el(`<div style="margin:8px 0 16px;">Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.</div>`));
     if(r.newPiece){
       box.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">🧩 <b>Nouvelle pièce de puzzle !</b>${r.puzzleDone?' 🎉 L\'image est complète : ta professeur va t\'envoyer un petit cadeau.':''}</div>`));
       const see = el('<button class="btn ghost small" style="margin-bottom:12px;">Voir mon puzzle</button>');
