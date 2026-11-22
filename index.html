@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-20-2';
+  var APP_VERSION = '2026-11-22-5';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -291,11 +291,11 @@ if(!CONFIG_OK){
 
 function runApp(sb){
 
-const LEVEL_LABELS = {debutant:'Débutant', intermediaire:'Intermédiaire', avance:'Avancé', groupe:'Cours en groupe', topik:'TOPIK'};
+const LEVEL_LABELS = {debutant:'Débutant', faux_debutant:'faux-débutant', intermediaire:'Intermédiaire', inter_avance:'Intermédiaire-avancé', avance:'Avancé', groupe:'Cours en groupe', topik:'TOPIK'};
 const TOPIK_QS = {"1": [{"q": "저는 학생(   ).", "o": ["이에요", "예요", "이", "가"], "a": 0, "e": "학생 se termine par une consonne : on utilise 이에요. (예요 s'emploie après une voyelle.)"}, {"q": "밥(   ) 먹어요.", "o": ["을", "를", "이", "가"], "a": 0, "e": "밥 se termine par une consonne et c'est l'objet du verbe : 을."}, {"q": "어제 친구를 (   ).", "o": ["만나요", "만났어요", "만날 거예요", "만나세요"], "a": 1, "e": "« Hier » demande le passé : 만났어요."}, {"q": "물 한 (   ) 주세요.", "o": ["잔", "권", "마리", "명"], "a": 0, "e": "Pour un verre ou une tasse, le classificateur est 잔."}, {"q": "학교(   ) 가요.", "o": ["에", "에서", "을", "는"], "a": 0, "e": "Pour la destination d'un verbe de mouvement (가다), on utilise 에."}, {"q": "오늘 다음 날은 (   )입니다.", "o": ["어제", "내일", "지금", "아침"], "a": 1, "e": "Le lendemain d'aujourd'hui, c'est 내일 (demain)."}], "2": [{"q": "같이 점심 먹을(   )?", "o": ["까요", "거예요", "지요", "네요"], "a": 0, "e": "-(으)ㄹ까요? propose quelque chose : « On mange ensemble ? »"}, {"q": "여기에서 사진을 찍지 (   ).", "o": ["마세요", "않아요", "못해요", "안 해요"], "a": 0, "e": "-지 마세요 exprime l'interdiction ou la demande de ne pas faire."}, {"q": "한국에 가(   ) 싶어요.", "o": ["고", "서", "면", "지만"], "a": 0, "e": "-고 싶다 = vouloir (faire) : 가고 싶어요."}, {"q": "어머니(   ) 선물을 드렸어요.", "o": ["께", "한테", "에게", "에"], "a": 0, "e": "Pour une personne à respecter, « à » se dit 께 (et le verbe 드리다)."}, {"q": "머리가 아파서 약을 (   ).", "o": ["먹었어요", "마셨어요", "입었어요", "갔어요"], "a": 0, "e": "Le médicament se « mange » : 약을 먹다."}, {"q": "지하철이 버스(   ) 빨라요.", "o": ["보다", "처럼", "마다", "까지"], "a": 0, "e": "보다 exprime la comparaison : « plus rapide que le bus »."}], "3": [{"q": "한국 음식을 먹어 본 (   )이 있어요.", "o": ["적", "때", "수", "것"], "a": 0, "e": "-(으)ㄴ 적이 있다 = avoir déjà fait."}, {"q": "시간이 (   ) 때 운동을 해요.", "o": ["있을", "있어서", "있으니까", "있지만"], "a": 0, "e": "« Quand » se construit avec -(으)ㄹ 때 : 있을 때."}, {"q": "한국어를 배우(   ) 학원에 다녀요.", "o": ["려고", "니까", "아서", "면"], "a": 0, "e": "-(으)려고 = dans le but de : 배우려고."}, {"q": "다음 달부터 일찍 일어나(   ) 했어요.", "o": ["기로", "는데", "려고", "ㄹ까"], "a": 0, "e": "-기로 하다 = décider de : 일어나기로 했어요."}, {"q": "비가 오(   ) 약속을 취소했어요.", "o": ["기 때문에", "는데", "거나", "지만"], "a": 0, "e": "-기 때문에 donne la raison : « parce qu'il pleut »."}, {"q": "한국에서 살(   ) 되었어요.", "o": ["게", "기", "도록", "지"], "a": 0, "e": "-게 되다 = en venir à, finir par : 살게 되었어요."}], "4": [{"q": "길이 막히(   ) 약속에 늦었어요.", "o": ["는 바람에", "ㄹ수록", "더라도", "거나"], "a": 0, "e": "-는 바람에 : à cause de (un événement qui entraîne un résultat négatif)."}, {"q": "이 식당은 값이 싼 (   )이에요.", "o": ["편", "바", "채", "척"], "a": 0, "e": "-(으)ㄴ 편이다 = plutôt : 싼 편이에요."}, {"q": "힘들(   ) 끝까지 해 보세요.", "o": ["더라도", "ㄹ수록", "ㄴ 채로", "도록"], "a": 0, "e": "-더라도 = même si."}, {"q": "들(   ) 한국어가 재미있어요.", "o": ["을수록", "는 바람에", "더라도", "은 채로"], "a": 0, "e": "-(으)ㄹ수록 = plus… plus : 들을수록."}, {"q": "불을 켠 (   ) 잠이 들었어요.", "o": ["채로", "뿐", "만큼", "바람"], "a": 0, "e": "-(으)ㄴ 채로 = en restant dans cet état."}, {"q": "그 영화는 재미있을 (   ) 아니라 감동적이에요.", "o": ["뿐만", "수밖에", "바람에", "채로"], "a": 0, "e": "-(으)ㄹ 뿐만 아니라 = non seulement… mais aussi."}], "5": [{"q": "사람은 누구나 실수하(   ) 마련이에요.", "o": ["기", "는", "ㄹ", "ㄴ"], "a": 0, "e": "-기 마련이다 = il est naturel que."}, {"q": "너무 긴장한 (   ) 말이 안 나왔어요.", "o": ["나머지", "동안", "만큼", "대로"], "a": 0, "e": "-(으)ㄴ 나머지 = à force de, résultat excessif."}, {"q": "날씨가 추운 (   ) 바람까지 불어요.", "o": ["데다가", "나머지", "셈이", "한"], "a": 0, "e": "-(으)ㄴ 데다가 = en plus de cela."}, {"q": "그가 거짓말을 할 (   ) 없어요.", "o": ["리가", "셈이", "만큼", "뿐이"], "a": 0, "e": "-(으)ㄹ 리가 없다 = il est impossible que."}, {"q": "작년(   ) 물가가 많이 올랐어요.", "o": ["에 비해", "에 따라서", "에 대해", "에도 불구하고"], "a": 0, "e": "에 비해 = par rapport à."}, {"q": "건강을 유지하는 (   ) 계속 일할 수 있어요.", "o": ["한", "채", "뿐", "셈"], "a": 0, "e": "-는 한 = tant que."}], "6": [{"q": "도와주셔서 그저 감사할 (   )입니다.", "o": ["따름", "지경", "법", "뿐만"], "a": 0, "e": "-(으)ㄹ 따름이다 = ne pouvoir que (soutenu)."}, {"q": "미리 준비했기에 (   ) 큰일 날 뻔했다.", "o": ["망정이지", "ㄹ지언정", "건대", "ㄹ 따름"], "a": 0, "e": "-기에 망정이지 = heureusement que…, sinon…"}, {"q": "시대가 변함(   ) 생활 방식도 달라졌다.", "o": ["에 따라", "에도 불구하고", "을 비롯해", "에 앞서"], "a": 0, "e": "-(으)ㅁ에 따라 = au fur et à mesure que."}, {"q": "배가 고파서 쓰러질 (   )이다.", "o": ["지경", "법", "뿐", "따름"], "a": 0, "e": "-(으)ㄹ 지경이다 = au point de."}, {"q": "노력했음에(   ) 결과는 좋지 않았다.", "o": ["도 불구하고", "따라", "비해", "대하여"], "a": 0, "e": "-음에도 불구하고 = malgré le fait que."}, {"q": "그는 죽을(   ) 포기하지 않겠다고 말했다.", "o": ["지언정", "수록", "더라도 ㄹ", "ㄴ 채로"], "a": 0, "e": "-(으)ㄹ지언정 = plutôt que, quitte à."}]};
 const TOPIK_META = {"1": {"title": "TOPIK niveau 1 — Survivre au quotidien", "desc": "Se présenter, saluer, parler de soi et de sa journée, acheter, demander un prix. Phrases très simples sur des sujets familiers."}, "2": {"title": "TOPIK niveau 2 — Les situations de tous les jours", "desc": "Faire des achats, prendre les transports, fixer un rendez-vous, parler de la météo et de projets simples. Des phrases plus longues, au passé et au futur."}, "3": {"title": "TOPIK niveau 3 — Parler de ses expériences et de ses projets", "desc": "Se débrouiller dans des situations sociales, donner son opinion, expliquer une raison, parler d'expériences et de décisions. Premiers textes courts sur le travail et la société."}, "4": {"title": "TOPIK niveau 4 — Comprendre la société et argumenter", "desc": "Comprendre des sujets sociaux ou abstraits, des articles simples et des conversations de travail, et exprimer des nuances (cause, concession, progression)."}, "5": {"title": "TOPIK niveau 5 — Textes spécialisés et opinions nuancées", "desc": "Comprendre des articles, des discours et des sujets spécialisés, et exprimer une opinion nuancée avec des tournures plus littéraires."}, "6": {"title": "TOPIK niveau 6 — Précision, nuances et registre soutenu", "desc": "Comprendre et produire des textes complexes, abstraits ou littéraires, avec des expressions soutenues et des connecteurs précis."}};
 
-const PERSO_LEVELS = ['debutant','intermediaire','avance'];
+const PERSO_LEVELS = ['debutant','faux_debutant','intermediaire','inter_avance','avance'];
 
 let SESSION = null;
 let PROFILE = null;
@@ -1053,11 +1053,20 @@ async function renderOnce(){
   if(!PROFILE){ app.appendChild(el('<div class="empty-state">Chargement du profil…</div>')); return; }
   if(PROFILE.role==='student' && state.space==='groupe' && !PROFILE.group_id){ state.space='perso'; }
 
+  if(PROFILE.role==='student' && CONTROL_LOCKED_ELSEWHERE && CONTROL_GUARD.phase!=='active'){
+    app.appendChild(renderHeader());
+    const lk = el(`<div class="main-card" style="text-align:center;padding:40px 20px;"><div style="font-size:34px;">🔒</div><h2 style="margin:10px 0;">Un contrôle est en cours sur un autre appareil</h2><div class="note" style="max-width:460px;margin:0 auto 18px;">Le Cours, le Quiz et les Exercices sont bloqués jusqu'à la fin du contrôle. Reviens ici quand il est terminé.</div></div>`);
+    const again = el('<button class="btn celadon">Vérifier à nouveau</button>');
+    again.onclick = async ()=>{ again.disabled = true; await controlLockSync(); again.disabled = false; };
+    lk.appendChild(again); app.appendChild(lk); return;
+  }
   app.appendChild(renderHeader());
   app.appendChild(await renderAssignmentBanner());
+  app.appendChild(await renderReviewNoticeBanner());
   app.appendChild(await renderUpdatedBanner());
   app.appendChild(renderNextClassBanner());
 
+  if(PROFILE.role==='teacher') refreshReviewCount();
   app.appendChild(renderSpaceTabs());
 
   if(state.space==='dashboard' && PROFILE.role==='teacher'){
@@ -1315,6 +1324,100 @@ function markLessonSeen(l){
   LESSON_VIEWS[l.id] = new Date().toISOString();
   try{ sb.from('lesson_views').upsert({student_id:SESSION.user.id, lesson_id:l.id, seen_at:LESSON_VIEWS[l.id]}, {onConflict:'student_id,lesson_id'}).then(r=>{ if(r && r.error) VIEWS_OK=false; }); }catch(e){ VIEWS_OK=false; }
 }
+
+/* ---------- Validation des contrôles par la professeure ---------- */
+async function renderReviewNoticeBanner(){
+  const box = el('<div></div>');
+  if(!PROFILE || PROFILE.role!=='student') return box;
+  Object.keys(PROGRESS).forEach(lid=>{
+    const pr = PROGRESS[lid], rv = pr && pr.control && pr.control.review;
+    if(!rv || rv.seen || (rv.status!=='validated' && rv.status!=='cancelled')) return;
+    let html;
+    if(rv.status==='cancelled') html = `❌ Ton contrôle « ${escapeHtml(rv.lesson||'')} » a été annulé par ta professeure${rv.note?' : « '+escapeHtml(rv.note)+' »':''}. Tu peux le refaire.`;
+    else if(rv.passedNow) html = `✅ Ton contrôle « ${escapeHtml(rv.lesson||'')} » est validé : <b>${fmtPts(rv.points)}/${rv.a.length}</b>, bravo ! 🧩 <b>Nouvelle pièce de puzzle !</b>`;
+    else html = `Ton contrôle « ${escapeHtml(rv.lesson||'')} » est corrigé : <b>${fmtPts(rv.points)}/${rv.a.length}</b>. Il faut ${Math.round((rv.pass||0.8)*100)}% : revois le Cours et retente.`;
+    const n = el(`<div class="note" style="border-color:var(--celadon-dark);margin:0 0 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><span style="flex:1;min-width:200px;">${html}</span></div>`);
+    const ok = el('<button class="btn ghost small">OK</button>');
+    ok.onclick = async ()=>{ ok.disabled = true; const ctl = Object.assign({}, pr.control, { review:Object.assign({}, rv, { seen:true }) }); await sbUpsertProgress(lid, { control:ctl }); render(); };
+    n.appendChild(ok);
+    if(rv.status==='validated' && rv.passedNow){ const see = el('<button class="btn ghost small">Voir mon puzzle</button>'); see.onclick = ()=>{ openPuzzle(); }; n.appendChild(see); }
+    box.appendChild(n);
+  });
+  return box;
+}
+let REVIEW_COUNT = 0, REVIEW_COUNT_AT = 0;
+async function refreshReviewCount(force){
+  if(!PROFILE || PROFILE.role!=='teacher') return;
+  if(!force && Date.now()-REVIEW_COUNT_AT < 45000) return;
+  REVIEW_COUNT_AT = Date.now();
+  try{
+    const r = await sb.from('progress').select('student_id', { count:'exact', head:true }).eq('control->review->>status','pending');
+    if(!r.error && typeof r.count==='number'){ const was = REVIEW_COUNT; REVIEW_COUNT = r.count; if(was!==REVIEW_COUNT) render(); }
+  }catch(e){}
+}
+async function teacherReviewApply(row, decision, verdicts, note){
+  const ctl = Object.assign({}, row.control); const rv = Object.assign({}, ctl.review);
+  if(decision==='cancel'){ rv.status = 'cancelled'; rv.note = String(note||'').slice(0,200); rv.seen = false; }
+  else {
+    rv.a = rv.a.map((x,i)=>Object.assign({}, x, { v: verdicts[i] }));
+    const points = rv.a.reduce((t,x)=>t+(x.v==='ok'?1:(x.v==='half'?0.5:0)),0);
+    const ratio = rv.a.length ? points/rv.a.length : 0, passedNow = ratio >= (rv.pass||0.8);
+    rv.status = 'validated'; rv.points = points; rv.passedNow = passedNow; rv.seen = false; rv.note = '';
+    ctl.passed = !!ctl.passed || passedNow; ctl.score = Math.max(ctl.score||0, ratio); ctl.last_score = ratio; ctl.date = new Date().toISOString().slice(0,10);
+  }
+  ctl.review = rv;
+  const r = await sb.from('progress').update({ control:ctl }).eq('student_id', row.student_id).eq('lesson_id', row.lesson_id);
+  if(r.error) throw r.error;
+  ALL_PROGRESS = await sbAllProgress(); REVIEW_COUNT_AT = 0; await refreshReviewCount(true);
+}
+function reviewPanel(){
+  const pend = ALL_PROGRESS.filter(r=>r.control && r.control.review && r.control.review.status==='pending');
+  const box = el('<div class="section-block" style="border:1.5px solid var(--seal);border-radius:10px;padding:14px 18px;margin-bottom:26px;"></div>');
+  box.appendChild(el(`<h3 style="margin-top:0;">📝 Contrôles à valider ${pend.length?'('+pend.length+')':''}</h3>`));
+  if(!pend.length){ box.appendChild(el('<div style="color:var(--ink-soft);font-size:13px;">Aucun contrôle en attente.</div>')); return box; }
+  box.appendChild(el('<div class="note" style="margin-bottom:12px;">L\'outil a déjà corrigé. Regarde seulement les réponses jugées fausses : accepte celles qui sont bonnes, puis valide. Si le texte ne correspond pas aux réponses, tu peux annuler le contrôle.</div>'));
+  pend.forEach(row=>{
+    const rv = row.control.review, prof = (ALL_PROFILES||[]).find(p=>p.id===row.student_id);
+    const verd = rv.a.map(x=>x.t);
+    const head = el('<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line);"></div>');
+    const nOk = rv.a.filter(x=>x.t==='ok').length, mins = Math.max(1,Math.round((rv.secs||0)/60)), ex = (row.control.flags&&row.control.flags.exits)||0;
+    head.appendChild(el(`<div style="flex:1;min-width:220px;"><b>${escapeHtml(prof?prof.name:'Élève')}</b> · ${escapeHtml(rv.lesson||'')}<br><span style="font-size:12px;color:var(--ink-soft);">Outil : ${fmtPts(rv.a.reduce((t,x)=>t+(x.t==='ok'?1:x.t==='half'?0.5:0),0))}/${rv.a.length} · ${mins} min · ${ex} sortie${ex>1?'s':''} de page au total</span></div>`));
+    const open = el('<button class="btn celadon small">Examiner</button>');
+    head.appendChild(open); box.appendChild(head);
+    const detail = el('<div style="display:none;padding:6px 0 14px;"></div>'); box.appendChild(detail);
+    open.onclick = ()=>{
+      if(detail.style.display==='block'){ detail.style.display='none'; return; }
+      detail.style.display='block'; detail.innerHTML='';
+      detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
+      const score = el('<div style="font-weight:600;margin:10px 0;"></div>');
+      const upd = ()=>{ const pts = verd.reduce((t,v)=>t+(v==='ok'?1:v==='half'?0.5:0),0), ratio = pts/rv.a.length, okp = ratio>=(rv.pass||0.8); score.innerHTML = `Score avec tes corrections : ${fmtPts(pts)}/${rv.a.length} → ${okp?'<span style="color:var(--celadon-dark);">réussi ✅</span>':'<span style="color:var(--seal);">pas encore assez</span>'}`; };
+      const mkRow = (x,i)=>{
+        const r = el(`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line);"><div style="flex:1;min-width:220px;font-size:14px;">${escapeHtml(x.p)}<br><span style="font-size:13px;">Élève : <span class="kr">${escapeHtml(x.g||'—')}</span> · Attendu : <span class="kr">${escapeHtml(x.a)}</span></span></div></div>`);
+        const btns = el('<div style="display:flex;gap:6px;"></div>');
+        const defs = [['ok','✓ Acceptée'],['no','✗ Fausse']]; if(x.t==='half') defs.splice(1,0,['half','½']);
+        const paint = ()=>{ [...btns.children].forEach(b=>{ const on = b.dataset.v===verd[i]; b.style.background = on ? (b.dataset.v==='no'?'var(--seal)':'var(--celadon-dark)') : 'transparent'; b.style.color = on?'#fff':'var(--ink)'; }); };
+        defs.forEach(([v,l])=>{ const b = el(`<button type="button" class="btn ghost small" data-v="${v}">${l}</button>`); b.onclick = ()=>{ verd[i]=v; paint(); upd(); }; btns.appendChild(b); });
+        r.appendChild(btns); paint(); return r;
+      };
+      const bad = rv.a.map((x,i)=>[x,i]).filter(([x])=>x.t!=='ok');
+      if(bad.length){ detail.appendChild(el(`<div style="font-weight:600;margin:6px 0;">Réponses jugées fausses par l'outil (${bad.length})</div>`)); bad.forEach(([x,i])=>detail.appendChild(mkRow(x,i))); }
+      else detail.appendChild(el('<div style="margin:6px 0;color:var(--celadon-dark);">✅ Toutes les réponses sont justes selon l\'outil.</div>'));
+      const good = rv.a.map((x,i)=>[x,i]).filter(([x])=>x.t==='ok');
+      if(good.length){ const d = el(`<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;color:var(--ink-soft);">Voir les ${good.length} réponses jugées bonnes</summary></details>`); good.forEach(([x,i])=>d.appendChild(mkRow(x,i))); detail.appendChild(d); }
+      detail.appendChild(score); upd();
+      const bar = el('<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px;"></div>');
+      const okb = el('<button class="btn celadon">Valider le contrôle</button>');
+      const noteIn = el('<input type="text" placeholder="Raison de l\'annulation (facultatif)" style="flex:1;min-width:180px;max-width:300px;">');
+      const cb = el('<button class="btn ghost">Annuler le contrôle</button>');
+      const msg = el('<span style="font-size:12px;color:var(--ink-soft);"></span>');
+      okb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'validate',verd,''); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e)+' (la migration SQL est-elle lancée ?)'; okb.disabled = cb.disabled = false; } };
+      cb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'cancel',verd,noteIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e); okb.disabled = cb.disabled = false; } };
+      bar.appendChild(okb); bar.appendChild(noteIn); bar.appendChild(cb); bar.appendChild(msg); detail.appendChild(bar);
+    };
+  });
+  return box;
+}
+
 async function renderUpdatedBanner(){
   if(!VIEWS_OK || !PROFILE || PROFILE.role!=='student') return el('<div></div>');
   const found = [];
@@ -1561,7 +1664,7 @@ async function renderAssignmentBanner(){
 function renderSpaceTabs(){
   const row = el('<div class="level-tabs" style="margin-bottom:18px;"></div>');
   const spaces = PROFILE.role==='teacher'
-    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['puzzles', puzzleTabLabel()], ['boutique','🎁 Boutique'], ['dashboard','📊 Suivi élèves']]
+    ? [['inbox', dmTabLabel('inbox')], ['groupe','Cours en groupe'], ['manage','➕ Gérer les leçons'], ['puzzles', puzzleTabLabel()], ['boutique','🎁 Boutique'], ['dashboard','📊 Suivi élèves'+(REVIEW_COUNT?' ('+REVIEW_COUNT+')':'')]]
     : [['perso','Mon parcours']].concat(PROFILE.group_id ? [['groupe','Cours en groupe']] : []).concat([['topik','🎓 TOPIK']]).concat([['dm', dmTabLabel('dm')]]);
   spaces.forEach(([key,label])=>{
     const b = el(`<button class="level-tab ${state.space===key?'active':''}" data-space="${key}">${label}</button>`);
@@ -2148,7 +2251,12 @@ const FR_NUMS = {zero:0,deux:2,trois:3,quatre:4,cinq:5,six:6,sept:7,huit:8,dix:1
 function normFr(s){
   return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[’‘`]/g,"'").replace(/[^a-z0-9' ]+/g,' ').replace(/\s+/g,' ').trim()
-    .split(' ').map(w=> Object.prototype.hasOwnProperty.call(FR_NUMS,w) ? String(FR_NUMS[w]) : w).join(' ');
+    .split(' ').map(w=> Object.prototype.hasOwnProperty.call(FR_NUMS,w) ? String(FR_NUMS[w]) : w).join(' ')
+    .replace(/(\d) (?=\d{3}(?!\d))/g,'$1').replace(/(\d)([a-z])/g,'$1 $2').replace(/([a-z])(\d)/g,'$1 $2').replace(/\b(?:krw|wons?)\b/g,'won')
+    .replace(/\b(?:je souhaiterais|j'aimerais|je desirerais)\b/g,'je voudrais').replace(/\b(?:nous souhaiterions|nous aimerions|nous desirerions)\b/g,'nous voudrions').replace(/\b(?:vous souhaiteriez|vous aimeriez|vous desireriez)\b/g,'vous voudriez').replace(/\b(?:il souhaiterait|il aimerait|elle souhaiterait|elle aimerait)\b/g,m=>m.split(' ')[0]+' voudrait')
+    .replace(/\b(?:je souhaite|je desire)\b/g,'je veux').replace(/\bassoir\b/g,'asseoir').replace(/\bd'accord\b/g,'ok')
+    .replace(/^(?:est ce que|est ce qu') ?/,'').replace(/^puis je\b/,'je peux').replace(/^peux tu\b/,'tu peux')
+    .replace(/^(\w{2,8}(?:ons|ez|ent|ons|as|es|ait|ais|ez)|peux|veux|sais|as|est|a|va|fait|dois) (vous|tu|nous|ils|elles|il|elle|on)\b/,'$2 $1');
 }
 // Réponse acceptée si elle correspond à la traduction entière OU à l'une de ses
 // variantes ("être changé / être modifié" -> l'une ou l'autre), sans tenir
@@ -2351,7 +2459,7 @@ const GRAMMAR_CATEGORIES = [
 /* ===== Aide-mémoire : catégories de référence (toujours complètes) =====
    level : à partir de quel niveau on les montre par défaut. Chaque ligne : [coréen, français, note?, exemple?]
    seen:false = pas de « vu en cours » (les petits mots comme 이 ou 일 seraient confondus avec d'autres mots). */
-const REF_LEVEL_RANK = { debutant:0, intermediaire:1, avance:2 };
+const REF_LEVEL_RANK = { debutant:0, faux_debutant:0.5, intermediaire:1, inter_avance:1.5, avance:2 };
 const REF_CATEGORIES = [
   { id:'sino', icon:'💯', title:'Nombres sino-coréens', level:'debutant', hint:'Le système d\'origine chinoise : dates, prix, minutes, numéros…',
     intro:'À utiliser pour : les dates (월, 일), l\'argent (원), les minutes (분), les numéros de téléphone, les étages (층), les numéros (번), les adresses.',
@@ -4210,7 +4318,31 @@ function controlOtherTabOpen(){
     setTimeout(()=>{ TAB_CHANNEL.removeEventListener('message', h); resolve(found); }, 400);
   });
 }
-function controlGuardReset(){ Object.assign(CONTROL_GUARD, { phase:'idle', leaves:0, awayAt:null, awaySecs:0, view:null, banner:'', reasons:[] }); }
+function controlGuardReset(){ Object.assign(CONTROL_GUARD, { phase:'idle', leaves:0, awayAt:null, awaySecs:0, view:null, banner:'', reasons:[] }); setTimeout(()=>{ try{ controlLockSync(); }catch(e){} }, 50); }
+/* Verrou « un seul appareil » : pendant un contrôle, les autres appareils/onglets du même compte sont bloqués.
+   Si la fonction n'existe pas encore dans la base (migration non lancée), on ne bloque rien. */
+let CONTROL_LOCKED_ELSEWHERE = false, CONTROL_HOLD = false;
+async function controlLockAcquire(){
+  try{ const r = await sb.rpc('control_lock_acquire', { dev:TAB_ID }); if(r.error) return true; CONTROL_HOLD = true; return r.data!==false; }
+  catch(e){ return true; }
+}
+async function controlLockSync(){
+  try{
+    if(!SESSION || !PROFILE || PROFILE.role!=='student') return;
+    if(CONTROL_GUARD.phase==='active'){ await controlLockAcquire(); return; }
+    if(CONTROL_HOLD){ CONTROL_HOLD = false; await sb.rpc('control_lock_release', { dev:TAB_ID }); }
+    const r = await sb.rpc('control_lock_other', { dev:TAB_ID });
+    if(r.error) return;
+    const v = !!r.data;
+    if(v!==CONTROL_LOCKED_ELSEWHERE){ CONTROL_LOCKED_ELSEWHERE = v; render(); }
+  }catch(e){}
+}
+setInterval(controlLockSync, 15000);
+setTimeout(controlLockSync, 2500);
+window.addEventListener('pagehide', ()=>{ try{ if(CONTROL_HOLD) sb.rpc('control_lock_release', { dev:TAB_ID }); }catch(e){} });
+// Texte final du contrôle : petit minimum selon la leçon (les toutes premières leçons n'ont presque pas de vocabulaire)
+function controlTextMin(lesson){ return ((lesson.vocab||[]).length>=8) ? 25 : 8; }
+function hangulCount(t){ return ((t||'').match(/[\uAC00-\uD7A3]/g)||[]).length; }
 function controlGuardAway(reason){
   if(CONTROL_GUARD.phase!=='active' || CONTROL_GUARD.awayAt!==null) return;
   CONTROL_GUARD.awayAt = Date.now(); CONTROL_GUARD.pendingReason = reason;
@@ -4261,7 +4393,7 @@ function controlGuardCheckView(){
     // le contrôle repart de zéro : on ne laisse pas voir le cours puis revenir sur les mêmes questions
     const lessonId = g.view && g.view.lessonId; const lv = g.leaves;
     controlGuardReset(); g.leaves = lv; g.phase='idle'; g.banner = `⚠️ Tu as quitté l'écran du contrôle (${lv}/${CONTROL_MAX_LEAVES}). Les questions ont changé.`;
-    state.controlAnswers = {};
+    state.controlAnswers = {}; state.controlText = '';
     for(const k of Object.keys(LESSONS_CACHE)){ (LESSONS_CACHE[k]||[]).forEach(l=>{ delete l._control; }); }
     g.carry = lv;
   }
@@ -4336,11 +4468,16 @@ function renderControle(lesson, list, idx){
     const r = state.controlResult;
     if(g.phase==='active') controlGuardReset();
     const box = el('<div class="result-box"></div>');
+    if(r.pending){
+      box.appendChild(el(`<div class="score mono" style="font-size:26px;">📨</div>`));
+      box.appendChild(el(`<div style="margin:8px 0 6px;font-weight:600;">Contrôle envoyé à ta professeure !</div><div style="color:var(--ink-soft);">Elle va le regarder et le valider. Tu auras ton résultat dès que ce sera fait.</div>`));
+      wrap.appendChild(box); return wrap;
+    }
     if(r.cancelled){
       box.appendChild(el(`<div class="score mono" style="font-size:22px;">⛔</div>`));
       box.appendChild(el(`<div style="margin:8px 0 16px;"><b>Contrôle annulé.</b> Tu as quitté la page ${r.leaves} fois pendant le contrôle. Ta professeur le voit, pour t'aider à voir où ça coince. Il faut le refaire en restant sur la page.</div>`));
       const retry = el('<button class="btn celadon">Recommencer le contrôle</button>');
-      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
+      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlText=''; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
       box.appendChild(retry); wrap.appendChild(box);
       return wrap;
     }
@@ -4355,9 +4492,12 @@ function renderControle(lesson, list, idx){
       see.onclick = ()=>{ openPuzzle(); };
       box.appendChild(see);
     }
-    const retry = el('<button class="btn celadon">Retenter le contrôle</button>');
-    retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
-    box.appendChild(retry); wrap.appendChild(box);
+    if(!(r.passed && PROFILE.role!=='teacher')){
+      const retry = el('<button class="btn celadon">Retenter le contrôle</button>');
+      retry.onclick = ()=>{ state.controlResult=null; state.controlAnswers={}; state.controlText=''; state.controlRetry=null; state.controlRetryAns={}; delete lesson._control; controlGuardReset(); render(); };
+      box.appendChild(retry);
+    }
+    wrap.appendChild(box);
     if(r.wrong.length){
       const rev = el('<div class="section-block" style="margin-top:24px;"><h3>À revoir</h3></div>');
       r.wrong.forEach(w=>rev.appendChild(el(`<div class="vocab-row"><span class="kr">${w.kr}</span><span class="rom mono">donné : ${w.given||'—'}</span><span class="fr">correct : ${w.answer}</span></div>`)));
@@ -4367,8 +4507,21 @@ function renderControle(lesson, list, idx){
   }
 
   // Avant de commencer : règle du jeu + vérification qu'il n'y a pas un autre onglet ouvert
+  const myRv = (PROFILE.role==='student' && PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.review) || null;
+  if(g.phase!=='active' && myRv && myRv.status==='pending'){
+    const w = el('<div></div>');
+    w.appendChild(el(`<div class="result-box"><div class="score mono" style="font-size:26px;">⏳</div><div style="margin:8px 0 6px;font-weight:600;">Contrôle en attente de validation</div><div style="color:var(--ink-soft);">Ta professeure doit le valider. Tu auras ton résultat dès que ce sera fait.</div></div>`));
+    return w;
+  }
+  if(g.phase!=='active' && PROFILE.role!=='teacher' && PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.passed){
+    const done = el('<div></div>');
+    done.appendChild(el(`<div class="result-box"><div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div><div style="margin:8px 0 6px;font-weight:600;">Contrôle déjà réussi ✅</div><div style="color:var(--ink-soft);">Bravo ! Tu n'as pas besoin de le refaire. Continue à bien réviser avec le Cours, le Quiz et les Exercices, et le coréen n'aura plus aucun secret pour toi ! 💪</div></div>`));
+    return done;
+  }
   if(g.phase!=='active'){
     const intro = el('<div></div>');
+    if(myRv && myRv.status==='cancelled') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">❌ Ta professeure a annulé ton dernier contrôle${myRv.note?' : « '+escapeHtml(myRv.note)+' »':''}. Tu peux le refaire.</div>`));
+    if(myRv && myRv.status==='validated' && !myRv.passedNow) intro.appendChild(el(`<div class="note" style="margin-bottom:12px;">Dernier contrôle : <b>${fmtPts(myRv.points)}/${myRv.a.length}</b> (il faut ${Math.round((myRv.pass||0.8)*100)}%). Revois le Cours et retente.</div>`));
     if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
     intro.appendChild(el(`<div class="note" style="margin-bottom:14px;">Ce contrôle sert à voir ce que tu as <b>vraiment</b> retenu, pour que ta professeur puisse revenir sur ce qui coince. Pour ça :<br>• reste sur cette page pendant tout le contrôle (pas d'autre onglet ni d'autre application) ;<br>• n'ouvre l'outil que dans <b>un seul</b> onglet ;<br>• après ${CONTROL_MAX_LEAVES} sorties, le contrôle est annulé et ta professeur le voit.<br><br><b>20 questions</b> mélangées : choix multiple et réponses à écrire, du coréen vers le français et du français vers le coréen (pour écrire en coréen, utilise le clavier 한).<br><b>Orthographe en coréen :</b> si ta réponse a seulement une petite faute (ㅅ/ㅆ, ㄱ/ㄲ, ㄷ/ㄸ, ㅈ/ㅉ, ㅂ/ㅃ, ㅐ/ㅔ ou ㅎ/ㅇ), l'outil te le dit à la fin et tu peux la <b>réécrire une seule fois</b> : bien réécrite, elle compte ½ point ; sinon 0.<br>Réussi (${Math.round((lesson.pass_score||0.8)*100)}% minimum), il te donne une pièce de puzzle 🧩.</div>`));
     if(g.phase==='blocked') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">L'outil est déjà ouvert dans un autre onglet ou une autre fenêtre (même un onglet en veille, ou sur un autre appareil du même navigateur). Ferme-le, puis recharge cette page (Ctrl+F5) et réessaie.</div>`));
@@ -4377,6 +4530,8 @@ function renderControle(lesson, list, idx){
       g.phase = 'checking'; render();
       const other = await controlOtherTabOpen();
       if(other){ g.phase = 'blocked'; render(); return; }
+      if(PROFILE.role==='student' && !(await controlLockAcquire())){ g.phase = 'blocked'; render(); return; }
+      g.startedAt = Date.now();
       const carry = g.carry||0;
       g.phase = 'active'; g.leaves = carry; g.carry = 0; g.awayAt = null; g.awaySecs = g.awaySecs||0; g.banner = g.banner||'';
       g.view = { space:state.space, level:state.level, lessonIdState:state.lessonId||null, lessonId:lesson.id };
@@ -4402,7 +4557,7 @@ function renderControle(lesson, list, idx){
     row.appendChild(inp); return row;
   };
   const finish = async (retryAns)=>{
-    let points = 0; const wrong = [], rec = [];
+    let points = 0; const wrong = [], rec = [], ans = [];
     qs.forEach(q=>{
       const r = grade(q); let pts = r.pts, given = state.controlAnswers[q.id] || '';
       if(r.level==='near' && r.pts===0){
@@ -4411,6 +4566,7 @@ function renderControle(lesson, list, idx){
         given = re || given;
       }
       points += pts;
+      ans.push({ p:q.prompt, g:String(given||'').slice(0,200), a:q.answer, t: pts===1?'ok':(pts===0.5?'half':'no'), ty:q.type });
       if(pts<1) wrong.push({kr:q.prompt, given: given + (pts===0.5?' → petite faute corrigée (½ point)':''), answer:q.answer});
       rec.push({kr:q.item.kr, ok: pts===1});
     });
@@ -4422,11 +4578,17 @@ function renderControle(lesson, list, idx){
     const flags = Object.assign({ exits:0, cancelled:0, secs:0 }, prevCtl.flags||{});
     flags.exits += g.leaves; flags.secs += g.awaySecs; if(g.leaves) flags.last = new Date().toISOString().slice(0,10);
     const ctl = { passed, score: Math.max(prevCtl.score||0, ratio), last_score: ratio, date:new Date().toISOString().slice(0,10), attempts:(prevCtl.attempts||0)+1, flags };
+    const needReview = PROFILE.role==='student';
+    if(needReview){
+      ctl.passed = wasPassed; ctl.score = prevCtl.score||0; if(prevCtl.last_score!==undefined) ctl.last_score = prevCtl.last_score; else delete ctl.last_score;
+      ctl.review = { status:'pending', at:new Date().toISOString(), lesson:lesson.title, secs:Math.round((Date.now()-(g.startedAt||Date.now()))/1000), text:String(state.controlText||'').slice(0,1500), pass:(lesson.pass_score||0.8), a:ans };
+    }
     controlGuardReset();
     state.controlRetry = null; state.controlRetryAns = {};
-    state.controlResult = {correct, total, passed:passedNow, wrong};
+    state.controlResult = needReview ? {pending:true, total} : {correct, total, passed:passedNow, wrong};
     await sbRecordAnswers(lesson.id, rec);
     await sbUpsertProgress(lesson.id, {control: ctl});
+    if(needReview){ render(); return; }
     if(passedNow && PROFILE.role==='student'){
       const after = puzzleCount();
       if(after>piecesBefore){ state.controlResult.newPiece = true; state.controlResult.puzzleDone = (after % PUZZLE_PIECES === 0); }
@@ -4466,8 +4628,24 @@ function renderControle(lesson, list, idx){
     } else qb.appendChild(writeBox(q, state.controlAnswers));
     wrap.appendChild(qb);
   });
-  const submit = el('<button class="btn seal">Valider le contrôle</button>');
+  let textMsg = null;
+  if(PROFILE.role==='student'){
+    const need = controlTextMin(lesson);
+    wrap.appendChild(el(`<h3 style="margin:26px 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line);">${secNo+1}. Pour finir : un petit texte en coréen <small style="font-weight:400;color:var(--ink-soft);">(pas noté)</small></h3>`));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:8px;">Écris un petit texte d'environ 5 lignes avec ce que tu as appris dans cette leçon. Il n'est pas noté, mais il est obligatoire pour envoyer ton contrôle : ta professeure le lit.</div>`));
+    const ta = el('<textarea lang="ko" data-ko="1" spellcheck="false" style="width:100%;min-height:120px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:16px;" placeholder="한글로 써 보세요…"></textarea>');
+    ta.value = state.controlText || '';
+    const cnt = el('<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>');
+    const upd = ()=>{ const n = hangulCount(ta.value); cnt.textContent = n+' lettre'+(n>1?'s':'')+' coréenne'+(n>1?'s':'')+' · minimum '+need; };
+    ta.oninput = ()=>{ state.controlText = ta.value; upd(); }; upd();
+    wrap.appendChild(ta); wrap.appendChild(cnt);
+    textMsg = el('<div class="error-text" style="margin-top:8px;"></div>'); wrap.appendChild(textMsg);
+  }
+  const submit = el('<button class="btn seal" style="margin-top:14px;">Valider le contrôle</button>');
   submit.onclick = async ()=>{
+    if(PROFILE.role==='student' && hangulCount(state.controlText) < controlTextMin(lesson)){
+      textMsg.textContent = 'Écris ton petit texte en coréen (au moins '+controlTextMin(lesson)+' lettres coréennes) avant d\'envoyer ton contrôle.'; textMsg.scrollIntoView({block:'center'}); return;
+    }
     const nearQs = qs.filter(q=>grade(q).level==='near' && grade(q).pts===0);
     if(nearQs.length){ state.controlRetry = { ids: nearQs.map(q=>q.id) }; state.controlRetryAns = {}; render(); return; }
     submit.disabled = true; await finish(null);
@@ -5747,6 +5925,7 @@ async function renderDashboard(){
   const box = el('<div class="main-card"></div>');
   box.appendChild(el('<h2 style="margin:0 0 6px;">Suivi des élèves</h2>'));
   box.appendChild(el('<div class="note" style="margin-bottom:20px;">Résultats d\'exercices, de quiz et de contrôle, leçon par leçon.</div>'));
+  box.appendChild(reviewPanel());
 
   /* --- Créer un compte élève --- */
   // Ouvert depuis un fichier de l'ordinateur (file://), l'adresse serait inutilisable par un élève : on propose le site en ligne
@@ -5932,7 +6111,7 @@ async function renderDashboard(){
           const meta = allLessonsFlat[r.lesson_id] || {title:r.lesson_id, level:''};
           const ex = r.exercises ? `${r.exercises.correct}/${r.exercises.total}` : '—';
           const qz = r.quiz ? `Quiz ${r.quiz.correct}/${r.quiz.total}` : '';
-          const cf = r.control && r.control.flags; const ct = r.control ? `Contrôle ${Math.round((r.control.score||0)*100)}% ${r.control.passed?'✅':'❌'} (${r.control.attempts||0} essai${(r.control.attempts||0)>1?'s':''})${cf&&(cf.exits||cf.cancelled)?` ⚠️ ${cf.exits} sortie${cf.exits>1?'s':''} de page${cf.cancelled?`, ${cf.cancelled} annulé${cf.cancelled>1?'s':''}`:''}${cf.secs?` (${cf.secs} s hors page)`:''}`:''}` : '';
+          const cf = r.control && r.control.flags; const ct = r.control ? `Contrôle ${Math.round((r.control.score||0)*100)}% ${r.control.passed?'✅':(r.control.review&&r.control.review.status==='pending'?'⏳ à valider':'❌')} (${r.control.attempts||0} essai${(r.control.attempts||0)>1?'s':''})${cf&&(cf.exits||cf.cancelled)?` ⚠️ ${cf.exits} sortie${cf.exits>1?'s':''} de page${cf.cancelled?`, ${cf.cancelled} annulé${cf.cancelled>1?'s':''}`:''}${cf.secs?` (${cf.secs} s hors page)`:''}`:''}` : '';
           const weakTop = r.misses ? Object.keys(r.misses).filter(k=>r.misses[k] && r.misses[k].m>0).sort((a,b)=>r.misses[b].m-r.misses[a].m).slice(0,6) : [];
           table.appendChild(el(`<div class="vocab-row"><span>${escapeHtml(meta.title)} <span style="color:var(--ink-soft);font-size:11px;">(${LEVEL_LABELS[meta.level]||''})</span></span><span>${ex}</span><span>${[qz,ct].filter(Boolean).join(' · ')||'—'}</span></div>`));
           if(weakTop.length) table.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);margin:-2px 0 10px;">🎯 À reprendre : ${weakTop.map(k=>`<span class="kr">${escapeHtml(k)}</span> ×${r.misses[k].m}`).join(' · ')}</div>`));
