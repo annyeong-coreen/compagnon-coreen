@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-22-4';
+  var APP_VERSION = '2026-11-22-5';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2253,6 +2253,8 @@ function normFr(s){
     .replace(/[’‘`]/g,"'").replace(/[^a-z0-9' ]+/g,' ').replace(/\s+/g,' ').trim()
     .split(' ').map(w=> Object.prototype.hasOwnProperty.call(FR_NUMS,w) ? String(FR_NUMS[w]) : w).join(' ')
     .replace(/(\d) (?=\d{3}(?!\d))/g,'$1').replace(/(\d)([a-z])/g,'$1 $2').replace(/([a-z])(\d)/g,'$1 $2').replace(/\b(?:krw|wons?)\b/g,'won')
+    .replace(/\b(?:je souhaiterais|j'aimerais|je desirerais)\b/g,'je voudrais').replace(/\b(?:nous souhaiterions|nous aimerions|nous desirerions)\b/g,'nous voudrions').replace(/\b(?:vous souhaiteriez|vous aimeriez|vous desireriez)\b/g,'vous voudriez').replace(/\b(?:il souhaiterait|il aimerait|elle souhaiterait|elle aimerait)\b/g,m=>m.split(' ')[0]+' voudrait')
+    .replace(/\b(?:je souhaite|je desire)\b/g,'je veux').replace(/\bassoir\b/g,'asseoir').replace(/\bd'accord\b/g,'ok')
     .replace(/^(?:est ce que|est ce qu') ?/,'').replace(/^puis je\b/,'je peux').replace(/^peux tu\b/,'tu peux')
     .replace(/^(\w{2,8}(?:ons|ez|ent|ons|as|es|ait|ais|ez)|peux|veux|sais|as|est|a|va|fait|dois) (vous|tu|nous|ils|elles|il|elle|on)\b/,'$2 $1');
 }
