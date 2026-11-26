@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-22-5';
+  var APP_VERSION = '2026-11-26-6';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1340,10 +1340,52 @@ async function renderReviewNoticeBanner(){
     const ok = el('<button class="btn ghost small">OK</button>');
     ok.onclick = async ()=>{ ok.disabled = true; const ctl = Object.assign({}, pr.control, { review:Object.assign({}, rv, { seen:true }) }); await sbUpsertProgress(lid, { control:ctl }); render(); };
     n.appendChild(ok);
+    if(rv.fix || rv.comment){
+      const go = el('<button class="btn seal small">Voir ma correction</button>');
+      go.onclick = async ()=>{
+        go.disabled = true;
+        const ctl2 = Object.assign({}, pr.control, { review:Object.assign({}, rv, { seen:true }) }); try{ await sbUpsertProgress(lid, { control:ctl2 }); }catch(e){}
+        const lvl = (rv.space && rv.space!=='') ? rv.space : PROFILE.level;
+        state.space = PERSO_LEVELS.includes(lvl) ? 'perso' : lvl; state.level = lvl; if(state.space==='perso') state.lastPersoLevel = lvl;
+        state.puzzleMode=false; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
+        state.lessonId = lid; state.tab='controle'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0;
+        render();
+      };
+      n.appendChild(go);
+    }
     if(rv.status==='validated' && rv.passedNow){ const see = el('<button class="btn ghost small">Voir mon puzzle</button>'); see.onclick = ()=>{ openPuzzle(); }; n.appendChild(see); }
     box.appendChild(n);
   });
   return box;
+}
+// Texte corrigé avec les changements en vert (comparaison lettre par lettre avec le texte d'origine)
+function diffFixHtml(orig, fixed){
+  const a = Array.from(String(orig||'')), b = Array.from(String(fixed||''));
+  const n = a.length, m = b.length;
+  const W = m+1, L = new Uint16Array((n+1)*W);
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) L[i*W+j] = a[i]===b[j] ? L[(i+1)*W+j+1]+1 : Math.max(L[(i+1)*W+j], L[i*W+j+1]);
+  const keep = new Array(m).fill(false); let i=0, j=0;
+  while(i<n && j<m){ if(a[i]===b[j]){ keep[j]=true; i++; j++; } else if(L[(i+1)*W+j] >= L[i*W+j+1]) i++; else j++; }
+  let out = '', open = false;
+  const close = ()=>{ if(open){ out += '</span>'; open = false; } };
+  b.forEach((c,k)=>{
+    const changed = !keep[k] && !/\s/.test(c);
+    if(changed && !open){ out += '<span style="color:#1f7a3f;font-weight:700;background:rgba(31,122,63,.14);border-radius:3px;">'; open = true; }
+    if(!changed && open && !/\s/.test(c)) close();
+    out += escapeHtml(c);
+  });
+  close(); return out;
+}
+function reviewFeedbackBlock(rv){
+  if(!rv || !(rv.fix || rv.comment)) return null;
+  const b = el('<div class="note" style="margin-bottom:14px;border-color:var(--celadon-dark);"></div>');
+  b.appendChild(el('<div style="font-weight:600;margin-bottom:8px;">✏️ Ton texte corrigé par ta professeure</div>'));
+  if(rv.fix){
+    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Ta version :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${escapeHtml(rv.text||'')}</div></div>`));
+    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${diffFixHtml(rv.text, rv.fix)}</div><div style="font-size:11px;color:var(--ink-soft);">Les changements de ta professeure sont en <b style="color:#1f7a3f;">vert</b>.</div></div>`));
+  }
+  if(rv.comment) b.appendChild(el(`<div style="font-size:14px;">💬 ${escapeHtml(rv.comment)}</div>`));
+  return b;
 }
 let REVIEW_COUNT = 0, REVIEW_COUNT_AT = 0;
 async function refreshReviewCount(force){
@@ -1355,8 +1397,10 @@ async function refreshReviewCount(force){
     if(!r.error && typeof r.count==='number'){ const was = REVIEW_COUNT; REVIEW_COUNT = r.count; if(was!==REVIEW_COUNT) render(); }
   }catch(e){}
 }
-async function teacherReviewApply(row, decision, verdicts, note){
+async function teacherReviewApply(row, decision, verdicts, note, fix, comment){
   const ctl = Object.assign({}, row.control); const rv = Object.assign({}, ctl.review);
+  rv.fix = (rv.text && fix && String(fix).trim() && String(fix).trim()!==String(rv.text).trim()) ? String(fix).trim().slice(0,1500) : '';
+  rv.comment = String(comment||'').trim().slice(0,400);
   if(decision==='cancel'){ rv.status = 'cancelled'; rv.note = String(note||'').slice(0,200); rv.seen = false; }
   else {
     rv.a = rv.a.map((x,i)=>Object.assign({}, x, { v: verdicts[i] }));
@@ -1388,7 +1432,14 @@ function reviewPanel(){
     open.onclick = ()=>{
       if(detail.style.display==='block'){ detail.style.display='none'; return; }
       detail.style.display='block'; detail.innerHTML='';
-      detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
+      if(rv.text) detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
+      const fixTa = el('<textarea lang="ko" data-ko="1" spellcheck="false" style="width:100%;min-height:90px;padding:8px 10px;border:1.5px solid var(--celadon-dark);border-radius:8px;font-size:16px;"></textarea>');
+      const comIn = el('<input type="text" maxlength="400" placeholder="Commentaire pour l\'élève (facultatif)" style="width:100%;margin-top:6px;">');
+      if(rv.text){
+        fixTa.value = rv.text;
+        const fb = el('<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">✏️ Correction du texte (modifie directement ci-dessous, facultatif) :</div></div>');
+        fb.appendChild(fixTa); fb.appendChild(comIn); detail.appendChild(fb);
+      } else { comIn.style.marginBottom = '10px'; detail.appendChild(comIn); }
       const score = el('<div style="font-weight:600;margin:10px 0;"></div>');
       const upd = ()=>{ const pts = verd.reduce((t,v)=>t+(v==='ok'?1:v==='half'?0.5:0),0), ratio = pts/rv.a.length, okp = ratio>=(rv.pass||0.8); score.innerHTML = `Score avec tes corrections : ${fmtPts(pts)}/${rv.a.length} → ${okp?'<span style="color:var(--celadon-dark);">réussi ✅</span>':'<span style="color:var(--seal);">pas encore assez</span>'}`; };
       const mkRow = (x,i)=>{
@@ -1410,8 +1461,8 @@ function reviewPanel(){
       const noteIn = el('<input type="text" placeholder="Raison de l\'annulation (facultatif)" style="flex:1;min-width:180px;max-width:300px;">');
       const cb = el('<button class="btn ghost">Annuler le contrôle</button>');
       const msg = el('<span style="font-size:12px;color:var(--ink-soft);"></span>');
-      okb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'validate',verd,''); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e)+' (la migration SQL est-elle lancée ?)'; okb.disabled = cb.disabled = false; } };
-      cb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'cancel',verd,noteIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e); okb.disabled = cb.disabled = false; } };
+      okb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'validate',verd,'',fixTa.value,comIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e)+' (la migration SQL est-elle lancée ?)'; okb.disabled = cb.disabled = false; } };
+      cb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'cancel',verd,noteIn.value,fixTa.value,comIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e); okb.disabled = cb.disabled = false; } };
       bar.appendChild(okb); bar.appendChild(noteIn); bar.appendChild(cb); bar.appendChild(msg); detail.appendChild(bar);
     };
   });
@@ -2201,7 +2252,7 @@ function spliceVariants(texts, ans, lang){
   out.delete(ans.trim());
   return [...out];
 }
-function pickDistractors(items, it, dir, n){
+function pickDistractors(items, it, dir, n, simple){
   const frOf = x=>x.fr||x.rom;
   const ansTxt = dir==='kf' ? frOf(it) : it.kr;
   const firstWord = t=>normFr(t).split(' ')[0];
@@ -2214,7 +2265,8 @@ function pickDistractors(items, it, dir, n){
   const out = [];
   // 1) mauvaises réponses fabriquées à partir de la bonne réponse (phrases surtout)
   const txtOf = x=> dir==='fk' ? x.kr : frOf(x);
-  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
+  // simple (débutants / faux-débutants) : pas de variantes au passé, à la négation ou au futur — ils ne les ont pas encore vus
+  const made = (simple ? [] : (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it)))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
   for(const t of made){ const key = dir==='kf' ? normFr(t) : t; if(seen.has(key) || t===ansTxt) continue; seen.add(key); out.push(t); if(out.length>=n) return out; }
   // 2) puis des éléments proches de la leçon : même catégorie (verbe/nom/phrase) et, pour les phrases, même ponctuation
   const cat = koCat(it.kr), sig = punctSig(ansTxt);
@@ -2234,14 +2286,22 @@ function pickDistractors(items, it, dir, n){
   }
   return out;
 }
+// Débutants et faux-débutants : pas de phrases ni d'écriture libre français → coréen, et un peu de répétition des bases
+function isBeginnerLesson(lesson){
+  const lv = (typeof PROFILE!=='undefined' && PROFILE && PROFILE.role==='student') ? PROFILE.level : (lesson && lesson.space);
+  return lv==='debutant' || lv==='faux_debutant';
+}
+const shortKrWord = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
 function buildMCQ(lesson, count, smart){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr})));
-  const shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
+  const BEG = isBeginnerLesson(lesson);
+  let shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
+  if(BEG && count && shuffled.length>0 && shuffled.length<count){ const base = shuffled.slice(); let k = 0; while(shuffled.length<count){ shuffled.push(base[k%base.length]); k++; } }
   return shuffled.map((it,i)=>{
     // un mot sur deux est demandé dans l'autre sens (français → coréen), sauf les lettres sans traduction
-    const dir = (it.fr && i%2===1) ? 'fk' : 'kf';
+    const dir = (it.fr && i%2===1 && (!BEG || shortKrWord(it))) ? 'fk' : 'kf';
     const correct = dir==='fk' ? it.kr : (it.fr || it.rom);
-    const distractors = pickDistractors(items, it, dir, 3);
+    const distractors = pickDistractors(items, it, dir, 3, BEG);
     return {id:'q'+lesson.id+'_'+i, kr:it.kr, dir, fr:it.fr||it.rom, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
   });
 }
@@ -2325,12 +2385,20 @@ function renderExercices(lesson){
     return wrap;
   }
   const shortKrEx = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
-  if(!lesson._exOrder || lesson._exOrder.length!==items.length){
-    lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+  // Débutants / faux-débutants : chaque mot revient 2 ou 3 fois dans le tour (3 fois si la leçon est courte), jamais deux fois de suite
+  const REPS = isBeginnerLesson(lesson) ? (items.length<=6 ? 3 : 2) : 1;
+  if(!lesson._exOrder || lesson._exOrder.length!==items.length*REPS){
+    const passes = [];
+    for(let r=0;r<REPS;r++){
+      let ord = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+      if(passes.length && ord.length>1 && ord[0]===passes[passes.length-1]){ ord = ord.slice(1).concat(ord[0]); }
+      passes.push(...ord);
+    }
+    lesson._exOrder = passes;
     // une carte sur deux est à écrire en coréen (français → coréen), sauf lettres et phrases longues
-    lesson._exDirs = items.map((it)=> (it.fr && !it.rom && shortKrEx(it) && Math.random()<0.5) ? 'fk' : 'kf');
+    lesson._exDirs = items.map((it)=> (!isBeginnerLesson(lesson) && it.fr && !it.rom && shortKrEx(it) && Math.random()<0.5) ? 'fk' : 'kf');
   }
-  const total = items.length;
+  const total = lesson._exOrder.length;
   if(state.exerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.exerciseCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Entraînement terminé — refais un tour, ou passe au Quiz.</div></div>`);
     const restart = el('<button class="btn celadon">Recommencer</button>');
@@ -4341,7 +4409,7 @@ setInterval(controlLockSync, 15000);
 setTimeout(controlLockSync, 2500);
 window.addEventListener('pagehide', ()=>{ try{ if(CONTROL_HOLD) sb.rpc('control_lock_release', { dev:TAB_ID }); }catch(e){} });
 // Texte final du contrôle : petit minimum selon la leçon (les toutes premières leçons n'ont presque pas de vocabulaire)
-function controlTextMin(lesson){ return ((lesson.vocab||[]).length>=8) ? 25 : 8; }
+function controlTextMin(lesson){ if(isBeginnerLesson(lesson)) return ((lesson.vocab||[]).length>=8) ? 12 : 6; return ((lesson.vocab||[]).length>=8) ? 25 : 8; }
 function hangulCount(t){ return ((t||'').match(/[\uAC00-\uD7A3]/g)||[]).length; }
 function controlGuardAway(reason){
   if(CONTROL_GUARD.phase!=='active' || CONTROL_GUARD.awayAt!==null) return;
@@ -4428,7 +4496,12 @@ function fmtPts(n){ return (Math.round(n*2)/2).toString().replace('.',','); }
 function buildControlQs(lesson, N){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr}))).filter(x=>x.kr);
   const shortKr = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
-  const FORMATS = [
+  const BEG = isBeginnerLesson(lesson);
+  const FORMATS = BEG ? [
+    {t:'mcq', d:'kf', ok:x=>!!(x.fr||x.rom)},
+    {t:'mcq', d:'fk', ok:x=>!!x.fr && shortKr(x)},   // débutants : mots seulement, pas de phrases
+    {t:'wr',  d:'kf', ok:x=>!!x.fr}
+  ] : [
     {t:'mcq', d:'kf', ok:x=>!!(x.fr||x.rom)},
     {t:'mcq', d:'fk', ok:x=>!!x.fr},
     {t:'wr',  d:'kf', ok:x=>!!x.fr},
@@ -4441,7 +4514,8 @@ function buildControlQs(lesson, N){
   while(picks.length<N && progress){
     progress = false;
     for(let fi=0; fi<FORMATS.length && picks.length<N; fi++){
-      const cand = order[fi].find(x=>!used.some(u=>u.has(x))) || order[fi].find(x=>!used[fi].has(x));
+      if(BEG && order[fi].length && order[fi].every(x=>used[fi].has(x))) used[fi].clear();
+      const cand = BEG ? order[fi].find(x=>!used[fi].has(x)) : (order[fi].find(x=>!used.some(u=>u.has(x))) || order[fi].find(x=>!used[fi].has(x)));
       if(cand){ used[fi].add(cand); picks.push({fi, item:cand}); progress = true; }
     }
   }
@@ -4451,7 +4525,7 @@ function buildControlQs(lesson, N){
     const frOf = x=>x.fr||x.rom;
     if(f.t==='mcq'){
       const answer = f.d==='kf' ? frOf(it) : it.kr;
-      const distract = pickDistractors(items, it, f.d, 3);
+      const distract = pickDistractors(items, it, f.d, 3, BEG);
       return {id, type:'mcq', dir:f.d, item:it, answer, options:shuffle(distract.concat([answer])),
               prompt: f.d==='kf' ? 'Que signifie '+it.kr+' ?' : 'Comment dit-on « '+frOf(it)+' » en coréen ?'};
     }
@@ -4470,7 +4544,7 @@ function renderControle(lesson, list, idx){
     const box = el('<div class="result-box"></div>');
     if(r.pending){
       box.appendChild(el(`<div class="score mono" style="font-size:26px;">📨</div>`));
-      box.appendChild(el(`<div style="margin:8px 0 6px;font-weight:600;">Contrôle envoyé à ta professeure !</div><div style="color:var(--ink-soft);">Elle va le regarder et le valider. Tu auras ton résultat dès que ce sera fait.</div>`));
+      box.appendChild(el(`<div><div style="margin:8px 0 6px;font-weight:600;">Contrôle envoyé à ta professeure !</div><div style="color:var(--ink-soft);">Elle va le regarder et le valider. Tu auras ton résultat dès que ce sera fait.</div></div>`));
       wrap.appendChild(box); return wrap;
     }
     if(r.cancelled){
@@ -4484,7 +4558,7 @@ function renderControle(lesson, list, idx){
     if(r.passed && !r.burst){ r.burst=true; petalBurst(); }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
     box.appendChild(el(`<div class="score mono">${fmtPts(r.correct)}/${r.total}</div>`));
-    if(r.passed) box.appendChild(el(`<div style="margin:0 0 6px;font-weight:600;">Réussi, bravo !</div><div style="margin:0 0 16px;color:var(--ink-soft);">Continue à bien réviser, et le coréen n'aura plus aucun secret pour toi ! 💪</div>`));
+    if(r.passed) box.appendChild(el(`<div><div style="margin:0 0 6px;font-weight:600;">Réussi, bravo !</div><div style="margin:0 0 16px;color:var(--ink-soft);">Continue à bien réviser, et le coréen n'aura plus aucun secret pour toi ! 💪</div></div>`));
     if(!r.passed) box.appendChild(el(`<div style="margin:8px 0 16px;">Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.</div>`));
     if(r.newPiece){
       box.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">🧩 <b>Nouvelle pièce de puzzle !</b>${r.puzzleDone?' 🎉 L\'image est complète : ta professeur va t\'envoyer un petit cadeau.':''}</div>`));
@@ -4516,10 +4590,12 @@ function renderControle(lesson, list, idx){
   if(g.phase!=='active' && PROFILE.role!=='teacher' && PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.passed){
     const done = el('<div></div>');
     done.appendChild(el(`<div class="result-box"><div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div><div style="margin:8px 0 6px;font-weight:600;">Contrôle déjà réussi ✅</div><div style="color:var(--ink-soft);">Bravo ! Tu n'as pas besoin de le refaire. Continue à bien réviser avec le Cours, le Quiz et les Exercices, et le coréen n'aura plus aucun secret pour toi ! 💪</div></div>`));
+    { const fbk = reviewFeedbackBlock(myRv); if(fbk) done.appendChild(fbk); }
     return done;
   }
   if(g.phase!=='active'){
     const intro = el('<div></div>');
+    { const fbk = (myRv && (myRv.status==='validated'||myRv.status==='cancelled')) ? reviewFeedbackBlock(myRv) : null; if(fbk) intro.appendChild(fbk); }
     if(myRv && myRv.status==='cancelled') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">❌ Ta professeure a annulé ton dernier contrôle${myRv.note?' : « '+escapeHtml(myRv.note)+' »':''}. Tu peux le refaire.</div>`));
     if(myRv && myRv.status==='validated' && !myRv.passedNow) intro.appendChild(el(`<div class="note" style="margin-bottom:12px;">Dernier contrôle : <b>${fmtPts(myRv.points)}/${myRv.a.length}</b> (il faut ${Math.round((myRv.pass||0.8)*100)}%). Revois le Cours et retente.</div>`));
     if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
@@ -4581,7 +4657,7 @@ function renderControle(lesson, list, idx){
     const needReview = PROFILE.role==='student';
     if(needReview){
       ctl.passed = wasPassed; ctl.score = prevCtl.score||0; if(prevCtl.last_score!==undefined) ctl.last_score = prevCtl.last_score; else delete ctl.last_score;
-      ctl.review = { status:'pending', at:new Date().toISOString(), lesson:lesson.title, secs:Math.round((Date.now()-(g.startedAt||Date.now()))/1000), text:String(state.controlText||'').slice(0,1500), pass:(lesson.pass_score||0.8), a:ans };
+      ctl.review = { status:'pending', at:new Date().toISOString(), lesson:lesson.title, lid:lesson.id, space:lesson.space||'', secs:Math.round((Date.now()-(g.startedAt||Date.now()))/1000), text:String(state.controlText||'').slice(0,1500), pass:(lesson.pass_score||0.8), a:ans };
     }
     controlGuardReset();
     state.controlRetry = null; state.controlRetryAns = {};
@@ -4629,10 +4705,11 @@ function renderControle(lesson, list, idx){
     wrap.appendChild(qb);
   });
   let textMsg = null;
-  if(PROFILE.role==='student'){
+  const needText = PROFILE.role==='student' && !isBeginnerLesson(lesson);   // pas de texte final pour Débutant / faux-débutant
+  if(needText){
     const need = controlTextMin(lesson);
     wrap.appendChild(el(`<h3 style="margin:26px 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line);">${secNo+1}. Pour finir : un petit texte en coréen <small style="font-weight:400;color:var(--ink-soft);">(pas noté)</small></h3>`));
-    wrap.appendChild(el(`<div class="note" style="margin-bottom:8px;">Écris un petit texte d'environ 5 lignes avec ce que tu as appris dans cette leçon. Il n'est pas noté, mais il est obligatoire pour envoyer ton contrôle : ta professeure le lit.</div>`));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:8px;">Écris un petit texte ${isBeginnerLesson(lesson)?'de 2 phrases environ':'d\'environ 5 lignes'} avec ce que tu as appris dans cette leçon. Il n'est pas noté, mais il est obligatoire pour envoyer ton contrôle : ta professeure le lit.</div>`));
     const ta = el('<textarea lang="ko" data-ko="1" spellcheck="false" style="width:100%;min-height:120px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:16px;" placeholder="한글로 써 보세요…"></textarea>');
     ta.value = state.controlText || '';
     const cnt = el('<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>');
@@ -4643,7 +4720,7 @@ function renderControle(lesson, list, idx){
   }
   const submit = el('<button class="btn seal" style="margin-top:14px;">Valider le contrôle</button>');
   submit.onclick = async ()=>{
-    if(PROFILE.role==='student' && hangulCount(state.controlText) < controlTextMin(lesson)){
+    if(needText && hangulCount(state.controlText) < controlTextMin(lesson)){
       textMsg.textContent = 'Écris ton petit texte en coréen (au moins '+controlTextMin(lesson)+' lettres coréennes) avant d\'envoyer ton contrôle.'; textMsg.scrollIntoView({block:'center'}); return;
     }
     const nearQs = qs.filter(q=>grade(q).level==='near' && grade(q).pts===0);
