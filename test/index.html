@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-26-5';
+  var APP_VERSION = '2026-11-26-6';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1340,10 +1340,41 @@ async function renderReviewNoticeBanner(){
     const ok = el('<button class="btn ghost small">OK</button>');
     ok.onclick = async ()=>{ ok.disabled = true; const ctl = Object.assign({}, pr.control, { review:Object.assign({}, rv, { seen:true }) }); await sbUpsertProgress(lid, { control:ctl }); render(); };
     n.appendChild(ok);
+    if(rv.fix || rv.comment){
+      const go = el('<button class="btn seal small">Voir ma correction</button>');
+      go.onclick = async ()=>{
+        go.disabled = true;
+        const ctl2 = Object.assign({}, pr.control, { review:Object.assign({}, rv, { seen:true }) }); try{ await sbUpsertProgress(lid, { control:ctl2 }); }catch(e){}
+        const lvl = (rv.space && rv.space!=='') ? rv.space : PROFILE.level;
+        state.space = PERSO_LEVELS.includes(lvl) ? 'perso' : lvl; state.level = lvl; if(state.space==='perso') state.lastPersoLevel = lvl;
+        state.puzzleMode=false; state.reviewMode=false; state.grammarMode=false; state.listenMode=false; state.globalQuizMode=false;
+        state.lessonId = lid; state.tab='controle'; state.controlResult=null; state.quizResult=null; state.exerciseIndex=0;
+        render();
+      };
+      n.appendChild(go);
+    }
     if(rv.status==='validated' && rv.passedNow){ const see = el('<button class="btn ghost small">Voir mon puzzle</button>'); see.onclick = ()=>{ openPuzzle(); }; n.appendChild(see); }
     box.appendChild(n);
   });
   return box;
+}
+// Texte corrigé avec les changements en vert (comparaison lettre par lettre avec le texte d'origine)
+function diffFixHtml(orig, fixed){
+  const a = Array.from(String(orig||'')), b = Array.from(String(fixed||''));
+  const n = a.length, m = b.length;
+  const W = m+1, L = new Uint16Array((n+1)*W);
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) L[i*W+j] = a[i]===b[j] ? L[(i+1)*W+j+1]+1 : Math.max(L[(i+1)*W+j], L[i*W+j+1]);
+  const keep = new Array(m).fill(false); let i=0, j=0;
+  while(i<n && j<m){ if(a[i]===b[j]){ keep[j]=true; i++; j++; } else if(L[(i+1)*W+j] >= L[i*W+j+1]) i++; else j++; }
+  let out = '', open = false;
+  const close = ()=>{ if(open){ out += '</span>'; open = false; } };
+  b.forEach((c,k)=>{
+    const changed = !keep[k] && !/\s/.test(c);
+    if(changed && !open){ out += '<span style="color:#1f7a3f;font-weight:700;background:rgba(31,122,63,.14);border-radius:3px;">'; open = true; }
+    if(!changed && open && !/\s/.test(c)) close();
+    out += escapeHtml(c);
+  });
+  close(); return out;
 }
 function reviewFeedbackBlock(rv){
   if(!rv || !(rv.fix || rv.comment)) return null;
@@ -1351,7 +1382,7 @@ function reviewFeedbackBlock(rv){
   b.appendChild(el('<div style="font-weight:600;margin-bottom:8px;">✏️ Ton texte corrigé par ta professeure</div>'));
   if(rv.fix){
     b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Ta version :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${escapeHtml(rv.text||'')}</div></div>`));
-    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;color:var(--celadon-dark);">${escapeHtml(rv.fix)}</div></div>`));
+    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${diffFixHtml(rv.text, rv.fix)}</div><div style="font-size:11px;color:var(--ink-soft);">Les changements de ta professeure sont en <b style="color:#1f7a3f;">vert</b>.</div></div>`));
   }
   if(rv.comment) b.appendChild(el(`<div style="font-size:14px;">💬 ${escapeHtml(rv.comment)}</div>`));
   return b;
@@ -4626,7 +4657,7 @@ function renderControle(lesson, list, idx){
     const needReview = PROFILE.role==='student';
     if(needReview){
       ctl.passed = wasPassed; ctl.score = prevCtl.score||0; if(prevCtl.last_score!==undefined) ctl.last_score = prevCtl.last_score; else delete ctl.last_score;
-      ctl.review = { status:'pending', at:new Date().toISOString(), lesson:lesson.title, secs:Math.round((Date.now()-(g.startedAt||Date.now()))/1000), text:String(state.controlText||'').slice(0,1500), pass:(lesson.pass_score||0.8), a:ans };
+      ctl.review = { status:'pending', at:new Date().toISOString(), lesson:lesson.title, lid:lesson.id, space:lesson.space||'', secs:Math.round((Date.now()-(g.startedAt||Date.now()))/1000), text:String(state.controlText||'').slice(0,1500), pass:(lesson.pass_score||0.8), a:ans };
     }
     controlGuardReset();
     state.controlRetry = null; state.controlRetryAns = {};
