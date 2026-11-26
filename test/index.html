@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-26-3';
+  var APP_VERSION = '2026-11-26-4';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1345,6 +1345,17 @@ async function renderReviewNoticeBanner(){
   });
   return box;
 }
+function reviewFeedbackBlock(rv){
+  if(!rv || !(rv.fix || rv.comment)) return null;
+  const b = el('<div class="note" style="margin-bottom:14px;border-color:var(--celadon-dark);"></div>');
+  b.appendChild(el('<div style="font-weight:600;margin-bottom:8px;">✏️ Ton texte corrigé par ta professeure</div>'));
+  if(rv.fix){
+    b.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">Ta version :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${escapeHtml(rv.text||'')}</div>`));
+    b.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;color:var(--celadon-dark);">${escapeHtml(rv.fix)}</div>`));
+  }
+  if(rv.comment) b.appendChild(el(`<div style="font-size:14px;">💬 ${escapeHtml(rv.comment)}</div>`));
+  return b;
+}
 let REVIEW_COUNT = 0, REVIEW_COUNT_AT = 0;
 async function refreshReviewCount(force){
   if(!PROFILE || PROFILE.role!=='teacher') return;
@@ -1355,8 +1366,10 @@ async function refreshReviewCount(force){
     if(!r.error && typeof r.count==='number'){ const was = REVIEW_COUNT; REVIEW_COUNT = r.count; if(was!==REVIEW_COUNT) render(); }
   }catch(e){}
 }
-async function teacherReviewApply(row, decision, verdicts, note){
+async function teacherReviewApply(row, decision, verdicts, note, fix, comment){
   const ctl = Object.assign({}, row.control); const rv = Object.assign({}, ctl.review);
+  rv.fix = (rv.text && fix && String(fix).trim() && String(fix).trim()!==String(rv.text).trim()) ? String(fix).trim().slice(0,1500) : '';
+  rv.comment = String(comment||'').trim().slice(0,400);
   if(decision==='cancel'){ rv.status = 'cancelled'; rv.note = String(note||'').slice(0,200); rv.seen = false; }
   else {
     rv.a = rv.a.map((x,i)=>Object.assign({}, x, { v: verdicts[i] }));
@@ -1389,6 +1402,13 @@ function reviewPanel(){
       if(detail.style.display==='block'){ detail.style.display='none'; return; }
       detail.style.display='block'; detail.innerHTML='';
       if(rv.text) detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
+      const fixTa = el('<textarea lang="ko" data-ko="1" spellcheck="false" style="width:100%;min-height:90px;padding:8px 10px;border:1.5px solid var(--celadon-dark);border-radius:8px;font-size:16px;"></textarea>');
+      const comIn = el('<input type="text" maxlength="400" placeholder="Commentaire pour l\'élève (facultatif)" style="width:100%;margin-top:6px;">');
+      if(rv.text){
+        fixTa.value = rv.text;
+        const fb = el('<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">✏️ Correction du texte (modifie directement ci-dessous, facultatif) :</div></div>');
+        fb.appendChild(fixTa); fb.appendChild(comIn); detail.appendChild(fb);
+      } else { comIn.style.marginBottom = '10px'; detail.appendChild(comIn); }
       const score = el('<div style="font-weight:600;margin:10px 0;"></div>');
       const upd = ()=>{ const pts = verd.reduce((t,v)=>t+(v==='ok'?1:v==='half'?0.5:0),0), ratio = pts/rv.a.length, okp = ratio>=(rv.pass||0.8); score.innerHTML = `Score avec tes corrections : ${fmtPts(pts)}/${rv.a.length} → ${okp?'<span style="color:var(--celadon-dark);">réussi ✅</span>':'<span style="color:var(--seal);">pas encore assez</span>'}`; };
       const mkRow = (x,i)=>{
@@ -1410,8 +1430,8 @@ function reviewPanel(){
       const noteIn = el('<input type="text" placeholder="Raison de l\'annulation (facultatif)" style="flex:1;min-width:180px;max-width:300px;">');
       const cb = el('<button class="btn ghost">Annuler le contrôle</button>');
       const msg = el('<span style="font-size:12px;color:var(--ink-soft);"></span>');
-      okb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'validate',verd,''); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e)+' (la migration SQL est-elle lancée ?)'; okb.disabled = cb.disabled = false; } };
-      cb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'cancel',verd,noteIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e); okb.disabled = cb.disabled = false; } };
+      okb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'validate',verd,'',fixTa.value,comIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e)+' (la migration SQL est-elle lancée ?)'; okb.disabled = cb.disabled = false; } };
+      cb.onclick = async ()=>{ okb.disabled = cb.disabled = true; msg.textContent = 'Enregistrement…'; try{ await teacherReviewApply(row,'cancel',verd,noteIn.value,fixTa.value,comIn.value); render(); }catch(e){ msg.textContent = 'Erreur : '+(e.message||e); okb.disabled = cb.disabled = false; } };
       bar.appendChild(okb); bar.appendChild(noteIn); bar.appendChild(cb); bar.appendChild(msg); detail.appendChild(bar);
     };
   });
@@ -4539,10 +4559,12 @@ function renderControle(lesson, list, idx){
   if(g.phase!=='active' && PROFILE.role!=='teacher' && PROGRESS[lesson.id] && PROGRESS[lesson.id].control && PROGRESS[lesson.id].control.passed){
     const done = el('<div></div>');
     done.appendChild(el(`<div class="result-box"><div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div><div style="margin:8px 0 6px;font-weight:600;">Contrôle déjà réussi ✅</div><div style="color:var(--ink-soft);">Bravo ! Tu n'as pas besoin de le refaire. Continue à bien réviser avec le Cours, le Quiz et les Exercices, et le coréen n'aura plus aucun secret pour toi ! 💪</div></div>`));
+    { const fbk = reviewFeedbackBlock(myRv); if(fbk) done.appendChild(fbk); }
     return done;
   }
   if(g.phase!=='active'){
     const intro = el('<div></div>');
+    { const fbk = (myRv && (myRv.status==='validated'||myRv.status==='cancelled')) ? reviewFeedbackBlock(myRv) : null; if(fbk) intro.appendChild(fbk); }
     if(myRv && myRv.status==='cancelled') intro.appendChild(el(`<div class="note" style="border-color:var(--seal);margin-bottom:12px;">❌ Ta professeure a annulé ton dernier contrôle${myRv.note?' : « '+escapeHtml(myRv.note)+' »':''}. Tu peux le refaire.</div>`));
     if(myRv && myRv.status==='validated' && !myRv.passedNow) intro.appendChild(el(`<div class="note" style="margin-bottom:12px;">Dernier contrôle : <b>${fmtPts(myRv.points)}/${myRv.a.length}</b> (il faut ${Math.round((myRv.pass||0.8)*100)}%). Revois le Cours et retente.</div>`));
     if(g.banner){ intro.appendChild(el(`<div class="note" style="border-color:var(--seal);color:var(--seal);margin-bottom:12px;">${escapeHtml(g.banner)}</div>`)); }
