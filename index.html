@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-26-6';
+  var APP_VERSION = '2026-11-26-7';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -796,6 +796,17 @@ async function lookupWordSmart(clean, preferredBase){
 }
 /* GRAMMAR:END */
 
+// Propositions automatiques (MyMemory) pour UN mot : on ne garde que du court et du neutre.
+// Base de traductions publique = on y trouve parfois des phrases entières, des slogans ou des messages politiques : tout cela est écarté.
+const POLITICAL_RE = /(iran|israël|israel|palestin|gaza|hamas|ukrain|russ|poutine|trump|biden|macron|netanyahou|g[ée]opolit|politi[cq]|gouvernement|[ée]lection|manifest|guerre|arm[ée]e|militaire|terroris|dictat|r[ée]gime|r[ée]volution|nazi|fascis|communis|extr[êe]me|propagand|vive\b|[àa] bas\b|mort [àa]\b|lib[ée]rez|libert[ée] pour|boycott|sanction|otage|migrant|immigr)/i;
+function cleanWordSuggestion(t, koWord){
+  t = String(t||'').trim(); if(!t) return null;
+  if(!/[!?]/.test(koWord||'') && /[!?]/.test(t)) return null;           // pas de phrase exclamative/interrogative pour un mot
+  if(t.split(/\s+/).filter(Boolean).length>3) return null;              // 3 mots maximum
+  if(/[A-ZÀ-Ý]/.test(t.slice(1))) return null;                          // majuscule au milieu : nom propre, peuple, lieu…
+  if(POLITICAL_RE.test(t)) return null;
+  return t.replace(/\s*[.!]+$/,'');
+}
 async function translateWordKoFr(word, opts){
   opts = opts || {};
   const stem = opts.noStrip ? word : stripKoParticle(word);
@@ -853,13 +864,13 @@ async function translateWordKoFr(word, opts){
     .slice()
     .sort((a,b)=> (parseFloat(b.match)||0) - (parseFloat(a.match)||0))
     .forEach(m=>{
-      const t = (m.translation||'').trim();
-      const key = t.toLowerCase();
+      const t = cleanWordSuggestion(m.translation, stem);
+      const key = t ? t.toLowerCase() : '';
       if(t && !seen.has(key)){ seen.add(key); variants.push(t); }
     });
 
-  const best = data && data.responseData && data.responseData.translatedText;
-  if(best && !seen.has(best.trim().toLowerCase())){ variants.unshift(best.trim()); }
+  const best = cleanWordSuggestion(data && data.responseData && data.responseData.translatedText, stem);
+  if(best && !seen.has(best.toLowerCase())){ variants.unshift(best); }
 
   if(variants.length===0) throw new Error('no translation');
   return variants.slice(0,4); // jusqu'à 4 propositions
