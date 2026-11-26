@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-26-2';
+  var APP_VERSION = '2026-11-26-3';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -2201,7 +2201,7 @@ function spliceVariants(texts, ans, lang){
   out.delete(ans.trim());
   return [...out];
 }
-function pickDistractors(items, it, dir, n){
+function pickDistractors(items, it, dir, n, simple){
   const frOf = x=>x.fr||x.rom;
   const ansTxt = dir==='kf' ? frOf(it) : it.kr;
   const firstWord = t=>normFr(t).split(' ')[0];
@@ -2214,7 +2214,8 @@ function pickDistractors(items, it, dir, n){
   const out = [];
   // 1) mauvaises réponses fabriquées à partir de la bonne réponse (phrases surtout)
   const txtOf = x=> dir==='fk' ? x.kr : frOf(x);
-  const made = (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
+  // simple (débutants / faux-débutants) : pas de variantes au passé, à la négation ou au futur — ils ne les ont pas encore vus
+  const made = (simple ? [] : (dir==='fk' ? koVariants(it.kr) : frVariants(frOf(it)))).concat(spliceVariants(items.map(txtOf), ansTxt, dir==='fk'?'ko':'fr')).sort(()=>Math.random()-0.5);
   for(const t of made){ const key = dir==='kf' ? normFr(t) : t; if(seen.has(key) || t===ansTxt) continue; seen.add(key); out.push(t); if(out.length>=n) return out; }
   // 2) puis des éléments proches de la leçon : même catégorie (verbe/nom/phrase) et, pour les phrases, même ponctuation
   const cat = koCat(it.kr), sig = punctSig(ansTxt);
@@ -2249,7 +2250,7 @@ function buildMCQ(lesson, count, smart){
     // un mot sur deux est demandé dans l'autre sens (français → coréen), sauf les lettres sans traduction
     const dir = (it.fr && i%2===1 && (!BEG || shortKrWord(it))) ? 'fk' : 'kf';
     const correct = dir==='fk' ? it.kr : (it.fr || it.rom);
-    const distractors = pickDistractors(items, it, dir, 3);
+    const distractors = pickDistractors(items, it, dir, 3, BEG);
     return {id:'q'+lesson.id+'_'+i, kr:it.kr, dir, fr:it.fr||it.rom, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
   });
 }
@@ -4473,7 +4474,7 @@ function buildControlQs(lesson, N){
     const frOf = x=>x.fr||x.rom;
     if(f.t==='mcq'){
       const answer = f.d==='kf' ? frOf(it) : it.kr;
-      const distract = pickDistractors(items, it, f.d, 3);
+      const distract = pickDistractors(items, it, f.d, 3, BEG);
       return {id, type:'mcq', dir:f.d, item:it, answer, options:shuffle(distract.concat([answer])),
               prompt: f.d==='kf' ? 'Que signifie '+it.kr+' ?' : 'Comment dit-on « '+frOf(it)+' » en coréen ?'};
     }
