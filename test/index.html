@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-22-5';
+  var APP_VERSION = '2026-11-26-2';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1388,7 +1388,7 @@ function reviewPanel(){
     open.onclick = ()=>{
       if(detail.style.display==='block'){ detail.style.display='none'; return; }
       detail.style.display='block'; detail.innerHTML='';
-      detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
+      if(rv.text) detail.appendChild(el(`<div style="margin-bottom:12px;"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px;">Petit texte de l'élève (non noté) :</div><div class="kr" style="white-space:pre-wrap;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;">${escapeHtml(rv.text||'(vide)')}</div></div>`));
       const score = el('<div style="font-weight:600;margin:10px 0;"></div>');
       const upd = ()=>{ const pts = verd.reduce((t,v)=>t+(v==='ok'?1:v==='half'?0.5:0),0), ratio = pts/rv.a.length, okp = ratio>=(rv.pass||0.8); score.innerHTML = `Score avec tes corrections : ${fmtPts(pts)}/${rv.a.length} → ${okp?'<span style="color:var(--celadon-dark);">réussi ✅</span>':'<span style="color:var(--seal);">pas encore assez</span>'}`; };
       const mkRow = (x,i)=>{
@@ -2234,12 +2234,20 @@ function pickDistractors(items, it, dir, n){
   }
   return out;
 }
+// Débutants et faux-débutants : pas de phrases ni d'écriture libre français → coréen, et un peu de répétition des bases
+function isBeginnerLesson(lesson){
+  const lv = (typeof PROFILE!=='undefined' && PROFILE && PROFILE.role==='student') ? PROFILE.level : (lesson && lesson.space);
+  return lv==='debutant' || lv==='faux_debutant';
+}
+const shortKrWord = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
 function buildMCQ(lesson, count, smart){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr})));
-  const shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
+  const BEG = isBeginnerLesson(lesson);
+  let shuffled = (smart ? smartOrder(items, x=>x.kr) : [...items].sort(()=>Math.random()-0.5)).slice(0,count||items.length);
+  if(BEG && count && shuffled.length>0 && shuffled.length<count){ const base = shuffled.slice(); let k = 0; while(shuffled.length<count){ shuffled.push(base[k%base.length]); k++; } }
   return shuffled.map((it,i)=>{
     // un mot sur deux est demandé dans l'autre sens (français → coréen), sauf les lettres sans traduction
-    const dir = (it.fr && i%2===1) ? 'fk' : 'kf';
+    const dir = (it.fr && i%2===1 && (!BEG || shortKrWord(it))) ? 'fk' : 'kf';
     const correct = dir==='fk' ? it.kr : (it.fr || it.rom);
     const distractors = pickDistractors(items, it, dir, 3);
     return {id:'q'+lesson.id+'_'+i, kr:it.kr, dir, fr:it.fr||it.rom, options:[...distractors, correct].sort(()=>Math.random()-0.5), answer:correct};
@@ -2325,12 +2333,20 @@ function renderExercices(lesson){
     return wrap;
   }
   const shortKrEx = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
-  if(!lesson._exOrder || lesson._exOrder.length!==items.length){
-    lesson._exOrder = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+  // Débutants / faux-débutants : chaque mot revient 2 ou 3 fois dans le tour (3 fois si la leçon est courte), jamais deux fois de suite
+  const REPS = isBeginnerLesson(lesson) ? (items.length<=6 ? 3 : 2) : 1;
+  if(!lesson._exOrder || lesson._exOrder.length!==items.length*REPS){
+    const passes = [];
+    for(let r=0;r<REPS;r++){
+      let ord = smartOrder(items.map((_,i)=>i), i=>items[i].kr);
+      if(passes.length && ord.length>1 && ord[0]===passes[passes.length-1]){ ord = ord.slice(1).concat(ord[0]); }
+      passes.push(...ord);
+    }
+    lesson._exOrder = passes;
     // une carte sur deux est à écrire en coréen (français → coréen), sauf lettres et phrases longues
-    lesson._exDirs = items.map((it)=> (it.fr && !it.rom && shortKrEx(it) && Math.random()<0.5) ? 'fk' : 'kf');
+    lesson._exDirs = items.map((it)=> (!isBeginnerLesson(lesson) && it.fr && !it.rom && shortKrEx(it) && Math.random()<0.5) ? 'fk' : 'kf');
   }
-  const total = items.length;
+  const total = lesson._exOrder.length;
   if(state.exerciseIndex >= total){
     const done = el(`<div class="result-box"><div class="score mono">${state.exerciseCorrectCount||0}/${total}</div><div style="margin:8px 0 16px;">Entraînement terminé — refais un tour, ou passe au Quiz.</div></div>`);
     const restart = el('<button class="btn celadon">Recommencer</button>');
@@ -4341,7 +4357,7 @@ setInterval(controlLockSync, 15000);
 setTimeout(controlLockSync, 2500);
 window.addEventListener('pagehide', ()=>{ try{ if(CONTROL_HOLD) sb.rpc('control_lock_release', { dev:TAB_ID }); }catch(e){} });
 // Texte final du contrôle : petit minimum selon la leçon (les toutes premières leçons n'ont presque pas de vocabulaire)
-function controlTextMin(lesson){ return ((lesson.vocab||[]).length>=8) ? 25 : 8; }
+function controlTextMin(lesson){ if(isBeginnerLesson(lesson)) return ((lesson.vocab||[]).length>=8) ? 12 : 6; return ((lesson.vocab||[]).length>=8) ? 25 : 8; }
 function hangulCount(t){ return ((t||'').match(/[\uAC00-\uD7A3]/g)||[]).length; }
 function controlGuardAway(reason){
   if(CONTROL_GUARD.phase!=='active' || CONTROL_GUARD.awayAt!==null) return;
@@ -4428,7 +4444,12 @@ function fmtPts(n){ return (Math.round(n*2)/2).toString().replace('.',','); }
 function buildControlQs(lesson, N){
   const items = (lesson.vowels||[]).concat((lesson.vocab||[]).map(v=>({kr:v.kr,rom:v.rom,fr:v.fr}))).filter(x=>x.kr);
   const shortKr = x=>{ const k=(x.kr||'').replace(/[.?!,~…]/g,'').trim(); return k.length<=10 && k.split(/\s+/).length<=3; };
-  const FORMATS = [
+  const BEG = isBeginnerLesson(lesson);
+  const FORMATS = BEG ? [
+    {t:'mcq', d:'kf', ok:x=>!!(x.fr||x.rom)},
+    {t:'mcq', d:'fk', ok:x=>!!x.fr && shortKr(x)},   // débutants : mots seulement, pas de phrases
+    {t:'wr',  d:'kf', ok:x=>!!x.fr}
+  ] : [
     {t:'mcq', d:'kf', ok:x=>!!(x.fr||x.rom)},
     {t:'mcq', d:'fk', ok:x=>!!x.fr},
     {t:'wr',  d:'kf', ok:x=>!!x.fr},
@@ -4441,7 +4462,8 @@ function buildControlQs(lesson, N){
   while(picks.length<N && progress){
     progress = false;
     for(let fi=0; fi<FORMATS.length && picks.length<N; fi++){
-      const cand = order[fi].find(x=>!used.some(u=>u.has(x))) || order[fi].find(x=>!used[fi].has(x));
+      if(BEG && order[fi].length && order[fi].every(x=>used[fi].has(x))) used[fi].clear();
+      const cand = BEG ? order[fi].find(x=>!used[fi].has(x)) : (order[fi].find(x=>!used.some(u=>u.has(x))) || order[fi].find(x=>!used[fi].has(x)));
       if(cand){ used[fi].add(cand); picks.push({fi, item:cand}); progress = true; }
     }
   }
@@ -4629,10 +4651,11 @@ function renderControle(lesson, list, idx){
     wrap.appendChild(qb);
   });
   let textMsg = null;
-  if(PROFILE.role==='student'){
+  const needText = PROFILE.role==='student' && !isBeginnerLesson(lesson);   // pas de texte final pour Débutant / faux-débutant
+  if(needText){
     const need = controlTextMin(lesson);
     wrap.appendChild(el(`<h3 style="margin:26px 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line);">${secNo+1}. Pour finir : un petit texte en coréen <small style="font-weight:400;color:var(--ink-soft);">(pas noté)</small></h3>`));
-    wrap.appendChild(el(`<div class="note" style="margin-bottom:8px;">Écris un petit texte d'environ 5 lignes avec ce que tu as appris dans cette leçon. Il n'est pas noté, mais il est obligatoire pour envoyer ton contrôle : ta professeure le lit.</div>`));
+    wrap.appendChild(el(`<div class="note" style="margin-bottom:8px;">Écris un petit texte ${isBeginnerLesson(lesson)?'de 2 phrases environ':'d\'environ 5 lignes'} avec ce que tu as appris dans cette leçon. Il n'est pas noté, mais il est obligatoire pour envoyer ton contrôle : ta professeure le lit.</div>`));
     const ta = el('<textarea lang="ko" data-ko="1" spellcheck="false" style="width:100%;min-height:120px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:8px;font-size:16px;" placeholder="한글로 써 보세요…"></textarea>');
     ta.value = state.controlText || '';
     const cnt = el('<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>');
@@ -4643,7 +4666,7 @@ function renderControle(lesson, list, idx){
   }
   const submit = el('<button class="btn seal" style="margin-top:14px;">Valider le contrôle</button>');
   submit.onclick = async ()=>{
-    if(PROFILE.role==='student' && hangulCount(state.controlText) < controlTextMin(lesson)){
+    if(needText && hangulCount(state.controlText) < controlTextMin(lesson)){
       textMsg.textContent = 'Écris ton petit texte en coréen (au moins '+controlTextMin(lesson)+' lettres coréennes) avant d\'envoyer ton contrôle.'; textMsg.scrollIntoView({block:'center'}); return;
     }
     const nearQs = qs.filter(q=>grade(q).level==='near' && grade(q).pts===0);
