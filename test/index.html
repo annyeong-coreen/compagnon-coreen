@@ -223,7 +223,7 @@ html[data-theme="dark"] .modal{background:var(--card);color:var(--ink);}
    si le numéro a changé, une bannière propose d'actualiser. Rien n'est rechargé automatiquement
    (pour ne jamais interrompre un exercice ou un message en cours d'écriture). */
 (function(){
-  var APP_VERSION = '2026-11-26-4';
+  var APP_VERSION = '2026-11-26-5';
   window.APP_VERSION = APP_VERSION;
   var shown = false, busy = false, lastCheck = 0;
   function showBanner(){
@@ -1350,8 +1350,8 @@ function reviewFeedbackBlock(rv){
   const b = el('<div class="note" style="margin-bottom:14px;border-color:var(--celadon-dark);"></div>');
   b.appendChild(el('<div style="font-weight:600;margin-bottom:8px;">✏️ Ton texte corrigé par ta professeure</div>'));
   if(rv.fix){
-    b.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">Ta version :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${escapeHtml(rv.text||'')}</div>`));
-    b.appendChild(el(`<div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;color:var(--celadon-dark);">${escapeHtml(rv.fix)}</div>`));
+    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Ta version :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;">${escapeHtml(rv.text||'')}</div></div>`));
+    b.appendChild(el(`<div><div style="font-size:12px;color:var(--ink-soft);">Version corrigée :</div><div class="kr" style="white-space:pre-wrap;font-size:16px;margin:2px 0 8px;color:var(--celadon-dark);">${escapeHtml(rv.fix)}</div></div>`));
   }
   if(rv.comment) b.appendChild(el(`<div style="font-size:14px;">💬 ${escapeHtml(rv.comment)}</div>`));
   return b;
@@ -4513,7 +4513,7 @@ function renderControle(lesson, list, idx){
     const box = el('<div class="result-box"></div>');
     if(r.pending){
       box.appendChild(el(`<div class="score mono" style="font-size:26px;">📨</div>`));
-      box.appendChild(el(`<div style="margin:8px 0 6px;font-weight:600;">Contrôle envoyé à ta professeure !</div><div style="color:var(--ink-soft);">Elle va le regarder et le valider. Tu auras ton résultat dès que ce sera fait.</div>`));
+      box.appendChild(el(`<div><div style="margin:8px 0 6px;font-weight:600;">Contrôle envoyé à ta professeure !</div><div style="color:var(--ink-soft);">Elle va le regarder et le valider. Tu auras ton résultat dès que ce sera fait.</div></div>`));
       wrap.appendChild(box); return wrap;
     }
     if(r.cancelled){
@@ -4527,7 +4527,7 @@ function renderControle(lesson, list, idx){
     if(r.passed && !r.burst){ r.burst=true; petalBurst(); }
     if(r.passed) box.appendChild(el(`<div class="stamp kr">합격<br><span style="font-size:9px;">PASS</span></div>`));
     box.appendChild(el(`<div class="score mono">${fmtPts(r.correct)}/${r.total}</div>`));
-    if(r.passed) box.appendChild(el(`<div style="margin:0 0 6px;font-weight:600;">Réussi, bravo !</div><div style="margin:0 0 16px;color:var(--ink-soft);">Continue à bien réviser, et le coréen n'aura plus aucun secret pour toi ! 💪</div>`));
+    if(r.passed) box.appendChild(el(`<div><div style="margin:0 0 6px;font-weight:600;">Réussi, bravo !</div><div style="margin:0 0 16px;color:var(--ink-soft);">Continue à bien réviser, et le coréen n'aura plus aucun secret pour toi ! 💪</div></div>`));
     if(!r.passed) box.appendChild(el(`<div style="margin:8px 0 16px;">Pas encore assez (il faut ${Math.round(lesson.pass_score*100)}%). Revois le Cours et retente.</div>`));
     if(r.newPiece){
       box.appendChild(el(`<div class="note" style="border-color:var(--celadon-dark);margin-bottom:14px;">🧩 <b>Nouvelle pièce de puzzle !</b>${r.puzzleDone?' 🎉 L\'image est complète : ta professeur va t\'envoyer un petit cadeau.':''}</div>`));
